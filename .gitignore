@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+*.swp
+*.log
+# PLI SP1 : bibliothèque du Neural Engine compilée sur la machine (construire.sh), pas suivie
+src/tensorfold/pli/ane/natif/libpli_ane.dylib

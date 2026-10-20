@@ -1,0 +1,123 @@
+"""Checkpoints TensorFold has no recipe for: detected from config.json alone, refused or noted with the way forward."""
+
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from tensorfold import cli, families
+
+MLX4 = {"model_type": "glm5_next", "quantization": {"group_size": 64, "bits": 4},
+        "quantization_config": {"group_size": 64, "bits": 4}}
+EXL3 = {"model_type": "glm5_next", "quantization_config": {"bits": 4, "codebook": "mcg", "quant_method": "exl3",
+                                                           "scope": "glm53_routed_experts_only"}}
+NVFP4 = {"model_type": "qwen3_5", "quantization_config": {"quant_method": "modelopt", "quant_algo": "NVFP4"}}
+
+
+def _family(**members):
+    package = SimpleNamespace(**{"MODELS": ("owner/tested",), **members})
+    return SimpleNamespace(model_type="fake", title="Fake Model", lanes=False, package=package)
+
+
+def test_quant_method_reads_every_format():
+    assert families.quant_method(MLX4) == "mlx"
+    assert families.quant_method(EXL3) == "exl3"
+    assert families.quant_method(NVFP4) == "modelopt"
+    assert families.quant_method({"model_type": "x"}) is None
+    assert families.quant_method({"text_config": {"quantization": {"bits": 4, "group_size": 32}}}) == "mlx"
+    assert families.quant_method({"quantization": {"bits": 4, "group_size": 32, "mode": "mxfp4"}}) == "mlx-mxfp4"
+
+
+def test_quantization_reports_mlx_only():
+    assert families.quantization(MLX4) == (4, 64)
+    assert families.quantization(EXL3) == (None, None)          # not "4-bit, groups of 64"
+    assert families.describe_quantization(EXL3) == "exl3 (4-bit)"
+    assert families.describe_quantization(MLX4) == "MLX 4-bit, groups of 64"
+
+
+def test_unreadable_formats_are_refused_with_the_way_forward():
+    family = _family(load=lambda *a, **k: None)
+    families.require_readable(family, MLX4, "mlx")
+    for config in (EXL3, NVFP4):
+        with pytest.raises(ValueError) as refused:
+            families.require_readable(family, config, "mlx")
+        message = str(refused.value)
+        assert "recipe book" in message and "RUNBOOK.md" in message and "owner/tested" in message
+
+
+def test_a_family_can_declare_more_formats():
+    family = _family(load=lambda *a, **k: None, QUANT_METHODS={"mlx": ("mlx", "exl3")})
+    families.require_readable(family, EXL3, "mlx")
+
+
+
+
+def test_glm_reads_mias_exl3_checkpoint_as_an_experiment(tmp_path, capsys):
+    from tensorfold.families import glm5_next
+
+    (tmp_path / "config.json").write_text(json.dumps(EXL3))
+    glm5_next.check(tmp_path)
+    assert "experimental" in capsys.readouterr().out
+    for key, value in (("bits", 3), ("codebook", "3inst"), ("scope", "all_linear")):
+        other = {**EXL3, "quantization_config": {**EXL3["quantization_config"], key: value}}
+        (tmp_path / "config.json").write_text(json.dumps(other))
+        with pytest.raises(ValueError, match="recipe book"):
+            glm5_next.check(tmp_path)
+
+
+def test_unknown_model_types_point_to_the_recipe_book(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({"model_type": "brand_new_arch"}))
+    with pytest.raises(ValueError) as refused:
+        families.detect(tmp_path)
+    assert "no recipe for model_type 'brand_new_arch'" in str(refused.value)
+    assert "RUNBOOK.md" in str(refused.value)
+
+
+@pytest.mark.parametrize("kind", ["qwen4_exp", "qwen3_8_flash_next"])
+def test_flash_next_is_found_by_either_model_type_its_exports_carry(tmp_path, kind):
+    config = {"model_type": kind, "text_config": {"model_type": kind + "_text"}}
+    (tmp_path / "config.json").write_text(json.dumps(config))
+    assert families.detect(tmp_path).module == "tensorfold.families.qwen4_exp"
+
+
+def test_serve_refuses_an_unreadable_checkpoint_before_downloading(tmp_path, capsys, monkeypatch):
+    # a GPTQ Qwen3.8 dense checkpoint: no engine of that family reads it
+    (tmp_path / "config.json").write_text(json.dumps({"model_type": "qwen3_5",
+                                                      "quantization_config": {"quant_method": "gptq", "bits": 4}}))
+    monkeypatch.setenv("TENSORFOLD_NO_UPDATE_CHECK", "1")
+    assert cli.main(["serve", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert "gptq" in err and "recipe book" in err
+
+
+def test_qwen_dense_refuses_nvfp4_on_the_mac():
+    family = families.families()["qwen3_5"]
+    with pytest.raises(ValueError, match="modelopt"):
+        families.require_readable(family, NVFP4, "mlx")
+
+
+@pytest.mark.parametrize("config,named", [
+    ({"model_type": "qwen3_5"}, "none (unquantized weights)"),
+    ({"model_type": "qwen3_5", "tie_word_embeddings": True, "quantization": {"bits": 4, "group_size": 64}},
+     "tied embedding"),
+    ({"model_type": "nemotron_h", "quantization": {"bits": 8, "group_size": 64}}, "MLX 8-bit, groups of 64"),
+])
+def test_serve_refuses_what_the_mac_decoders_cannot_read_before_downloading(tmp_path, capsys, monkeypatch, config,
+                                                                            named):
+    from tensorfold import hub
+
+    (tmp_path / "config.json").write_text(json.dumps(config))
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setenv("TENSORFOLD_NO_UPDATE_CHECK", "1")
+    monkeypatch.setattr(hub, "resolve", lambda *a, **kw: pytest.fail("downloaded before refusing"))
+    assert cli.main(["serve", str(tmp_path)]) == 1
+    assert named in capsys.readouterr().err
+
+
+def test_untested_hugging_face_checkpoints_get_a_note(capsys):
+    family = _family(DRAFTER="owner/drafter")
+    cli._note_untested(family, "someone/other-conversion")
+    assert "not a checkpoint TensorFold is tested with" in capsys.readouterr().out
+    for model in ("owner/tested", "owner/drafter", "/local/folder"):
+        cli._note_untested(family, model)
+        assert capsys.readouterr().out == ""
