@@ -87,8 +87,8 @@ def check(model_dir: str | Path) -> None:
             print(f"[tensorfold] this checkpoint has no MTP layer: decoding without MTP drafts ({MODELS[0]} has "
                   f"one)", flush=True)
         return
-    print("[tensorfold] GLM-5.3-Flash runs on two NVIDIA GPUs with 128 GB each (two DGX Sparks): pull it on both "
-          "and serve with --tp 2 on both (docs/recipes/glm-5.3-flash.md)", flush=True)
+    print("[tensorfold] PLI serves GLM-5.3-Flash on Apple Silicon only (MLX checkpoints); "
+          "TensorFold's CUDA engine for two NVIDIA GPUs is not part of PLI", flush=True)
 
 
 def has_mtp(model_dir: str | Path) -> bool:
@@ -183,7 +183,7 @@ def kernel_version(model: Any) -> str:
     for module in (__name__, KERNEL_PACKAGE, *KERNEL_DEPENDENCIES):
         source = Path(str(importlib.import_module(module).__file__))
         folder = source.parent
-        # a package's folder only (the CUDA engine, cuda/, is not on this path); a module's own file
+        # a package's folder only; a module's own file
         for path in sorted(folder.glob("*.py")) if source.name == "__init__.py" else [source]:
             digest.update(path.relative_to(folder).as_posix().encode())
             digest.update(path.read_bytes())

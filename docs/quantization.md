@@ -19,7 +19,6 @@ Choose an 8-bit checkpoint made from the original model when you want its 8-bit 
 | --- | --- |
 | Qwen dense, M5 native lane kernels | Affine 2/3/4/5/6/8-bit, group 64; affine 4-bit also group 32 |
 | Qwen dense, packed row kernels on Apple Silicon | Affine 2/3/4/5/6/8-bit, groups 32/64/128 |
-| Qwen dense, CUDA | Affine 2/3/4/5/6/8-bit, groups 32/64/128 |
 | Nemotron | Existing affine 4-bit recipe; broader expert formats are not enabled here |
 | Flash Next | Existing uniform affine 4-bit/group-32 recipe |
 | GLM and EXL3 | Existing family recipes and separate EXL3 integration |
@@ -43,7 +42,6 @@ Conflicting aliases and packed shapes that disagree with the declared bit width 
 
 Fused stacks combine projections only when bit width, group size, input width and metadata dtypes agree.
 Otherwise the model computes those projections separately with their declared formats.
-CUDA tensor-parallel splits retain complete groups and packed-word boundaries, and memory admission counts the actual packed precision.
 Changing a checkpoint, precision or kernel implementation also changes the conditions under which cached states remain valid.
 
 ## Scope and qualification

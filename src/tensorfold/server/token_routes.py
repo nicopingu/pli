@@ -3,8 +3,7 @@
 ``POST /tokenize`` takes ``prompt`` (``add_special_tokens``, default true, as vLLM's) or ``messages`` with the chat
 fields that shape the prompt (``tools``, ``reasoning_effort``, ``chat_template_kwargs``) and ``add_generation_prompt``
 (default true); it answers ``count``, ``max_model_len`` and ``tokens``, plus ``token_strs`` with
-``return_token_strs``. ``POST /detokenize`` turns ``tokens`` back into ``prompt``, special tokens included. The CUDA
-server answers the same fields (``cuda.server.App.tokenize``)."""
+``return_token_strs``. ``POST /detokenize`` turns ``tokens`` back into ``prompt``, special tokens included."""
 
 from __future__ import annotations
 

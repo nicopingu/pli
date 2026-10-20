@@ -36,7 +36,7 @@ def _memory(reset_peak: bool, *, admission: Any = None) -> dict[str, int]:
         return admission.memory_snapshot(reset_peak)
     try:
         import mlx.core as mx
-    except ImportError:          # the CUDA server
+    except ImportError:          # no MLX in this process
         return {}
     memory = {"active": int(mx.get_active_memory()), "cache": int(mx.get_cache_memory()),
               "peak": int(mx.get_peak_memory())}

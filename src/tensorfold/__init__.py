@@ -1,4 +1,4 @@
-"""TensorFold: fast, exact LLM decoding on Apple Silicon and NVIDIA GPUs behind an OpenAI-compatible endpoint."""
+"""PLI (fork of TensorFold): fast, exact LLM decoding on Apple Silicon behind an OpenAI-compatible endpoint."""
 
 __version__ = "3.6.0"
 

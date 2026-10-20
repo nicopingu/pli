@@ -198,7 +198,7 @@ def normalize(now: float, health: dict, values: dict[str, list[float]]) -> Sampl
         if value is not None:
             sample.counters[key] = value
             sample.sources[key] = "completed requests"
-    # CUDA /health reports tokens while they are emitted, unlike its /metrics in 0.6.0.
+    # a server whose /health reports tokens while they are emitted wins over its /metrics
     live_generation = numeric(health.get("completion_tokens_total"))
     if live_generation is not None:
         sample.counters["generation"] = live_generation

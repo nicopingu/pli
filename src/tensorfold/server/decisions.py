@@ -140,7 +140,7 @@ def _prepare_question(
 def prompts_for(
     body: dict[str, Any], render: Any, encode: Any, *, context_len: int | None = None,
 ) -> list[PreparedQuestion]:
-    """The same questions as prepare, for a server that renders text and encodes it itself (the CUDA GLM template)."""
+    """The same questions as prepare, for a server that renders text and encodes it itself."""
 
     _validate_body(body)
     text = _render_text(body.get("input"))

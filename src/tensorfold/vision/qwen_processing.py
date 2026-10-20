@@ -22,7 +22,7 @@ class PreparedVisionPrompt:
     rope_delta: int
     image_spans: tuple[tuple[int, int], ...]
     image_hashes: tuple[str, ...]
-    # videos (a CUDA frontend with ``videos``): patches, one (frames, height, width) grid each, one span a frame group
+    # videos (a frontend with ``videos``): patches, one (frames, height, width) grid each, one span a frame group
     video_pixel_values: np.ndarray | None = None
     video_grid_thw: np.ndarray | None = None
     video_spans: tuple[tuple[int, int], ...] = ()

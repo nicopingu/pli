@@ -156,7 +156,6 @@ The first sample is a baseline. A missing metric is a dash on screen. A real zer
 A failure, a long gap, a counter reset, or a new counter source drops the baseline.
 Monitoring never sends a generation request.
 
-CUDA `/health` reports generated tokens as they arrive, and `/metrics` counts completed requests.
 The dashboard prefers the live counter when that counter is present, and it names the source.
 When `/health` carries a `live` object, DECODE TOK/S, PREFILL TOK/S, and CONNECTIONS / WAIT use
 `decode_tokens_per_second`, `prefill_tokens_per_second`, `connections`, and `waiting`.

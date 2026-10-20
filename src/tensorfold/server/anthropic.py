@@ -17,7 +17,7 @@ def route(path: str) -> bool:
 
 def count_tokens(app: Any, chat: dict[str, Any]) -> int:
     """Render with the same tokenizer, tools and thinking controls as chat, without running generation."""
-    if hasattr(app, "prepare"):                   # CUDA's preparation includes vision token expansion
+    if hasattr(app, "prepare"):                   # an app with its own preparation (vision token expansion included)
         return len(app.prepare(chat, True).prompt)
     from tensorfold.server.messages import normalize_messages
     from tensorfold.server.prompts import has_images, prepare_images

@@ -291,9 +291,9 @@ def _requests(app: Any) -> tuple[int, int]:
 def _endings(app: Any) -> tuple[int | None, int | None]:
     """(client disconnections, preemptions) at scrape time, or None where nothing counts them.
 
-    The Mac scheduler counts cancelled requests and preempted background jobs per request. The CUDA
-    scheduler raises RequestCancelled without counting disconnects and counts lane yields (requeued
-    background streams) in ``yields``; neither server counts per-request failures.
+    The Mac scheduler counts cancelled requests and preempted background jobs per request. A scheduler
+    with ``yields`` counts lane yields (requeued background streams) there instead; per-request failures
+    are not counted.
     """
 
     scheduler = getattr(app, "scheduler", None)
@@ -349,7 +349,7 @@ def _lengths(app: Any) -> list[int]:
 
 
 def _occupied(stream: Any) -> int:
-    """Mac streams publish ``cache_len``. A CUDA stream's ``context`` gains the prompt when decode starts."""
+    """Mac streams publish ``cache_len``; a stream with ``context`` instead gains the prompt when decode starts."""
 
     cache = getattr(stream, "cache_len", None)
     if isinstance(cache, int):
