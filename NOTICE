@@ -1,12 +1,12 @@
 PLI (Parallel Linked Inference)
 Copyright 2026 Nicolas, NF DEVELOPPEMENT (FeNiX)
 
-PLI est un fork de TensorFold 0.6.6 (https://github.com/ashhart/TensorFold, commit cb2ebf05),
-distribue sous la meme licence Apache 2.0 (LICENSE). Les fichiers modifies ou ajoutes par PLI
-sont listes dans l historique git (etiquette amont-0.6.6 = copie conforme de l amont, branche pli
-= modifications). Le module Python garde le nom tensorfold.
+PLI is a fork of TensorFold 0.6.6 (https://github.com/ashhart/TensorFold, commit cb2ebf05),
+distributed under the same Apache License 2.0 (LICENSE). PLI modifies TensorFold's files and adds
+its own: the changes are described in CHANGELOG.md, the code PLI took from other projects is listed
+in THIRD_PARTY_NOTICES.md. The Python module keeps the name tensorfold.
 
------ Avis d origine de TensorFold -----
+----- Original TensorFold notice -----
 
 TensorFold
 Copyright 2026 TensorFold contributors
