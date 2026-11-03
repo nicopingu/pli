@@ -284,6 +284,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if args.ple_on_ssd and not hasattr(family.package, "ple_bytes"):
         raise ValueError(f"--ple-on-ssd: {family.title} has no n-gram (PLE) tables to read from SSD")
     backend = _backend(args.backend, family)
+    from tensorfold.pli import banner
+    print(banner.text(__version__), flush=True)
     _check_serve_options(args, family, backend, config_dir)
     families.require_readable(family, families.read_config(config_dir), backend)
     _note_untested(family, args.model)
