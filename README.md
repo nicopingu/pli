@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pli-logo-dark.svg">
+    <img src="docs/assets/pli-logo.svg" alt="PLI logo: a folded-paper figure drawn in engraved lines" width="200">
+  </picture>
+</p>
+
 # PLI
 
 PLI ("Parallel Linked Inference") is an LLM inference server for Apple Silicon, tuned for the Ultra chips.

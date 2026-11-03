@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="697" height="720" viewBox="-20 -20 697 720" role="img" aria-label="PLI logo (dark background)">
+  <title>PLI</title>
+  <defs>
+    <pattern id="dense" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(35)">
+      <line x1="0" y1="0" x2="0" y2="12" stroke="#E8E3D6" stroke-width="2.6"/>
+    </pattern>
+    <pattern id="sparse" patternUnits="userSpaceOnUse" width="20" height="20" patternTransform="rotate(35)">
+      <line x1="0" y1="0" x2="0" y2="20" stroke="#E8E3D6" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <g>
+    <polygon points="425,100 322,340 490,168" fill="url(#dense)"/>
+    <polygon points="556,443 490,512 657,680" fill="url(#dense)"/>
+    <polygon points="324,457 160,513 328,680" fill="url(#dense)"/>
+    <polygon points="322,0 322,340 425,100" fill="url(#sparse)"/>
+    <polygon points="657,340 420,242 322,340" fill="url(#sparse)"/>
+    <polygon points="556,443 322,340 490,512" fill="url(#sparse)"/>
+    <polygon points="407,428 324,457 328,680" fill="url(#sparse)"/>
+    <polygon points="328,680 223,578 0,680" fill="url(#sparse)"/>
+  </g>
+  <path d="M657,0L322,0 M322,0L322,340 M657,0L322,340 M322,0L657,340 M657,0L425,100 M425,100L322,340 M657,340L420,242 M657,340L322,340 M657,340L657,680 M657,340L328,680 M322,340L657,680 M556,443L322,340 M556,443L657,680 M322,340L328,680 M407,428L328,680 M407,428L160,513 M322,340L0,680 M328,680L0,680 M328,680L160,513 M223,578L0,680" fill="none" stroke="#E8E3D6" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M657,0 L322,0 L322,340 L0,680 L328,680 L490,512 L657,680 L657,340 L490,168 Z" fill="none" stroke="#E8E3D6" stroke-width="8.5" stroke-linejoin="miter"/>
+</svg>
