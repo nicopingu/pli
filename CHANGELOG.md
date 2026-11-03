@@ -4,6 +4,29 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
+## Unreleased
+
+- **`pli setup` installs PLI; `install.sh` only makes the virtual environment.** `./install.sh install` finds Python
+  3.11 to 3.14, creates `~/pli/venv` (or `--prefix`), installs PLI in it and runs `pli setup` with the same options.
+  `pli setup` does what the rest of `install.sh` did, with the same checks, messages, defaults and service settings
+  (profile `m1-ultra` on an Ultra chip with 64 GB, `PLI_ANE_FFN`, `MLX_MAX_MB_PER_BUFFER=500`,
+  `MLX_MAX_OPS_PER_BUFFER=100`, `--context 229376 --parallel 4`, `--spill-gib 40` with 70 GB free, the hybrid draft),
+  through `pli pull` and `pli service`. `pli status`, `start`, `stop`, `restart`, `logs` and `uninstall` replace the
+  commands of `install.sh`, which still run them (`./install.sh status` is `pli status`).
+- **Nothing is downloaded without consent.** Before downloading, `pli setup` lists each item: Hugging Face repo, page
+  and revision (`main`, not pinned, with its commit), license from the model card, size read from the Hub's API
+  ("about" when the Hub does not answer), where it goes, the free disk, and what it brings. Files already in the
+  Hugging Face cache are marked "already downloaded" and not counted. It then asks `[y/N]`; `--yes` answers yes, and
+  without a terminal and without `--yes` it stops and says what to add. It stops too when the disk is too small.
+- **Each item is optional.** `--no-hybrid` (no MTP head), `--no-drafter` (new: no draft at all, `--drafter none
+  --no-drafts`), `--no-models` (nothing downloaded; the service now starts when the model and the draft are already on
+  the Mac), `--model DIR`, `--drafter REPO|DIR` (new) and `--mtp-head FILE` (new: a head already written).
+- **`pli bench`** runs the public suite pli-bench-v1 against the local server (the port of `pli setup`), thinking off.
+  The bench and its texts (811 KB) are now part of the package (`src/tensorfold/bench/`); `tools/pli_bench.py` runs the
+  same code from a clone, with standard Python only. `tools/quantize_mtp_head.py` likewise runs
+  `tensorfold.install.mtp_head`, which `pli setup` uses.
+- **`pli` alone** prints a short help with examples instead of an argument error.
+
 ## 4.0.0 (2026-11-02)
 
 Everything below went into production between 27 October and 2 November 2026, after 3.7.0, and is switched on by

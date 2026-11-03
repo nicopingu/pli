@@ -45,22 +45,47 @@ cd pli
 ./install.sh install
 ```
 
-`install.sh` checks the Mac (Apple Silicon, macOS 14 or later, memory, free disk, Python 3.11 to 3.14, Xcode Command
-Line Tools for the Neural Engine), installs PLI in its own virtual environment under `~/pli`, downloads
-Qwen3.8-27B 4-bit, the DFlash2 draft and the MTP head (about 20 GB), writes the MTP head in 4 bits, and starts PLI as a
-per-user service that starts again at login and after a crash. Then:
+`install.sh` finds Python 3.11 to 3.14, installs PLI in its own virtual environment under `~/pli`, then runs
+`pli setup`, which does the rest: it checks the Mac (Apple Silicon, macOS 14 or later, memory, free disk, Xcode Command
+Line Tools for the Neural Engine), downloads the models, writes the MTP head in 4 bits, and starts PLI as a per-user
+service that starts again at login and after a crash.
+
+Before anything is downloaded, `pli setup` lists each item with its Hugging Face repo and page, its revision (`main`,
+not pinned, with the commit it points to), its license as its model card gives it ("see model card" otherwise), its
+size as the Hub lists it (read from the Hub's API, no weights fetched; "about" when the Hub does not answer), where it
+goes on disk, and what it brings:
+
+| Item | What it brings |
+| --- | --- |
+| [mlx-community/Qwen3.8-27B-4bit](https://huggingface.co/mlx-community/Qwen3.8-27B-4bit) | the model (required) |
+| [z-lab/Qwen3.8-27B-DFlash2](https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2) | DFlash2 draft: faster replies, the same text |
+| [EigenLabs/Qwen3.8-27B-MTP-bf16](https://huggingface.co/EigenLabs/Qwen3.8-27B-MTP-bf16) | the model's MTP head, the hybrid draft with DFlash2: faster, the same text |
+| MTP head in 4 bits | written on the Mac from the head above, nothing more to download |
+
+A file already in the Hugging Face cache is marked "already downloaded" and not counted. Then come the total to
+download and the free disk, and the question `Download them? [y/N]` (no by default). `--yes` answers yes; without a
+terminal and without `--yes`, `pli setup` stops before downloading and says what to add.
+
+Each item can be left out: `--no-hybrid` (no MTP head: DFlash2 alone), `--no-drafter` (no draft at all: slower, the
+same text), `--model DIR` (a model already on the Mac, not downloaded; also `--drafter DIR`, and `--mtp-head FILE` for
+a head already written), `--no-models` (nothing downloaded: the service starts only if the model and the draft are
+already on the Mac, and uses the hybrid draft only with `--mtp-head`). The other options: `--prefix DIR`, `--port N`
+(default 8080), `--model REPO` (a Qwen3.8-27B checkpoint or fine-tune: the drafts are the 27B's), `--context N`,
+`--no-start`. `./install.sh install` passes every option to `pli setup`; a second `pli setup` keeps the prefix, port
+and model of the first unless told otherwise. On a Mac without a screen, turn on automatic login so that PLI starts
+after a reboot.
+
+Then (`pli` is `~/pli/venv/bin/pli`; `./install.sh status` and the others run the same commands):
 
 | Command | What it does |
 | --- | --- |
-| `./install.sh status` | is the service loaded, is the server answering, which model |
-| `./install.sh start`, `stop`, `restart` | start or stop the server (stopping lets it finish writing its snapshots) |
-| `./install.sh logs` | the last lines of the server log |
-| `./install.sh uninstall` | removes the service, `~/pli`, the settings, the logs and the snapshots on disk; asks before deleting each downloaded model (`--keep-models` keeps them; `--yes` deletes them without asking) |
+| `pli status` | is the service loaded, is the server answering, which model |
+| `pli start`, `stop`, `restart` | start or stop the server (stopping lets it finish writing its snapshots) |
+| `pli logs` | the last lines of the server log |
+| `pli bench` | the public bench suite against the local server (see [Benchmark](#benchmark)) |
+| `pli uninstall` | removes the service, `~/pli`, the settings, the logs and the snapshots on disk; asks before deleting each downloaded model (`--keep-models` keeps them; `--yes` deletes them without asking) |
 
-Options of `install`: `--prefix DIR`, `--port N` (default 8080), `--model REPO` (a Qwen3.8-27B checkpoint or
-fine-tune: the drafts are the 27B's), `--context N`, `--no-hybrid`, `--no-start`, `--no-models` (the service then uses
-the DFlash2 draft alone; run `./install.sh install` again for the hybrid draft), `--yes`. On a Mac without a screen, turn on automatic login so that PLI starts after a
-reboot.
+`pli` alone gives a short help; `pli --help` lists every command.
 
 The server answers OpenAI clients at `http://127.0.0.1:8080/v1` and Anthropic clients at `http://127.0.0.1:8080`.
 PLI ships no model weights. Each checkpoint keeps its own license (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
@@ -76,7 +101,7 @@ PLI ships no model weights. Each checkpoint keeps its own license (see [THIRD_PA
 | Profile | `m1-ultra` |
 
 Other Apple Silicon Macs can run PLI with its additions off, or with a profile of their own; they are not measured.
-`install.sh` gives the `m1-ultra` profile to any Ultra chip with 64 GB or more: an M2 Ultra or M3 Ultra gets it
+`pli setup` gives the `m1-ultra` profile to any Ultra chip with 64 GB or more: an M2 Ultra or M3 Ultra gets it
 without having been measured.
 
 ## What PLI adds to TensorFold 0.6.6
@@ -125,7 +150,7 @@ arithmetic, judged on whole conversations before it went into production.
 | Reduced attention, anchored, for prompt chunks of up to 2 047 rows beyond 65 536 tokens of context | `PLI_S3B`, `PLI_S3B_THRESHOLD` | can change | 4.0.0 |
 | Snapshot on disk read again at the first slice of a resumed prompt | `PLI_REREAD_DISK` | see CHANGELOG | 4.0.0 |
 | Prompt checkpoint spilled to disk even when a reply extends it; checkpoint where a prompt forks in its last message (both on by default) | `PLI_SPILL_PROMPT`, `PLI_FORK_MIN` | same text | 4.0.0 |
-| MLX command buffers of at most 500 MB and 100 operations (env, set by `install.sh`) | `MLX_MAX_MB_PER_BUFFER`, `MLX_MAX_OPS_PER_BUFFER` | same text | 4.0.0 |
+| MLX command buffers of at most 500 MB and 100 operations (env, set by `pli setup`) | `MLX_MAX_MB_PER_BUFFER`, `MLX_MAX_OPS_PER_BUFFER` | same text | 4.0.0 |
 
 ## Experimental features
 
@@ -176,7 +201,7 @@ On the first error, PLI computes the layer on the GPU. To run without it, set `P
 
 ## Manual install and run
 
-What `install.sh` does, by hand:
+What `install.sh` and `pli setup` do, by hand (without the checks, the MTP head and the service):
 
 ```bash
 git clone https://github.com/nicopingu/pli.git
@@ -186,7 +211,9 @@ python3 -m venv ~/pli/venv
 ~/pli/venv/bin/pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto --port 8080
 ```
 
-`pli serve --help` lists every option; `pli info MODEL` shows what a checkpoint needs; `pli models` lists the families
+The MTP head in 4 bits: `~/pli/venv/bin/python -m tensorfold.install.mtp_head --model MODEL_DIR SOURCE OUTPUT`
+(or `tools/quantize_mtp_head.py` from a clone). `pli serve --help` lists every option; `pli info MODEL` shows what a
+checkpoint needs; `pli models` lists the families
 and their tested checkpoints; `pli service --help` manages the per-user service. Memory sizing, health checks and
 updates are in [RUNBOOK.md](RUNBOOK.md).
 
@@ -219,18 +246,21 @@ pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto --con
 
 ## Benchmark
 
-`tools/pli_bench.py` measures prompt reading and writing speed against any server that speaks the OpenAI chat API with
-streaming, so PLI and other engines can be compared on the same Mac with the same requests. It needs only standard
+`pli bench` measures prompt reading and writing speed of the local PLI server (the port of `pli setup`), with thinking
+off. From a clone, `tools/pli_bench.py` runs the same code against any server that speaks the OpenAI chat API with
+streaming, so PLI and other engines can be compared on the same Mac with the same requests; it needs only standard
 Python.
 
 ```bash
-python3 tools/pli_bench.py --url http://127.0.0.1:8080/v1 --salt pub --only single --sizes code,1k,8k,32k,64k
-python3 tools/pli_bench.py --url http://127.0.0.1:8080/v1 --salt pub --only single --sizes 96k
-python3 tools/pli_bench.py --url http://127.0.0.1:8080/v1 --salt pub --only agent
+pli bench --salt pub --only single --sizes code,1k,8k,32k,64k
+pli bench --salt pub --only single --sizes 96k
+pli bench --salt pub --only agent
+python3 tools/pli_bench.py --url http://127.0.0.1:8080/v1 --salt pub --only agent    # any server
 ```
 
-The requests are fixed: they come from the suite `tools/bench_data/suite-v1.json` and its corpus (PLI's own source
-code), checked by SHA-256 before the run, so every run on every machine sends the same texts.
+The requests are fixed: they come from the suite pli-bench-v1 (`src/tensorfold/bench/data/suite-v1.json`, installed
+with PLI) and its corpus (PLI's own source code), checked by SHA-256 before the run, so every run on every machine sends
+the same texts.
 
 | Part | Requests |
 | --- | --- |
@@ -244,7 +274,8 @@ prompt tokens / time to the first written token (in the agent part the prefix ma
 Decoding is greedy. Memory (wired, available, swap, server resident memory with `--pid`) is sampled every second.
 Results go to a JSON file (`--out`). `--free` keeps the older mode with free sizes (`--contexts`).
 
-The bench sends no thinking field, so measure with thinking off: start PLI with `pli serve ... --no-thinking`, or pass
+`tools/pli_bench.py` sends no thinking field, so measure with thinking off (`pli bench` passes
+`--extra '{"chat_template_kwargs": {"enable_thinking": false}}'`): start PLI with `pli serve ... --no-thinking`, or pass
 `--extra` for other servers (`'{"chat_template_kwargs": {"enable_thinking": false}}'` for PLI and mlx-lm,
 `'{"reasoning_effort": "none"}'` for Kapitsa); for llama.cpp, start its server with `--reasoning off`.
 
@@ -258,8 +289,8 @@ line says. The figures in this section come from the public suite (see [Benchmar
 | --- | --- |
 | Machine | Mac Studio, M1 Ultra (20-core CPU: 16 performance and 4 efficiency cores; 64-core GPU; two Neural Engine blocks), 64 GB |
 | OS | macOS 27.0.1 |
-| Suite | `tools/bench_data/suite-v1.json`, `--salt pub`; one engine at a time, nothing else running; greedy decoding, thinking off |
-| PLI 4.0.0 | set up as `install.sh` does: `--profile m1-ultra`, hybrid draft (DFlash2 and the MTP head of Qwen3.8-27B in 4 bits), `--context 229376 --parallel 4`; Python 3.12, MLX 0.32.3, mlx-lm 0.32.0 |
+| Suite | pli-bench-v1 (`src/tensorfold/bench/data/suite-v1.json`), `--salt pub`; one engine at a time, nothing else running; greedy decoding, thinking off |
+| PLI 4.0.0 | set up as `install.sh` (now `pli setup`) does: `--profile m1-ultra`, hybrid draft (DFlash2 and the MTP head of Qwen3.8-27B in 4 bits), `--context 229376 --parallel 4`; Python 3.12, MLX 0.32.3, mlx-lm 0.32.0 |
 | [Kapitsa](https://github.com/nace-ai/kapitsa) 0.2.24 | its defaults with the DFlash2 draft, `--context 131072 --slots 4`, `reasoning_effort: none` |
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) b11926 | Qwen3.8-27B in GGUF Q4_K_M with its MTP head (GGUF Q8_0) as draft (`--spec-type draft-mtp --spec-draft-n-max 2`), `-fa on -ngl all`, `--reasoning off` |
 | [mlx-lm](https://github.com/ml-explore/mlx-lm) 0.32.2 | `mlx_lm.server` (MLX 0.32.4), no draft, thinking off |

@@ -96,8 +96,8 @@ above). The FALCON pair is experimental.
 | `PLI_ALLOWED_HOSTS` | `mac.local,192.0.2.10` | Extra host names admitted by the Host/Origin guard (for example the machine's LAN name). | `tensorfold/server/host_guard.py` |
 | `PLI_EVENTS` | `~/pli/logs/events.jsonl` | Path of the event journal: one JSON line per scheduler action, with the conversation, no message content. | `tensorfold/pli/events.py` |
 | `PLI_TRACE_DIR` | `~/pli/logs/trace` | Directory of the step trace, off until switched on with `python -m tensorfold.pli.trace on [--duration 24h]` (no restart). | `tensorfold/pli/trace.py` |
-| `MLX_MAX_MB_PER_BUFFER` | `500` | Most MB of an MLX command buffer. MLX reads it when it starts, before any profile is applied, so it goes in the server's environment; `install.sh` sets it with `--profile m1-ultra`. Stable, in production. | `install.sh` (read by MLX) |
-| `MLX_MAX_OPS_PER_BUFFER` | `100` | Most operations of an MLX command buffer; in the environment for the same reason. Stable, in production. | `install.sh` (read by MLX) |
+| `MLX_MAX_MB_PER_BUFFER` | `500` | Most MB of an MLX command buffer. MLX reads it when it starts, before any profile is applied, so it goes in the server's environment; `pli setup` sets it with `--profile m1-ultra`. Stable, in production. | `tensorfold/install/commands.py` (read by MLX) |
+| `MLX_MAX_OPS_PER_BUFFER` | `100` | Most operations of an MLX command buffer; in the environment for the same reason. Stable, in production. | `tensorfold/install/commands.py` (read by MLX) |
 | `PLI_FALCON` | `~/pli/falcon/capture` | Experimental. Directory where FALCON captures training examples for the MTP head (hidden state, chosen token, top logits). Off when unset. | `tensorfold/pli/falcon/capture.py` |
 | `PLI_FALCON_MAX_GB` | `50` | Experimental. Disk cap of the FALCON capture in GB; the oldest files go first. Code default 2. | `tensorfold/pli/falcon/capture.py` |
 

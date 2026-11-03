@@ -1,6 +1,6 @@
 # Qwen3.8-27B
 
-> **With PLI**, use `install.sh` or the [Profile `m1-ultra`](../../README.md#profile-m1-ultra) section of the
+> **With PLI**, use `pli setup` (`./install.sh install`) or the [Profile `m1-ultra`](../../README.md#profile-m1-ultra) section of the
 > README. The recipe below is TensorFold's and does not describe PLI's settings.
 
 Experimental [packed affine formats](../quantization.md) include 8-bit and mixed layer precision.
