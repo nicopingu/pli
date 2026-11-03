@@ -7,7 +7,7 @@
 
 # PLI
 
-PLI ("Parallel Linked Inference") is an LLM inference server for Apple Silicon, tuned for the Ultra chips.
+PLI ("Parallel Linked Inference") is an LLM inference server for Apple Silicon, tuned for the M1 Ultra.
 It is a fork of [TensorFold](https://github.com/ashhart/TensorFold) 0.6.6 (Apache-2.0) and keeps its
 OpenAI- and Anthropic-compatible HTTP API, its exact speculative decoding and its model families.
 

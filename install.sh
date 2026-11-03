@@ -97,7 +97,7 @@ check_mac() {
     if [[ "$CHIP" == *Ultra* ]] && [ "$RAM_GB" -ge 64 ]; then
         PROFILE="m1-ultra"
     else
-        warn "the m1-ultra profile is tuned for an Ultra chip with 64 GB; PLI will run with its defaults"
+        warn "the m1-ultra profile is tuned for the M1 Ultra with 64 GB and given to Ultra chips with 64 GB or more; PLI will run with its defaults"
     fi
     ANE=1
     if ! xcode-select -p >/dev/null 2>&1; then

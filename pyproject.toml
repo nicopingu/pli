@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pli"
 dynamic = ["version"]
-description = "PLI (Parallel Linked Inference): LLM inference for Apple Silicon Ultra chips (GPU, CPU and Neural Engine), forked from TensorFold 0.6.6"
+description = "PLI (Parallel Linked Inference): LLM inference for Apple Silicon, tuned for the M1 Ultra (GPU, CPU and Neural Engine), forked from TensorFold 0.6.6"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"   # MLX 0.32.2 and 0.32.3 publish wheels for Python 3.10 to 3.14
 license = "Apache-2.0"
