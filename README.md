@@ -153,16 +153,16 @@ The full list, with each variable's code default, is in [docs/switches.md](docs/
 PLI's kernels, Neural Engine path and drafts are written and measured for the dense Qwen3.8-27B. The other families
 come from TensorFold 0.6.6 and keep its MLX engines; PLI has not validated them.
 
-| Family | `model_type` | Status under PLI | Recipe |
-| --- | --- | --- | --- |
-| Qwen3.8-27B (dense) and its fine-tunes | `qwen3_5` | **Validated** (M1 Ultra, 64 GB, `m1-ultra` profile) | [qwen3.8-27b.md](docs/recipes/qwen3.8-27b.md) |
-| Qwen3.6-35B-A3B (MoE) | `qwen3_5_moe` | Not validated under PLI | [qwen3.6-moe.md](docs/recipes/qwen3.6-moe.md) |
-| GLM-5.3-Flash | `glm5_next` | Not validated under PLI (written for a 256 GB Mac) | [glm-5.3-flash.md](docs/recipes/glm-5.3-flash.md) |
-| DeepSeek-V4-Flash | `deepseek_v4` | Not validated under PLI (written for a 256 GB Mac) | [deepseek-v4-flash.md](docs/recipes/deepseek-v4-flash.md) |
-| Nemotron 3.5 Lightning | `nemotron_h` | Not validated under PLI | [nemotron-3.5.md](docs/recipes/nemotron-3.5.md) |
-| Gemma 4 26B-A4B | `gemma4` | Not validated under PLI | [gemma-4.md](docs/recipes/gemma-4.md) |
-| Qwen3.8 Flash Next | `qwen4_exp` | Not validated under PLI (sized for a 128 GB Mac) | [qwen3.8-flash-next.md](docs/recipes/qwen3.8-flash-next.md) |
-| Ternary Bonsai 2 27B | `bonsai` | Not validated under PLI | [ternary-bonsai-2.md](docs/recipes/ternary-bonsai-2.md) |
+| Family | `model_type` | Status under PLI | Model on Hugging Face | Recipe |
+| --- | --- | --- | --- | --- |
+| Qwen3.8-27B (dense) and its fine-tunes | `qwen3_5` | **Validated** (M1 Ultra, 64 GB, `m1-ultra` profile) | [mlx-community/Qwen3.8-27B-4bit](https://huggingface.co/mlx-community/Qwen3.8-27B-4bit) (installed by `install.sh`); fine-tune validated: [sabicap/sabi-noema](https://huggingface.co/sabicap/sabi-noema) | [qwen3.8-27b.md](docs/recipes/qwen3.8-27b.md) |
+| Qwen3.6-35B-A3B (MoE) | `qwen3_5_moe` | Not validated under PLI | [TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP](https://huggingface.co/TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP) | [qwen3.6-moe.md](docs/recipes/qwen3.6-moe.md) |
+| GLM-5.3-Flash | `glm5_next` | Not validated under PLI (written for a 256 GB Mac) | [TensorFold/GLM-5.3-Flash-MLX-4bit-MTP](https://huggingface.co/TensorFold/GLM-5.3-Flash-MLX-4bit-MTP) | [glm-5.3-flash.md](docs/recipes/glm-5.3-flash.md) |
+| DeepSeek-V4-Flash | `deepseek_v4` | Not validated under PLI (written for a 256 GB Mac) | [mlx-community/DeepSeek-V4-Flash-4bit](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-4bit) | [deepseek-v4-flash.md](docs/recipes/deepseek-v4-flash.md) |
+| Nemotron 3.5 Lightning | `nemotron_h` | Not validated under PLI | [TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit](https://huggingface.co/TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit) | [nemotron-3.5.md](docs/recipes/nemotron-3.5.md) |
+| Gemma 4 26B-A4B | `gemma4` | Not validated under PLI | [mlx-community/gemma-4-26b-a4b-it-4bit](https://huggingface.co/mlx-community/gemma-4-26b-a4b-it-4bit) | [gemma-4.md](docs/recipes/gemma-4.md) |
+| Qwen3.8 Flash Next | `qwen4_exp` | Not validated under PLI (sized for a 128 GB Mac) | [TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP](https://huggingface.co/TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP) | [qwen3.8-flash-next.md](docs/recipes/qwen3.8-flash-next.md) |
+| Ternary Bonsai 2 27B | `bonsai` | Not validated under PLI | [prism-ml/Ternary-Bonsai-2-27B-mlx-2bit](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-mlx-2bit) | [ternary-bonsai-2.md](docs/recipes/ternary-bonsai-2.md) |
 
 The recipes are TensorFold's; their CUDA sections describe the upstream project and do not apply to PLI.
 
