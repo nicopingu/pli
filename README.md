@@ -18,7 +18,7 @@ how it is measured: [Measurements](#measurements)):
 | --- | ---: | --- | ---: | --- |
 | Prompt reading (tok/s) | 191 | 62-token prompt | 323 | 8k-token prompt |
 | Writing (tok/s) | 34.1 | 96k-token context | 111.2 | 62-token context |
-| Time to the first token (ms) | 320 | 62-token prompt | 450,030 | 96k-token prompt |
+| Time to the first token (ms) | 320 | 62-token prompt | 450 030 | 96k-token prompt |
 
 PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, kernels measured for the dense
 Qwen3.8-27B, and a draft that picks, per conversation, between DFlash2 and the model's own MTP head.
@@ -105,7 +105,7 @@ arithmetic, judged on whole conversations before it went into production.
 | Neural Engine kept awake, units by chunk size | `PLI_ANE_KEEPAWAKE`, `PLI_ANE_STEPS` | can change | 3.7.0 |
 | Neural Engine weights requantized on the CPU | `PLI_ANE_REQUANT_CPU`, `PLI_ANE_REQUANT_THREADS` | same bits | 3.7.0 |
 | Decode attention `attm`, 128-key slices on short calls | `PLI_ATTENTION_ATTM`, `PLI_ATTM_SHORT` (fallbacks: `PLI_ATTENTION_ATTEC`, `PLI_ATTENTION_PER_ROW`) | can change | 3.7.0: `PLI_ATTM_SHORT` |
-| Reduced attention beyond 20,000 tokens, anchored to positions | `PLI_ATTENTION_REDUCED`, `PLI_REDUCED_ROUNDS`, `PLI_REDUCED_ANCHOR` | can change | 3.7.0: `_ROUNDS`, `_ANCHOR` |
+| Reduced attention beyond 20 000 tokens, anchored to positions | `PLI_ATTENTION_REDUCED`, `PLI_REDUCED_ROUNDS`, `PLI_REDUCED_ANCHOR` | can change | 3.7.0: `_ROUNDS`, `_ANCHOR` |
 | Decode kernels: weight layout, bf16 fragments, one tile per threadgroup | `PLI_RELAYOUT`, `PLI_XF_BF16`, `PLI_TILES_PER_GROUP` | same bits | 3.7.0: `PLI_TILES_PER_GROUP` |
 | Cost arbiter, small requests first, prompt chunks between decode rounds | `PLI_ARBITER`, `PLI_ADMIT_SMALL`, `PLI_ROUNDS_BETWEEN_PREFILLS`, `PLI_CHUNK_LAYERS`, `PLI_INTERLEAVE_DENSE` | same text | 3.6.0 or earlier |
 | Last prompt tokens read with the chunk before | `PLI_MERGE_TAIL` | can change | 3.7.0 |
@@ -119,10 +119,10 @@ arithmetic, judged on whole conversations before it went into production.
 | Host/Origin guard, arrival and end times in the log | `PLI_HOST_GUARD`, `PLI_LOG_TIMES` | same text | 3.6.0 or earlier |
 | Draft trees for one-turn questions (KFlash, verified through `attm`): the DFlash2 chain stays while it keeps 4.5 tokens per round; agent sessions keep the chain | `PLI_KFLASH`, `PLI_TREES_ATTM`, `PLI_HYBRID_TREES`, `PLI_TREE_DELTANET`, `PLI_TREES_SHORT_ONLY`, `PLI_TREES_TOKEN_THRESHOLD` | can change (near ties) | 4.0.0 |
 | Copy of the context or DFlash2 chain, chosen per stream from what each would have given | `PLI_HEAD_BEFORE_COPY` | same text | 4.0.0 |
-| Extended draft lists: a file of 2,515 token ids, one per line, added to the reduced vocabularies of both drafts (for each draft, the 2,048 tokens it missed most, merged; shipped with PLI). Learned on the author's traffic, mostly French; its gain for other use is not measured | `PLI_EXTENDED_DRAFT_LIST` | same text | 4.0.0 |
+| Extended draft lists: a file of 2 515 token ids, one per line, added to the reduced vocabularies of both drafts (for each draft, the 2 048 tokens it missed most, merged; shipped with PLI). Learned on the author's traffic, mostly French; its gain for other use is not measured | `PLI_EXTENDED_DRAFT_LIST` | same text | 4.0.0 |
 | Draft kernels: attention, stacked projections, q and k norms with RoPE in one kernel, top-16 spread, block projections laid out | `PLI_DRAFT_ATTN`, `PLI_DRAFT_STACK`, `PLI_DRAFT_QKR`, `PLI_DRAFT_TOPK`, `PLI_RELAYOUT_DRAFT` | same text (drafts are verified) | 4.0.0 |
 | `attm` fragments loaded by simdgroup; 8-row tables prepared in parallel | `PLI_ATTM_LOAD`, `PLI_V8_PREP2` | same bits | 4.0.0 |
-| Reduced attention, anchored, for prompt chunks of up to 2,047 rows beyond 65,536 tokens of context | `PLI_S3B`, `PLI_S3B_THRESHOLD` | can change | 4.0.0 |
+| Reduced attention, anchored, for prompt chunks of up to 2 047 rows beyond 65 536 tokens of context | `PLI_S3B`, `PLI_S3B_THRESHOLD` | can change | 4.0.0 |
 | Snapshot on disk read again at the first slice of a resumed prompt | `PLI_REREAD_DISK` | see CHANGELOG | 4.0.0 |
 | Prompt checkpoint spilled to disk even when a reply extends it; checkpoint where a prompt forks in its last message (both on by default) | `PLI_SPILL_PROMPT`, `PLI_FORK_MIN` | same text | 4.0.0 |
 | MLX command buffers of at most 500 MB and 100 operations (env, set by `install.sh`) | `MLX_MAX_MB_PER_BUFFER`, `MLX_MAX_OPS_PER_BUFFER` | same text | 4.0.0 |
@@ -274,33 +274,33 @@ Prompt reading (higher is better):
 | Prompt | Tokens read | PLI 4.0.0 reading (tok/s) | Kapitsa 0.2.24 reading (tok/s) | llama.cpp reading (tok/s) | mlx-lm reading (tok/s) |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | short code request | 62 | 191 | 156 | 121 | 91 |
-| 1k | 1,001 | 294 | 210 | 193 | 159 |
-| 8k | 8,001 | 323 | 209 | 192 | 165 |
-| 32k | 32,002 | 285 | 189 | 168 | 153 |
-| 64k | 64,002 | 245 | 167 | 144 | 136 |
-| 96k | 96,002 | 213 | 151 | 126 | not measured (prompt reading over 13 min) |
+| 1k | 1 001 | 294 | 210 | 193 | 159 |
+| 8k | 8 001 | 323 | 209 | 192 | 165 |
+| 32k | 32 002 | 285 | 189 | 168 | 153 |
+| 64k | 64 002 | 245 | 167 | 144 | 136 |
+| 96k | 96 002 | 213 | 151 | 126 | not measured (prompt reading over 13 min) |
 
 Writing (higher is better; 400 tokens written for the code request, 200 for the others):
 
 | Prompt | Tokens read | PLI 4.0.0 writing (tok/s) | Kapitsa 0.2.24 writing (tok/s) | llama.cpp writing (tok/s) | mlx-lm writing (tok/s) |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | short code request | 62 | 111.2 | 116.1 | 31.1 | 24.1 |
-| 1k | 1,001 | 53.2 | 65.3 | 25.1 | 24.0 |
-| 8k | 8,001 | 45.8 | 54.2 | 23.0 | 22.6 |
-| 32k | 32,002 | 49.2 | 43.1 | 19.9 | 18.8 |
-| 64k | 64,002 | 40.8 | 32.9 | 17.1 | 17.2 |
-| 96k | 96,002 | 34.1 | 33.6 | 15.5 | not measured |
+| 1k | 1 001 | 53.2 | 65.3 | 25.1 | 24.0 |
+| 8k | 8 001 | 45.8 | 54.2 | 23.0 | 22.6 |
+| 32k | 32 002 | 49.2 | 43.1 | 19.9 | 18.8 |
+| 64k | 64 002 | 40.8 | 32.9 | 17.1 | 17.2 |
+| 96k | 96 002 | 34.1 | 33.6 | 15.5 | not measured |
 
 Time from the request to the first token written (lower is better; measured to 10 ms):
 
 | Prompt | Tokens read | PLI 4.0.0 time (ms) | Kapitsa 0.2.24 time (ms) | llama.cpp time (ms) | mlx-lm time (ms) |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | short code request | 62 | 320 | 400 | 510 | 680 |
-| 1k | 1,001 | 3,410 | 4,770 | 5,180 | 6,300 |
-| 8k | 8,001 | 24,810 | 38,210 | 41,650 | 48,620 |
-| 32k | 32,002 | 112,200 | 169,280 | 190,040 | 208,580 |
-| 64k | 64,002 | 261,810 | 382,840 | 443,660 | 469,130 |
-| 96k | 96,002 | 450,030 | 634,250 | 761,140 | not measured |
+| 1k | 1 001 | 3 410 | 4 770 | 5 180 | 6 300 |
+| 8k | 8 001 | 24 810 | 38 210 | 41 650 | 48 620 |
+| 32k | 32 002 | 112 200 | 169 280 | 190 040 | 208 580 |
+| 64k | 64 002 | 261 810 | 382 840 | 443 660 | 469 130 |
+| 96k | 96 002 | 450 030 | 634 250 | 761 140 | not measured |
 
 PLI reads prompts 1.4 to 1.5 times as fast as Kapitsa from 1k to 96k (1.2 times on the short code request). Kapitsa
 writes faster on short prompts (code request, 1k, 8k); PLI writes faster at 32k and 64k, and level at 96k. Both draft with DFlash2; llama.cpp drafts with the MTP head, mlx-lm
@@ -309,7 +309,7 @@ prompts of the same size can differ by several percent.
 
 ### Agent session
 
-One session that grows from 6,468 to 50,706 tokens, with 8 measured answers of 200 tokens (see
+One session that grows from 6 468 to 50 706 tokens, with 8 measured answers of 200 tokens (see
 [Benchmark](#benchmark)). Each run was stopped after 13 minutes.
 
 | Measure | PLI 4.0.0 | Kapitsa 0.2.24 | llama.cpp | mlx-lm |
@@ -317,7 +317,7 @@ One session that grows from 6,468 to 50,706 tokens, with 8 measured answers of 2
 | Answers measured in 13 minutes | 8 of 8 | 6 of 8 | 8 of 8 | 6 of 8 |
 | Writing, first 6 answers (tok/s) | 47.0 | 46.7 | 24.3 | 20.9 |
 | Writing, all 8 answers (tok/s) | 47.1 | | 22.7 | |
-| Mean time to the first token, first 6 answers (ms) | 31,100 | 97,300 | 31,300 | 121,400 |
+| Mean time to the first token, first 6 answers (ms) | 31 100 | 97 300 | 31 300 | 121 400 |
 | Prompt tokens served from the cache, first 6 answers | 57 % | 0 % | 73 % | 0 % |
 
 The session drops each measured answer before it goes on, so a cache must reuse a prefix that ends inside the
@@ -344,7 +344,7 @@ PLI_NO_UPDATE_CHECK=1 ~/pli/venv/bin/python -m pytest -q tests
 ```
 
 Tests that need hardware PLI's GPU lacks are skipped with the reason (Metal 4 tensor units on M5-generation GPUs,
-or 1,024 threads per threadgroup for GLM-5.3-Flash's kernels). Measurement probes that are not unit tests live in
+or 1 024 threads per threadgroup for GLM-5.3-Flash's kernels). Measurement probes that are not unit tests live in
 `tools/probes/`.
 
 ## Inspirations and third-party code
