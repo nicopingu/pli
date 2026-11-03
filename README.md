@@ -11,6 +11,15 @@ PLI ("Parallel Linked Inference") is an LLM inference server for Apple Silicon, 
 It is a fork of [TensorFold](https://github.com/ashhart/TensorFold) 0.6.6 (Apache-2.0) and keeps its
 OpenAI- and Anthropic-compatible HTTP API, its exact speculative decoding and its model families.
 
+Speed of PLI 4.0.0 on the validated machine (Mac Studio M1 Ultra, 64 GB, Qwen3.8-27B 4-bit, one request at a time;
+how it is measured: [Measurements](#measurements)):
+
+| Measure | Min | At | Max | At |
+| --- | ---: | --- | ---: | --- |
+| Prompt reading (tok/s) | 191 | 62-token prompt | 323 | 8k-token prompt |
+| Writing (tok/s) | 34.1 | 96k-token context | 111.2 | 62-token context |
+| Time to the first token (ms) | 320 | 62-token prompt | 450,030 | 96k-token prompt |
+
 PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, kernels measured for the dense
 Qwen3.8-27B, and a draft that picks, per conversation, between DFlash2 and the model's own MTP head.
 
@@ -255,21 +264,43 @@ line says. The figures in this section come from the public suite (see [Benchmar
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) b11926 | Qwen3.8-27B in GGUF Q4_K_M with its MTP head (GGUF Q8_0) as draft (`--spec-type draft-mtp --spec-draft-n-max 2`), `-fa on -ngl all`, `--reasoning off` |
 | [mlx-lm](https://github.com/ml-explore/mlx-lm) 0.32.2 | `mlx_lm.server` (MLX 0.32.4), no draft, thinking off |
 | Models | mlx-community/Qwen3.8-27B-4bit for PLI, Kapitsa and mlx-lm; drafts z-lab/Qwen3.8-27B-DFlash2 |
-| Units | tokens per second (tok/s), prompt sizes in tokens (Qwen3.8 tokenizer) |
+| Units | tokens per second (tok/s), times in milliseconds (ms), prompt sizes in tokens (Qwen3.8 tokenizer) |
 | Dates | 2 and 3 November 2026 |
 
 ### One request at a time
 
-Prompt reading / writing, in tok/s (higher is better):
+Prompt reading (higher is better):
 
-| Prompt | Tokens read | PLI 4.0.0 | Kapitsa 0.2.24 | llama.cpp | mlx-lm |
+| Prompt | Tokens read | PLI 4.0.0 reading (tok/s) | Kapitsa 0.2.24 reading (tok/s) | llama.cpp reading (tok/s) | mlx-lm reading (tok/s) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| short code request (400 tokens written) | 62 | 191 / 111.2 | 156 / 116.1 | 121 / 31.1 | 91 / 24.1 |
-| 1k | 1,001 | 294 / 53.2 | 210 / 65.3 | 193 / 25.1 | 159 / 24.0 |
-| 8k | 8,001 | 323 / 45.8 | 209 / 54.2 | 192 / 23.0 | 165 / 22.6 |
-| 32k | 32,002 | 285 / 49.2 | 189 / 43.1 | 168 / 19.9 | 153 / 18.8 |
-| 64k | 64,002 | 245 / 40.8 | 167 / 32.9 | 144 / 17.1 | 136 / 17.2 |
-| 96k | 96,002 | 213 / 34.1 | 151 / 33.6 | 126 / 15.5 | not measured (prompt reading over 13 min) |
+| short code request | 62 | 191 | 156 | 121 | 91 |
+| 1k | 1,001 | 294 | 210 | 193 | 159 |
+| 8k | 8,001 | 323 | 209 | 192 | 165 |
+| 32k | 32,002 | 285 | 189 | 168 | 153 |
+| 64k | 64,002 | 245 | 167 | 144 | 136 |
+| 96k | 96,002 | 213 | 151 | 126 | not measured (prompt reading over 13 min) |
+
+Writing (higher is better; 400 tokens written for the code request, 200 for the others):
+
+| Prompt | Tokens read | PLI 4.0.0 writing (tok/s) | Kapitsa 0.2.24 writing (tok/s) | llama.cpp writing (tok/s) | mlx-lm writing (tok/s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| short code request | 62 | 111.2 | 116.1 | 31.1 | 24.1 |
+| 1k | 1,001 | 53.2 | 65.3 | 25.1 | 24.0 |
+| 8k | 8,001 | 45.8 | 54.2 | 23.0 | 22.6 |
+| 32k | 32,002 | 49.2 | 43.1 | 19.9 | 18.8 |
+| 64k | 64,002 | 40.8 | 32.9 | 17.1 | 17.2 |
+| 96k | 96,002 | 34.1 | 33.6 | 15.5 | not measured |
+
+Time from the request to the first token written (lower is better; measured to 10 ms):
+
+| Prompt | Tokens read | PLI 4.0.0 time (ms) | Kapitsa 0.2.24 time (ms) | llama.cpp time (ms) | mlx-lm time (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| short code request | 62 | 320 | 400 | 510 | 680 |
+| 1k | 1,001 | 3,410 | 4,770 | 5,180 | 6,300 |
+| 8k | 8,001 | 24,810 | 38,210 | 41,650 | 48,620 |
+| 32k | 32,002 | 112,200 | 169,280 | 190,040 | 208,580 |
+| 64k | 64,002 | 261,810 | 382,840 | 443,660 | 469,130 |
+| 96k | 96,002 | 450,030 | 634,250 | 761,140 | not measured |
 
 PLI reads prompts 1.4 to 1.5 times as fast as Kapitsa from 1k to 96k (1.2 times on the short code request). Kapitsa
 writes faster on short prompts (code request, 1k, 8k); PLI writes faster at 32k and 64k, and level at 96k. Both draft with DFlash2; llama.cpp drafts with the MTP head, mlx-lm
@@ -281,12 +312,12 @@ prompts of the same size can differ by several percent.
 One session that grows from 6,468 to 50,706 tokens, with 8 measured answers of 200 tokens (see
 [Benchmark](#benchmark)). Each run was stopped after 13 minutes.
 
-| | PLI 4.0.0 | Kapitsa 0.2.24 | llama.cpp | mlx-lm |
+| Measure | PLI 4.0.0 | Kapitsa 0.2.24 | llama.cpp | mlx-lm |
 | --- | ---: | ---: | ---: | ---: |
 | Answers measured in 13 minutes | 8 of 8 | 6 of 8 | 8 of 8 | 6 of 8 |
 | Writing, first 6 answers (tok/s) | 47.0 | 46.7 | 24.3 | 20.9 |
 | Writing, all 8 answers (tok/s) | 47.1 | | 22.7 | |
-| Mean time to the first token, first 6 answers (s) | 31.1 | 97.3 | 31.3 | 121.4 |
+| Mean time to the first token, first 6 answers (ms) | 31,100 | 97,300 | 31,300 | 121,400 |
 | Prompt tokens served from the cache, first 6 answers | 57 % | 0 % | 73 % | 0 % |
 
 The session drops each measured answer before it goes on, so a cache must reuse a prefix that ends inside the
