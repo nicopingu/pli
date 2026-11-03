@@ -471,7 +471,7 @@ def test_the_bench_suite_is_package_data():
     suite = json.loads(pli_bench.SUITE.read_text())
     assert suite["suite"] == "pli-bench-v1" and (pli_bench.SUITE.parent / suite["corpus"]).is_file()
     pyproject = (ROOT / "pyproject.toml").read_text()
-    assert '"tensorfold.bench" = ["data/*.json", "data/*.txt"]' in pyproject
+    assert '"tensorfold.bench.data" = ["*.json", "*.txt"]' in pyproject
 
 
 def test_pli_bench_runs_the_suite_on_the_local_port_with_thinking_off(fake, monkeypatch):

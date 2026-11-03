@@ -52,7 +52,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "tensorfold.control.assets" = ["*.json"]
-"tensorfold.bench" = ["data/*.json", "data/*.txt"]
+"tensorfold.bench.data" = ["*.json", "*.txt"]
 "tensorfold.drafters.vendor.z_lab_dflash" = ["README.md"]
 "tensorfold.pli" = ["profiles/*/*.env", "extended-list-*.txt"]
 "tensorfold.pli.ane" = ["build.sh", "native/*.c", "native/*.mm", "native/*.hpp", "native/*/*.mm", "native/*/*.hpp", "native/LICENSE-splash"]
