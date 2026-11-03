@@ -8,6 +8,16 @@ from typing import Callable
 
 from tensorfold import __version__
 
+SHORT_HELP = f"""PLI {__version__}: fast, exact LLM decoding on Apple Silicon behind an OpenAI-compatible endpoint.
+
+  pli setup            check this Mac, download the models (it asks first), install and start the service
+  pli serve MODEL      serve a model in this terminal, e.g. pli serve mlx-community/Qwen3.8-27B-4bit
+  pli status           is the service running, is the server answering
+  pli bench            run the public bench suite against the local server
+
+Also: pli start, stop, restart, logs, uninstall; pli pull, models, info, plan, service, tui.
+pli --help lists every command; pli COMMAND --help gives its options."""
+
 
 def build_parser(handlers: dict[str, Callable[[argparse.Namespace], int]]) -> argparse.ArgumentParser:
     """The ``tensorfold`` parser, each subcommand bound to ``handlers[name]``."""
@@ -130,6 +140,9 @@ def build_parser(handlers: dict[str, Callable[[argparse.Namespace], int]]) -> ar
     from tensorfold.control.cli import register
 
     register(commands)
+    from tensorfold.install.commands import register as register_install
+
+    register_install(commands)
 
     plan = commands.add_parser("plan",
                                help="estimate local checkpoint weights against MLX budgets without loading a model")

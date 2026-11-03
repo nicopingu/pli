@@ -18,8 +18,9 @@ from tensorfold.server import stacks, thinking_notes
 from tensorfold.server.memory_budget import MEMORY_FRACTION
 from tensorfold.serve_options import check as _check_serve_options
 from tensorfold.serve_options import vision_options as _vision_options
+from tensorfold.install.commands import COMMANDS as _INSTALL_COMMANDS
 
-COMMANDS = ("serve", "pull", "models", "info", "update", "service", "tui", "plan")
+COMMANDS = ("serve", "pull", "models", "info", "update", "service", "tui", "plan", *_INSTALL_COMMANDS)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,6 +32,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv:                                  # `pli` alone: a short help with examples
+        print(cli_args.SHORT_HELP)
+        return 0
+    if argv[0] == "bench":                        # every option goes to the bench, --help included
+        from tensorfold.install.commands import bench
+
+        return bench(argv[1:])
     # ``tensorfold MODEL ...`` is ``tensorfold serve MODEL ...``
     if argv and not argv[0].startswith("-") and argv[0] not in COMMANDS:
         from tensorfold import hub

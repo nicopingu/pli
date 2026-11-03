@@ -1,4 +1,4 @@
-"""The public bench suite (tools/bench_data/suite-v1.json): its corpus and every request are the frozen texts."""
+"""The public bench suite (src/tensorfold/bench/data/suite-v1.json): its corpus and every request are the frozen texts."""
 
 import hashlib
 import importlib.util
@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITE = ROOT / "tools" / "bench_data" / "suite-v1.json"
+SUITE = ROOT / "src" / "tensorfold" / "bench" / "data" / "suite-v1.json"
 
 
 def _bench():
-    spec = importlib.util.spec_from_file_location("pli_bench", ROOT / "tools" / "pli_bench.py")
+    spec = importlib.util.spec_from_file_location("pli_bench", ROOT / "src" / "tensorfold" / "bench" / "pli_bench.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
