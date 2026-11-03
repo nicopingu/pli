@@ -13,5 +13,5 @@ if [ "$(uname -s)" = Darwin ]; then
 fi
 if [ "${2:-}" = --native-launchd ]; then
   [ "$(uname -s)" = Darwin ] || { echo 'Native launchd check requires macOS' >&2; exit 1; }
-  TENSORFOLD_TEST_LAUNCHD=1 "$PYTHON" -m pytest tests/control/test_macos_smoke.py -v
+  PLI_TEST_LAUNCHD=1 "$PYTHON" -m pytest tests/control/test_macos_smoke.py -v
 fi

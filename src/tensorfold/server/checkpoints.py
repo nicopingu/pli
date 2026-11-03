@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import threading
 import time
 from typing import Any, Callable
-from tensorfold.pli import evenements as _ev
+from tensorfold.pli import events as _ev
+
+# PLI (28/10/2026, PLI_CHECKPOINT_LOG=1, off by default): each checkpoint kept, evicted or refused writes an event
+# (PLI_EVENTS log), to find why an agent conversation re-reads everything.
+_LOG = __import__("os").environ.get("PLI_CHECKPOINT_LOG", "0") == "1"
+
+
+def _point(action: str, entry: "CheckpointEntry", **extra: Any) -> None:
+    if not _LOG:
+        return
+    try:
+        reply_end = entry.tokens != entry.last_prompt[:len(entry.tokens)]
+        _ev.ev(action, conv=_ev.conv_of_tokens(entry.tokens), tokens=len(entry.tokens), gib=round(entry.nbytes / 1024**3, 3),
+               kind="reply_end" if reply_end else ("block" if entry.pinned else "prompt"), **extra)
+    except Exception:  # noqa: BLE001 - a log never breaks a request
+        pass
+
 
 def longest_common_prefix(a: list[int], b: list[int]) -> int:
     n = 0
@@ -25,6 +42,14 @@ def extends(longer: list[int], shorter: list[int]) -> bool:
     return len(longer) > n > 0 and longer[n - 1] == shorter[-1] and longer[:n] == shorter
 
 
+# PLI (rule of TensorFold PR #1291 for issue #1262, rewritten in Python): when the prompt forks from the previous one inside
+# its last message (the same long document sent again with another question), the state at the fork point is kept: the next
+# request of the same kind starts from there instead of reading the document again. Only past PLI_FORK_MIN tokens read since the
+# resume (4,096); 0: off. Same text (a resume gives what a full prefill gives).
+_FORK_MIN = int(os.environ.get("PLI_FORK_MIN", "4096") or 0)
+_SPILL_PROMPT = os.environ.get("PLI_SPILL_PROMPT", "1") != "0"
+
+
 def choose_checkpoints(
     history_len: int, cached: int, last_prompt: list[int] | None, prompt: list[int]
 ) -> list[int]:
@@ -34,6 +59,8 @@ def choose_checkpoints(
     if last_prompt:
         stable = longest_common_prefix(last_prompt, prompt)
         if 0 < stable < int(history_len) and stable >= int(history_len) // 2:
+            candidates.add(stable)
+        elif _FORK_MIN > 0 and int(history_len) < stable < len(prompt) and stable - int(cached) >= _FORK_MIN:
             candidates.add(stable)
     return sorted(at for at in candidates if int(cached) < at < len(prompt))
 
@@ -74,8 +101,8 @@ def save_conversations(store: "CheckpointStore", directory: Path, model_id: str,
             break
         saved += 1
         total += entry.nbytes
-        _ev.ev("point_de_reprise", conv=_ev.conv_des_jetons(entry.tokens), jetons=len(entry.tokens),
-               gio=entry.nbytes / 1024**3, duree=time.perf_counter() - started)
+        _ev.ev("checkpoint", conv=_ev.conv_of_tokens(entry.tokens), tokens=len(entry.tokens),
+               gib=entry.nbytes / 1024**3, duration=time.perf_counter() - started)
         print(f"[lanes] saved conversation checkpoint tokens={len(entry.tokens)} "
               f"({entry.nbytes / 1024**3:.1f} GiB) in {time.perf_counter() - started:.1f}s", flush=True)
     return saved
@@ -95,8 +122,8 @@ def spill_conversation(entry: CheckpointEntry, directory: Path, model_id: str, *
         print(f"[tensorfold] conversation spill failed: {type(exc).__name__}: {exc}", flush=True)
         return False
     prune_conversations(directory, model_id, limit_bytes)
-    _ev.ev("deversement", conv=_ev.conv_des_jetons(entry.tokens), jetons=len(entry.tokens),
-           gio=entry.nbytes / 1024**3, duree=time.perf_counter() - started)
+    _ev.ev("spill", conv=_ev.conv_of_tokens(entry.tokens), tokens=len(entry.tokens),
+           gib=entry.nbytes / 1024**3, duration=time.perf_counter() - started)
     print(f"[tensorfold] spilled conversation tokens={len(entry.tokens)} ({entry.nbytes / 1024**3:.1f} GiB) "
           f"in {time.perf_counter() - started:.2f}s", flush=True)
     return True
@@ -162,7 +189,12 @@ class CheckpointStore:
         if self.on_evict is None:
             return
         with self._lock:
-            remaining = [entry.tokens for entry in self._entries]
+            # PLI (29/10/2026): a reply end does not count as a continuation. An agent that rewrites its tool calls (Hermes Agent:
+            # sorted keys, changed ids) never resumes it; the evicted prompt checkpoint did not go to disk because the reply end
+            # extended it, and the next turn read everything again (night of 28 to 29/10: 15 turns of 30,000 to 80,000 tokens, prompt
+            # checkpoint evicted by another session). PLI_SPILL_PROMPT=0: as before.
+            remaining = [entry.tokens for entry in self._entries
+                         if not (_SPILL_PROMPT and entry.tokens != entry.last_prompt[:len(entry.tokens)])]
         for entry in gone:
             # an older checkpoint of a conversation that moved on continues from the newer entry: no write
             if entry.pinned or any(extends(t, entry.tokens) for t in remaining):
@@ -176,6 +208,33 @@ class CheckpointStore:
     @property
     def nbytes(self) -> int:
         return sum(entry.nbytes for entry in self._entries)
+
+    def _recount(self, entries: list[CheckpointEntry]) -> None:
+        """PLI (29/10/2026): the checkpoints' bytes, each KV layer counted once in the store.
+
+        Under K5, a length checkpoint (``KVLen``) and the real checkpoint at the reply end hold the same KV layer of the
+        conversation; each checkpoint's count counted it whole, so twice (log of the evening of 28/10: prompt checkpoint at
+        59,269 tokens counted 3.78 GiB, like the reply end that extends it, then evicted for the 8 GiB budget).
+        The layer is counted by the first checkpoint that holds it (the most recent), at 0 in the next ones; the other layers
+        (DeltaNet, MTP head, draft) belong to each checkpoint and are counted as before. Without K5: as before."""
+
+        from tensorfold.pli import kv_sharing as _kvp
+
+        if not _kvp.ACTIVE or self.sizer is None:
+            return
+        seen: set[int] = set()
+        for e in entries:
+            total = 0
+            for item in e.cache:
+                if isinstance(item, _kvp.KVLen) or _kvp.is_kv(item):
+                    owner = _kvp.owner(item)
+                    if id(owner) in seen:
+                        continue
+                    seen.add(id(owner))
+                    total += int(self.sizer([owner]))
+                else:
+                    total += int(self.sizer([item]))
+            e.nbytes = total
 
     def _best(self, prompt: list[int], usable: Any) -> CheckpointEntry | None:
         best: CheckpointEntry | None = None
@@ -206,11 +265,46 @@ class CheckpointStore:
             self.hits += 1
             self._entries.remove(best)
             previous = list(best.last_prompt)
+            from tensorfold.pli import kv_sharing as _kvp
+            if _kvp.ACTIVE:
+                # PLI: free KV layers given without a copy; the checkpoint keeps lengths
+                n = len(best.tokens)
+                live = _kvp.resume(best.cache, n, self.copier, self._entries, take=take)
+                if take:
+                    return n, live, previous
+                best.cache = _kvp.as_lengths(best.cache, live, n)
+                self._entries.insert(0, best)
+                self._recount(self._entries)
+                best.last_prompt = list(prompt)
+                return n, live, previous
             if take:
                 return len(best.tokens), best.cache, previous
             self._entries.insert(0, best)
             best.last_prompt = list(prompt)
             return len(best.tokens), self.copier(best.cache), previous
+
+    def nearest_prompt(self, prompt: list[int]) -> list[int] | None:
+        """PLI (PLI_FORK_MIN): with no checkpoint prefixing the prompt, the kept prompt that shares the longest start with it
+        (the same document sent again with another question); None if none shares PLI_FORK_MIN tokens. Not counted as a hit or miss."""
+
+        if _FORK_MIN <= 0 or not prompt:
+            return None
+        with self._lock:
+            best, best_n = None, 0
+            for entry in self._entries:
+                last = entry.last_prompt
+                if not last or last[0] != prompt[0]:
+                    continue
+                lo, hi = 0, min(len(last), len(prompt))
+                while lo < hi:                       # longest common start, by comparing slices
+                    mid = (lo + hi + 1) // 2
+                    if last[:mid] == prompt[:mid]:
+                        lo = mid
+                    else:
+                        hi = mid - 1
+                if lo > best_n:
+                    best, best_n = last, lo
+            return list(best) if best is not None and best_n >= _FORK_MIN else None
 
     def longest(self, prompt: list[int], usable: Any = None) -> int:
         """Length of the longest strict-prefix entry ``usable`` accepts (0 if none); not counted as a hit or miss."""
@@ -231,6 +325,7 @@ class CheckpointStore:
             except Exception as exc:  # noqa: BLE001 - a bad file costs a refill, never the request
                 print(f"[tensorfold] refused snapshot spillover failed: {type(exc).__name__}: {exc}", flush=True)
         self.refused += 1
+        _point("checkpoint_refused", entry, reason=reason)
         print(f"[tensorfold] kept nothing at {len(tokens)} tokens ({reason}): a turn reusing this prefix "
               "re-prefills it", flush=True)
 
@@ -249,6 +344,7 @@ class CheckpointStore:
             pinned = pinned or any(entry.pinned for entry in replaced)
             entry = CheckpointEntry(list(tokens), cache, list(last_prompt), nbytes, pinned, len(last_prompt))
             entries = [entry, *kept]
+            self._recount(entries)                  # PLI: KV layers counted once
             for extra in [e for e in entries if e.pinned][self.pinned_slots:]:
                 extra.pinned = False
             # an oversized newest entry displaces conversations but keeps the pinned system blocks
@@ -266,12 +362,24 @@ class CheckpointStore:
                 unpinned = [i for i in range(1, len(entries)) if not entries[i].pinned]
                 if unpinned:
                     gone.append(entries.pop(self._victim(entries, unpinned)))
+                    self._recount(entries)
+                    _point("checkpoint_evicted", gone[-1], reason="slots" if over_slots else "budget",
+                           by=len(entry.tokens), budget_gib=round((limit or 0) / 1024**3, 2))
                 elif over_budget:
                     entries.pop()
+                    self._recount(entries)
                 else:
                     break
                 self.evictions += 1
+            from tensorfold.pli import kv_sharing as _kvp
+            if _kvp.ACTIVE and gone:                 # PLI: the length checkpoints follow their real layer
+                follow = _kvp.evict(entries, gone, keep=entry)
+                for g in follow:
+                    _point("checkpoint_evicted", g, reason="k5_layer_gone")
+                gone += follow
+                self._recount(entries)
             self._entries = entries
+            _point("checkpoint_kept", entry, slots=len(entries), gib_total=round(sum(e.nbytes for e in entries) / 1024**3, 2))
         self._evicted(gone)
 
     def __len__(self) -> int:
@@ -297,5 +405,14 @@ class CheckpointStore:
             ordinary = [i for i in candidates if not self._entries[i].pinned]
             gone = self._entries.pop(self._victim(self._entries, ordinary) if ordinary else candidates[-1])
             self.evictions += 1
-        self._evicted([gone])
+            _point("checkpoint_evicted", gone, reason="memory")
+            evicted = [gone]
+            from tensorfold.pli import kv_sharing as _kvp
+            if _kvp.ACTIVE:                          # PLI
+                follow = _kvp.evict(self._entries, [gone], keep=keep)
+                for g in follow:
+                    _point("checkpoint_evicted", g, reason="k5_layer_gone")
+                evicted += follow
+                self._recount(self._entries)
+        self._evicted(evicted)
         return True

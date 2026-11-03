@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,14 +7,14 @@ name = "pli"
 dynamic = ["version"]
 description = "PLI (Parallel Linked Inference): LLM inference for Apple Silicon Ultra chips (GPU, CPU and Neural Engine), forked from TensorFold 0.6.6"
 readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
-authors = [{ name = "Nicolas (NF DEVELOPPEMENT / FeNiX)" }, { name = "TensorFold contributors" }]
+requires-python = ">=3.11,<3.15"   # MLX 0.32.2 and 0.32.3 publish wheels for Python 3.10 to 3.14
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "LICENSES/*"]
+authors = [{ name = "Nicolas F. (nicopingu)" }, { name = "TensorFold contributors" }]
 keywords = ["llm", "mlx", "apple-silicon", "neural-engine", "inference", "speculative-decoding", "openai"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: Apache Software License",
   "Operating System :: MacOS",
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -37,13 +37,15 @@ vision = ["Pillow>=10", "transformers>=5.3,<6", "mlx-vlm>=0.7.3,<0.8; sys_platfo
 # response_format, guided_* and structured_outputs on every server: grammar-shaped replies (xgrammar brings torch)
 grammar = ["xgrammar>=0.2.8,<0.3"]
 
+[project.urls]
+Homepage = "https://github.com/nicopingu/pli"
+Source = "https://github.com/nicopingu/pli"
+Issues = "https://github.com/nicopingu/pli/issues"
+
 [project.scripts]
 pli = "tensorfold.cli:main"
 # former name, kept for existing scripts
 tensorfold = "tensorfold.cli:main"
-
-[tool.setuptools]
-license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "LICENSES/*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -51,8 +53,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 "tensorfold.control.assets" = ["*.json"]
 "tensorfold.drafters.vendor.z_lab_dflash" = ["README.md"]
-"tensorfold.pli" = ["profils/*/*.env"]
-"tensorfold.pli.ane" = ["construire.sh", "natif/*.mm", "natif/*.hpp", "natif/*/*.mm", "natif/*/*.hpp", "natif/LICENSE-splash"]
+"tensorfold.pli" = ["profiles/*/*.env", "extended-list-*.txt"]
+"tensorfold.pli.ane" = ["build.sh", "native/*.c", "native/*.mm", "native/*.hpp", "native/*/*.mm", "native/*/*.hpp", "native/LICENSE-splash"]
 "tensorfold.families.qwen3_5" = ["*.json"]
 "tensorfold.families.nemotron_h" = ["*.txt"]
 "tensorfold.families.qwen4_exp" = ["*.txt"]

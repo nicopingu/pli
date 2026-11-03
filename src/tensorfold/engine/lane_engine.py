@@ -9,6 +9,7 @@ from typing import Any, Callable, Iterator, Sequence
 from tensorfold.engine.family_prefill import drain
 from tensorfold.engine.lane_family import FamilyRounds
 from tensorfold.engine.prefill_plan import PrefillPlan, PromptChunks
+_KEEP_REPLY = __import__("os").environ.get("PLI_KEEP_REPLY", "0") == "1"   # PLI (23/10/2026): see server/text.py
 
 
 class SuffixLookupProposer:
@@ -395,7 +396,7 @@ class LaneEngine(FamilyRounds):
     def _keeps_decoded(self, stream: LaneStream) -> bool:
         """Whether a finished stream's decoded state is kept for the next turn (never under a plan: decoded rows)."""
 
-        return self.retain_finished_caches and stream.retain and self.prefill_plan is None
+        return self.retain_finished_caches and stream.retain and (self.prefill_plan is None or _KEEP_REPLY)
 
     @property
     def active_count(self) -> int:
@@ -420,6 +421,11 @@ class LaneEngine(FamilyRounds):
         """Release a cancelled stream between rounds: no retained cache, no pending draws or drafts."""
 
         stream.finished, stream.finish_reason, stream.finished_at = True, "cancelled", time.perf_counter()
+        from tensorfold.pli import kv_sharing as _kvp      # PLI: its KV layers become free again
+        if _kvp.ACTIVE:
+            for s, cache in self._live:
+                if s is stream:
+                    _kvp.release(cache)
         self._live[:] = [(s, cache) for s, cache in self._live if s is not stream]
         self._release_stream_state(stream.stream_id)
         self.finished_caches.pop(stream.stream_id, None)
@@ -470,6 +476,9 @@ class LaneEngine(FamilyRounds):
             return value
 
         for item in cache:
+            if type(item).__name__ == "KVLen":     # PLI: a length layer, copied to be its own
+                out.append(item.copy())
+                continue
             materialize = getattr(item, "materialize", None)
             if materialize is not None:
                 materialize()                      # a lazily held state becomes arrays before it is copied

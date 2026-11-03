@@ -10,19 +10,20 @@ from typing import Any, Callable
 import uuid
 
 from tensorfold.engine.lane_engine import LaneEngine, SuffixLookupProposer
-from tensorfold.pli import rappel as _rappel
-from tensorfold.pli import evenements as _ev
+from tensorfold.pli import recall as _recall
+from tensorfold.pli import events as _ev
+from tensorfold.pli import trace as _tr
 
 
-def _pli_heures(received_at) -> str:
-    """PLI : heure d'arrivée et de fin de la demande en bout de ligne « done », si PLI_HEURES=1 (éteint : ligne inchangée)."""
+def _pli_times(received_at) -> str:
+    """PLI: arrival and end time of the request at the end of the "done" line, if PLI_LOG_TIMES=1 (off: line unchanged)."""
     import os
-    if os.environ.get("PLI_HEURES", "0") != "1":
+    if os.environ.get("PLI_LOG_TIMES", "0") != "1":
         return ""
-    fin = time.time()
-    duree = max(0.0, time.perf_counter() - received_at) if received_at else 0.0
+    end = time.time()
+    duration = max(0.0, time.perf_counter() - received_at) if received_at else 0.0
     f = lambda t: time.strftime("%H:%M:%S", time.localtime(t)) + ".%d" % int(t * 10 % 10)
-    return f" recu={f(fin - duree)} fin={f(fin)} jour={time.strftime('%Y-%m-%d', time.localtime(fin))}"
+    return f" received={f(end - duration)} end={f(end)} day={time.strftime('%Y-%m-%d', time.localtime(end))}"
 from tensorfold.engine import grammar
 from tensorfold.server.admission import concurrency
 from tensorfold.server.checkpoints import (CheckpointStore, prune_conversations,
@@ -188,8 +189,8 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
             admission=admission,
             eos_ids=self.stop_ids,
             checkpoints=self.checkpoints,
-            # PLI (lot de patch 20261016-220013-4533) : rappel du texte déjà lu, éteint sans PLI_RAPPEL=1 (pli/rappel.py)
-            proposer_factory=(lambda: _rappel.envelopper(SuffixLookupProposer(min_match=self.min_match)))
+            # PLI: recall of text already read, off without PLI_RECALL=1 (pli/recall.py)
+            proposer_factory=(lambda: _recall.wrap(SuffixLookupProposer(min_match=self.min_match)))
             if use_proposer else None,
             snapshot_dir=snapshot_dir,
             session_dir=None if snapshot_dir is None else Path(snapshot_dir).parent / "session-snapshots",
@@ -310,6 +311,7 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
             thinking = False
         rendered = prepare_prompt(self, messages, tools, thinking, prompt, fields)
         prompt_ids, history_len = rendered.tokens, rendered.history_len
+        _tr_template = time.perf_counter()                # PLI trace: template and tokens done
         cancellation.check()
         if not prompt_ids:
             raise RequestError("rendered prompt is empty")
@@ -335,7 +337,7 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
         shaped = thinking and any(fields.get(k) is not None for k in grammar.FIELDS)
         think_end = self._token_id(self.think_markers[1]) if shaped else -1     # a grammar starts after it
 
-        conv_pli = _ev.conversation(messages) if (_ev.actif() and prompt is None) else ""   # PLI 3.6.0
+        conv_pli = _ev.conversation(messages) if (_ev.active() and prompt is None) else ""   # PLI 3.6.0
 
         def make_job() -> ChatJob:
             job = ChatJob(
@@ -360,14 +362,14 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
                 job.think_close, job.think_end = self._think_close()
                 job.think_budget = budget if job.think_end >= 0 else 0
             if drafts:
-                base: Any = _rappel.envelopper(SuffixLookupProposer(min_match=self.min_match))
+                base: Any = _recall.wrap(SuffixLookupProposer(min_match=self.min_match))
                 if tools:
                     from tensorfold.engine.tool_draft import ToolCallProposer
 
                     base = ToolCallProposer(_LockedTokenizer(self.tokenizer, self.tokenizer_lock), tools,
                                             len(prompt_ids), fallback=base)
                 job.proposer = base
-            _ev.lier(job, conv_pli)
+            _ev.bind(job, conv_pli)
             return job
 
         job = make_job()
@@ -380,7 +382,7 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
         cancellation.check()
         self.scheduler.submit(job)
         metrics.begin(self, len(prompt_ids), received_at)
-        _ev.ev("arrivee", job, prompt=len(prompt_ids), histoire=history_len, max=limit, fond=True if background else None)
+        _ev.ev("arrival", job, prompt=len(prompt_ids), history=history_len, max=limit, background=True if background else None)
         metrics.bind(job)
         if preparing is not None:
             preparing.release()           # submitted: a waiting background request may go now
@@ -397,12 +399,17 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
         visible_text = IncrementalText(self.tokenizer, self.tokenizer_lock)
         replay: list[int] = []        # tokens a preempted job already delivered, owed again by its rerun
         preemptions = 0
+        _tr_stream, _tr_n, _tr_start = 0.0, 0, 0.0         # PLI trace: time spent handling the received chunks
         while True:
+            if _tr_start:
+                _tr_stream += time.perf_counter() - _tr_start
+                _tr_n, _tr_start = _tr_n + 1, 0.0
             cancellation.check()
             try:
                 chunk = job.chunks.get(timeout=0.05)
             except queue.Empty:
                 continue
+            _tr_start = time.perf_counter()
             cancellation.check()
             if chunk is None:
                 if job.preempted and job.error is None:
@@ -411,7 +418,7 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
                     replay = list(collected)
                     job = make_job()
                     self.scheduler.submit(job)
-                    _ev.ev("reprise", job, raison="préemption", deja=len(collected))
+                    _ev.ev("resume", job, reason="preemption", already=len(collected))
                     metrics.bind(job)
                     continue
                 break
@@ -456,6 +463,10 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
             if calls_stream is not None:
                 for call_delta in calls_stream.feed(answer):   # never the reasoning: a call it mentions is not made
                     on_delta(call_delta)
+        _tr_loop = time.perf_counter()
+        if _tr_start:
+            _tr_stream += _tr_loop - _tr_start
+            _tr_n += 1
         if job.error is not None:
             raise job.error
 
@@ -520,10 +531,23 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
         warning = unanswered(reply["finish_reason"], thinking, content)
         if warning:
             print(warning, flush=True)
-        _ev.ev("fin", job, prompt=len(prompt_ids), cache=job.cached_tokens, sortie=len(collected),
-               tok_s=float(reply["runtime"]["tokens_per_second"]), raison=reply["finish_reason"],
-               attente=(first_token_at - received_at) if first_token_at else None,
-               lecture=(job.prefilled_at - job.started_at) if job.started_at and job.prefilled_at else None)
+        if _tr.active():
+            def _ms(a: float, b: float) -> float | None:
+                return (b - a) * 1e3 if a and b else None
+
+            _tr.pt("request", job.job_id, t=received_at, conv=getattr(job, "pli_conv", "") or None,
+                   prompt=len(prompt_ids), cache=job.cached_tokens, output=len(collected), background=bool(background),
+                   preemptions=preemptions or None,
+                   template_ms=_ms(received_at, _tr_template), before_queue_ms=_ms(_tr_template, job.submitted_at),
+                   queue_ms=_ms(job.submitted_at, job.started_at), prefill_ms=_ms(job.started_at, job.prefilled_at),
+                   first_token_ms=_ms(received_at, first_token_at),
+                   decode_ms=_ms(job.prefilled_at, job.finished_at), after_engine_ms=_ms(job.finished_at, _tr_loop),
+                   stream_ms=_tr_stream * 1e3, stream_chunks=_tr_n, output_ms=_ms(_tr_loop, time.perf_counter()),
+                   total_ms=_ms(received_at, time.perf_counter()), reason=reply["finish_reason"])
+        _ev.ev("done", job, prompt=len(prompt_ids), cache=job.cached_tokens, output=len(collected),
+               tok_s=float(reply["runtime"]["tokens_per_second"]), reason=reply["finish_reason"],
+               wait=(first_token_at - received_at) if first_token_at else None,
+               prefill=(job.prefilled_at - job.started_at) if job.started_at and job.prefilled_at else None)
         print(
             f"[tensorfold] done {job.job_id} prompt={len(prompt_ids)} cached={job.cached_tokens} "
             f"thinking={thinking} effort={reply['runtime']['reasoning_effort']} "
@@ -541,7 +565,7 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
                 if store is not None
                 else "checkpoints=off"
             )
-            + _pli_heures(received_at),
+            + _pli_times(received_at),
             flush=True,
         )
         return reply

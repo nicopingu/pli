@@ -39,7 +39,7 @@ def test_flash_prompt_attention_mode_changes_the_family_key(monkeypatch):
     model.layers[0].self_attn.kernel_select = True
     sparse = families.kernel_version(family, model)
     assert dense != sparse
-    monkeypatch.setenv("TF_FLASH_FUSED", "0")
+    monkeypatch.setenv("PLI_FLASH_FUSED", "0")
     assert families.kernel_version(family, model) == sparse
     assert callable(qwen4_exp.kernel_version)
 

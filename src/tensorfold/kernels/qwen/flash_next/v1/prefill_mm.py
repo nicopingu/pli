@@ -183,9 +183,9 @@ def _int(v: int) -> mx.array:
 
 
 def fast_prefill() -> bool:
-    """Whether prefill takes the fast path: on the GPU, unless TF_FLASH_PREFILL=0."""
+    """Whether prefill takes the fast path: on the GPU, unless PLI_FLASH_PREFILL=0."""
 
-    return os.environ.get("TF_FLASH_PREFILL", "1") != "0" and mx.default_device() == mx.gpu
+    return os.environ.get("PLI_FLASH_PREFILL", "1") != "0" and mx.default_device() == mx.gpu
 
 
 def active(rows: int) -> bool:
@@ -237,7 +237,7 @@ def tiles() -> bool:
 
 
 def _requires(metadata):
-    """Dependances du paquet installe : pli (le fork), sinon tensorfold."""
+    """Dependencies of the installed package: pli (the fork), else tensorfold."""
 
     try:
         return metadata.requires("pli")
@@ -257,9 +257,9 @@ def _fallback(why: str) -> None:
         pins = []
     fix = f'pip install "{pins[0]}"' if pins else "install the MLX version this TensorFold requires"
     message = (f"TensorFold's prompt kernels {why} on MLX {mx.__version__}. Prompts run on MLX's own kernels: replies "
-               f"are the same, prompt processing is slower. To restore them, {fix}; TF_REQUIRE_KERNELS=1 stops here "
+               f"are the same, prompt processing is slower. To restore them, {fix}; PLI_REQUIRE_KERNELS=1 stops here "
                "instead.")
-    if os.environ.get("TF_REQUIRE_KERNELS") == "1":
+    if os.environ.get("PLI_REQUIRE_KERNELS") == "1":
         raise RuntimeError(message)
     rule = "[tensorfold] " + "=" * 88
     print(f"{rule}\n[tensorfold] WARNING: {message}\n{rule}", file=sys.stderr, flush=True)

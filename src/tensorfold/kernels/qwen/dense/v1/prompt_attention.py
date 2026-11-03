@@ -7,17 +7,17 @@ import os
 import mlx.core as mx
 
 ROWS = 128
-# PLI (12/10) : PLI_ATTENTION_GROUPEE=1 passe les têtes de requête qui partagent une tête de clés en un seul appel (lignes rangées
-# tête par tête) avec un masque causal explicite ; mêmes bits que l'appel causal tête par tête (essai M1 Pro ; sonde M1 Ultra à suivre).
-# Seulement au-delà de 16 lignes (en dessous, MLX prend un autre noyau). 0 = origine.
-GROUPEE = os.environ.get("PLI_ATTENTION_GROUPEE", "0") == "1"
+# PLI (12/10): PLI_ATTENTION_GROUPED=1 sends the query heads that share a key head in a single call (rows laid out
+# head by head) with an explicit causal mask; same bits as the head-by-head causal call (trial on M1 Pro; M1 Ultra probe to follow).
+# Only past 16 rows (below, MLX takes another kernel). 0 = original.
+GROUPED = os.environ.get("PLI_ATTENTION_GROUPED", "0") == "1"
 
 
 def _causal(queries: mx.array, keys: mx.array, values: mx.array, scale: float) -> mx.array:
     rows = int(queries.shape[2])
     b, hq, _, d = (int(v) for v in queries.shape)
     hk = int(keys.shape[1])
-    if not GROUPEE or rows <= 16 or hq == hk:
+    if not GROUPED or rows <= 16 or hq == hk:
         return mx.fast.scaled_dot_product_attention(queries, keys, values, scale=scale, mask="causal")
     g, total = hq // hk, int(keys.shape[2])
     pos = mx.arange(total - rows, total)
@@ -25,11 +25,11 @@ def _causal(queries: mx.array, keys: mx.array, values: mx.array, scale: float) -
     mask = mx.broadcast_to(mask[None], (g, rows, total)).reshape(1, 1, g * rows, total)
     out = mx.fast.scaled_dot_product_attention(queries.reshape(b, hk, g * rows, d), keys, values, scale=scale, mask=mask)
     return out.reshape(b, hq, rows, d)
-# PLI (12/10, pli-attlec7) : PLI_ATTENTION_GEMM=1 fait les deux produits (Q.Kt avec le masque causal dans le rangement, P.V) d'une part avec le noyau steel de MLX
-# instancié avec d'autres pavés (prompt_attention_gemm.py) ; mêmes bits que le chemin non fusionné de MLX ; repli sur le SDPA de MLX quand une condition manque. 0 = origine.
+# PLI (12/10): PLI_ATTENTION_GEMM=1 does the two products (Q.Kt with the causal mask in the store, P.V) of a part with MLX's steel kernel
+# instantiated with other tiles (prompt_attention_gemm.py); same bits as MLX's unfused path; falls back to MLX's SDPA when a condition is missing. 0 = original.
 GEMM = os.environ.get("PLI_ATTENTION_GEMM", "0") == "1"
-# PLI (13/10, pli-attml2 a 6) : PLI_ATTENTION_F16=1 prend l'attention de lecture (au-dela de FROM_KEYS clefs, parts de plus de ROWS lignes) en f16 par groupes de tetes de cles
-# (prompt_attention_f16.py) : CLASSE V3, les bits changent ; repli sur le chemin d'origine quand une condition manque. 0 = origine.
+# PLI (13/10): PLI_ATTENTION_F16=1 takes the prefill attention (past FROM_KEYS keys, parts of more than ROWS rows) in f16 by groups of key heads
+# (prompt_attention_f16.py): CLASS V3, the bits change; falls back to the original path when a condition is missing. 0 = original.
 F16 = os.environ.get("PLI_ATTENTION_F16", "0") == "1"
 FROM_KEYS = 4096
 KEY_BLOCK = 16          # MLX 0.32.2's key block before M5: a part ending inside one rounds unlike one whole call

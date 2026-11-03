@@ -13,8 +13,8 @@ from tensorfold import __version__, cli, update
 
 import pytest as _pytest
 
-# PLI : fork de TensorFold 0.6.6, la mise a jour depuis l amont est desactivee (voir test_pli_refuse_la_mise_a_jour).
-AMONT = _pytest.mark.skip(reason="PLI : mise a jour depuis l amont desactivee")
+# PLI: fork of TensorFold 0.6.6, the update from upstream is disabled (see test_pli_refuses_the_update).
+UPSTREAM = _pytest.mark.skip(reason="PLI: update from upstream disabled")
 
 
 SAMPLE = """# What's new in TensorFold
@@ -79,20 +79,20 @@ def test_notice_only_for_a_newer_release():
 
 
 def test_background_check_can_be_switched_off(monkeypatch):
-    monkeypatch.setenv("TENSORFOLD_NO_UPDATE_CHECK", "1")
+    monkeypatch.setenv("PLI_NO_UPDATE_CHECK", "1")
     monkeypatch.setattr(update, "latest_release", _no_network)
     assert update.check_in_background() is None
 
 
-@AMONT
+@UPSTREAM
 def test_background_check_prints_the_notice(monkeypatch, capsys):
-    monkeypatch.delenv("TENSORFOLD_NO_UPDATE_CHECK", raising=False)
+    monkeypatch.delenv("PLI_NO_UPDATE_CHECK", raising=False)
     monkeypatch.setattr(update, "latest_release", lambda: "v99.0.0")
     update.check_in_background().join(5)
     assert "TensorFold 99.0.0 is available" in capsys.readouterr().out
 
 
-@AMONT
+@UPSTREAM
 def test_update_installs_the_latest_tag_with_this_python(monkeypatch):
     commands = []
     monkeypatch.setattr(update, "latest_release", lambda **kwargs: "v99.0.0")
@@ -104,7 +104,7 @@ def test_update_installs_the_latest_tag_with_this_python(monkeypatch):
                          "git+https://github.com/ashhart/TensorFold.git@v99.0.0"]]
 
 
-@AMONT
+@UPSTREAM
 def test_check_only_and_current_install_nothing(monkeypatch, capsys):
     monkeypatch.setattr(update.subprocess, "call", _no_network)
     monkeypatch.setattr(update, "latest_release", lambda **kwargs: "v99.0.0")
@@ -114,7 +114,7 @@ def test_check_only_and_current_install_nothing(monkeypatch, capsys):
     assert "is the latest release" in capsys.readouterr().out
 
 
-@AMONT
+@UPSTREAM
 def test_editable_clone_fast_forwards_only_when_clean(monkeypatch, tmp_path):
     commands = []
     monkeypatch.setattr(update, "latest_release", lambda **kwargs: "v99.0.0")
@@ -128,7 +128,7 @@ def test_editable_clone_fast_forwards_only_when_clean(monkeypatch, tmp_path):
     assert update.update() == 1                            # local changes: left alone
 
 
-@AMONT
+@UPSTREAM
 def test_the_cli_has_update_and_the_serve_switch(monkeypatch):
     monkeypatch.setattr(update, "latest_release", lambda **kwargs: f"v{__version__}")
     assert cli.main(["update", "--check"]) == 0
@@ -142,7 +142,7 @@ def test_whats_new_keeps_the_versions_after_this_one():
     assert update.whats_new(SAMPLE, "99.0.0", "v99.0.0") == ""
 
 
-@AMONT
+@UPSTREAM
 def test_update_shows_whats_new_from_the_new_tag(monkeypatch, capsys):
     fetched = []
 
@@ -162,7 +162,7 @@ def test_update_shows_whats_new_from_the_new_tag(monkeypatch, capsys):
     assert update.SEEN.read_text() == "99.0.0"             # the first run after it stays quiet
 
 
-@AMONT
+@UPSTREAM
 def test_an_editable_clone_reads_its_own_changelog(monkeypatch, tmp_path, capsys):
     (tmp_path / "CHANGELOG.md").write_text(SAMPLE)
     monkeypatch.setattr(update, "latest_release", lambda **kwargs: "v99.0.0")
@@ -180,16 +180,16 @@ def test_offline_the_notes_link_still_prints(capsys):
     assert "What's new" not in out and "blob/v99.0.0/CHANGELOG.md" in out
 
 
-@AMONT
+@UPSTREAM
 def test_the_first_run_of_a_version_points_at_its_notes_once(monkeypatch):
-    monkeypatch.delenv("TENSORFOLD_NO_UPDATE_CHECK", raising=False)
+    monkeypatch.delenv("PLI_NO_UPDATE_CHECK", raising=False)
     assert f"TensorFold {__version__}" in update.first_run_notice()
     assert update.first_run_notice() is None
     update.SEEN.write_text("0.0.1")
     assert "what's new" in update.first_run_notice()       # updated some other way
     update.SEEN.write_text("99.0.0")
     assert update.first_run_notice() is None               # a downgrade
-    monkeypatch.setenv("TENSORFOLD_NO_UPDATE_CHECK", "1")
+    monkeypatch.setenv("PLI_NO_UPDATE_CHECK", "1")
     update.SEEN.write_text("0.0.1")
     assert update.first_run_notice() is None
 
@@ -199,7 +199,7 @@ def test_the_changelog_has_this_version():
     assert re.search(rf"^## {re.escape(__version__)} ", text, re.M), f"CHANGELOG.md needs a ## {__version__} section"
 
 
-def test_pli_refuse_la_mise_a_jour(capsys):
+def test_pli_refuses_the_update(capsys):
     from tensorfold import update
     assert update.update() == 1
     assert update.update(check_only=True) == 1

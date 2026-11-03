@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,9 @@ import mlx.nn as nn
 from mlx_lm.models.cache import KVCache
 
 MTP_FILE = "mtp-4bit.safetensors"      # beside the checkpoint (TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP ships it)
+
+
+_WINDOW = int(os.environ.get("PLI_MTP_WINDOW", "0") or 0)
 
 
 class MTPCache(KVCache):
@@ -23,6 +27,28 @@ class MTPCache(KVCache):
     @property
     def drafted(self) -> int:
         return 0 if self.side is None else int(self.side[0].shape[2])
+
+    row_bytes = 0                            # keys + values of a row (set by make_cache)
+
+    def update_and_fetch(self, keys: mx.array, values: mx.array) -> tuple[mx.array, mx.array]:
+        out = super().update_and_fetch(keys, values)
+        # PLI (24/10/2026, PLI_MTP_WINDOW): sliding window, the head keeps only the last _WINDOW rows
+        # (pruned in packs of 512); the positions are already in the keys (RoPE), the attention does not depend on them
+        if _WINDOW > 0 and self.side is None and self.offset > _WINDOW + 512:
+            cut = self.offset - _WINDOW
+            self.keys = self.keys[..., cut:self.offset, :]
+            self.values = self.values[..., cut:self.offset, :]
+            self.offset = _WINDOW
+        return out
+
+
+if _WINDOW > 0:
+    def _growth(self: MTPCache) -> tuple[int, int]:
+        """Size bounded by the window: fixed, nothing per token (the memory budget no longer counts it per token)."""
+
+        return (_WINDOW + 512 + KVCache.step) * int(self.row_bytes), 0
+
+    MTPCache.memory_growth = _growth
 
 
 class Qwen36MTP(nn.Module):
@@ -41,7 +67,11 @@ class Qwen36MTP(nn.Module):
         self.norm = nn.RMSNorm(d, eps=eps)
 
     def make_cache(self) -> MTPCache:
-        return MTPCache()
+        cache = MTPCache()
+        attn = self.layers[0].self_attn
+        cache.row_bytes = 2 * int(attn.num_key_value_heads) * int(attn.k_proj.weight.shape[0]
+                                                                     // attn.num_key_value_heads) * 2
+        return cache
 
     def inputs(self, hidden: mx.array, embeddings: mx.array) -> mx.array:
         """fc over [norm(embeddings) | norm(hidden)], both [1, R, D]."""

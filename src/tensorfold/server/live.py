@@ -61,19 +61,19 @@ def snapshot(scheduler: Any) -> dict[str, float]:
             "prefill_tokens_per_second": round(scheduler.prefilled.rate(), 1)}
 
 
-# PLI : entrées de « requests » au plus dans /health ; les attentes au-delà restent comptées dans live.waiting
+# PLI: entries of "requests" at most in /health; the waits beyond stay counted in live.waiting
 REQUESTS_MAX = 32
 
 
 def requests(scheduler: Any, clock: Callable[[], float] = time.perf_counter) -> list[dict[str, Any]]:
-    """PLI : une entrée par requête du moteur, pour /health (vue par emplacement d'un tableau de bord de supervision).
+    """PLI: one entry per engine request, for /health (per-slot view of a supervision dashboard).
 
-    D'abord les requêtes qui écrivent (``decoding``), puis celles dont le prompt est lu (``prefilling``), puis celles
-    qui attendent (``waiting``, dans leur ordre de passage). PLI n'a pas d'emplacement fixe : ``id`` (l'identifiant
-    interne de la requête) est la seule clé stable d'un relevé à l'autre. ``prefilled_tokens`` compte aussi les jetons
-    repris du cache (``cached_tokens``). Seulement des nombres et cet identifiant, jamais le contenu d'une requête.
-    Lu depuis le fil HTTP sans verrou du moteur : copies des listes, et toute surprise rend une liste vide plutôt
-    qu'une erreur, pour ne jamais faire tomber /health.
+    First the requests that decode (``decoding``), then those whose prompt is being prefilled (``prefilling``), then those
+    that wait (``waiting``, in their order of service). PLI has no fixed slot: ``id`` (the request's internal
+    identifier) is the only stable key from one reading to the next. ``prefilled_tokens`` also counts the tokens
+    reused from the cache (``cached_tokens``). Only numbers and this identifier, never the content of a request.
+    Read from the HTTP thread without the engine's lock: copies of the lists, and any surprise returns an empty list rather
+    than an error, so as never to bring /health down.
     """
 
     try:
@@ -89,12 +89,12 @@ def requests(scheduler: Any, clock: Callable[[], float] = time.perf_counter) -> 
             waiting += [entry[2] for entry in entries]
         out += [_request(job, "waiting", now) for job in waiting[:max(0, REQUESTS_MAX - len(out))]]
         return out[:REQUESTS_MAX]
-    except Exception:  # noqa: BLE001 - un relevé manqué vaut mieux qu'un /health en erreur
+    except Exception:  # noqa: BLE001 - a missed reading is better than an /health in error
         return []
 
 
 def _request(job: Any, state: str, now: float, left: int | None = None) -> dict[str, Any]:
-    """PLI : l'entrée de ``job`` dans ``requests`` (``left`` : jetons du prompt pas encore lus, pendant la lecture)."""
+    """PLI: the entry of ``job`` in ``requests`` (``left``: prompt tokens not yet prefilled, during prefill)."""
 
     stream = getattr(job, "stream", None)
     prompt = len(job.prompt_ids)
@@ -199,9 +199,9 @@ class _Proxy:
 
 
 def start(app: Any) -> LiveLine | None:
-    """The live line for ``app``'s scheduler in a terminal; None when stdout is redirected or TENSORFOLD_NO_LIVE=1."""
+    """The live line for ``app``'s scheduler in a terminal; None when stdout is redirected or PLI_NO_LIVE=1."""
 
-    if os.environ.get("TENSORFOLD_NO_LIVE") == "1" or not sys.stdout.isatty():
+    if os.environ.get("PLI_NO_LIVE") == "1" or not sys.stdout.isatty():
         return None
     scheduler = getattr(app, "scheduler", None)
     return None if scheduler is None else LiveLine(lambda: status(scheduler), sys.stdout).install()

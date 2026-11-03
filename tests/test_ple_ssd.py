@@ -124,7 +124,7 @@ def test_a_prompt_chunks_gather_on_threads_gives_the_same_bytes(tmp_path, monkey
 
 def test_from_checkpoint_picks_the_reader_by_argument_not_environment(tmp_path, monkeypatch):
     _, table = _checkpoint(tmp_path)
-    monkeypatch.setenv("TF_NGRAM_HOST", "0")
+    monkeypatch.setenv("PLI_NGRAM_HOST", "0")
     mapped = host_table.from_checkpoint(tmp_path, "emb", len(COUNTS))
     read = host_table.from_checkpoint(tmp_path, "emb", len(COUNTS), ssd=True)
     assert type(mapped) is HostTable and type(read) is SSDTable
@@ -416,7 +416,7 @@ def test_tables_left_on_ssd_do_not_count_against_the_memory_budget(tmp_path, mon
     _fake_mlx(monkeypatch)
     for key, value in qwen4_exp.MLX_ENV.items():
         monkeypatch.setenv(key, os.environ.get(key, value))
-    monkeypatch.setenv("TENSORFOLD_MEMORY_LIMIT_GB", "5")      # 2 GiB for weights beside the 3 GiB process reserve
+    monkeypatch.setenv("PLI_MEMORY_LIMIT_GB", "5")      # 2 GiB for weights beside the 3 GiB process reserve
     monkeypatch.setattr("faulthandler.register", lambda *a, **k: None)
 
     class Reached(Exception):
@@ -444,7 +444,7 @@ def test_routed_experts_left_on_ssd_count_as_their_pool(tmp_path, monkeypatch):
     _fake_mlx(monkeypatch)
     for key, value in qwen4_exp.MLX_ENV.items():
         monkeypatch.setenv(key, os.environ.get(key, value))
-    monkeypatch.setenv("TENSORFOLD_MEMORY_LIMIT_GB", "5")      # 2 GiB for weights beside the 3 GiB process reserve
+    monkeypatch.setenv("PLI_MEMORY_LIMIT_GB", "5")      # 2 GiB for weights beside the 3 GiB process reserve
     monkeypatch.setattr("faulthandler.register", lambda *a, **k: None)
 
     class Reached(Exception):
@@ -511,7 +511,7 @@ def test_metal_loads_give_the_same_logits_with_the_tables_on_ssd(tmp_path, monke
                             {n: a for n, a in params.items() if owner[n] % 2 == f}, metadata={"format": "mlx"})
     (tmp_path / "config.json").write_text(json.dumps(config))
     monkeypatch.setattr(mlx_lm.utils, "load_tokenizer", lambda *a, **k: "tokenizer")
-    monkeypatch.setenv("TF_FLASH_FUSED", "0")
+    monkeypatch.setenv("PLI_FLASH_FUSED", "0")
 
     def logits(**options) -> list:
         loaded, _ = q4.load(tmp_path, **options)
@@ -519,19 +519,19 @@ def test_metal_loads_give_the_same_logits_with_the_tables_on_ssd(tmp_path, monke
         first = loaded(np.array([[11, 42, 5, 17, 42, 11, 60, 3, 5, 5, 90, 17]]), cache)
         return [loaded.layers[1].ple.ple_embedding.host, first, loaded(np.array([[33]]), cache)]
 
-    monkeypatch.setenv("TF_NGRAM_HOST", "0")
+    monkeypatch.setenv("PLI_NGRAM_HOST", "0")
     on_gpu = logits()
-    monkeypatch.setenv("TF_NGRAM_HOST", "1")
+    monkeypatch.setenv("PLI_NGRAM_HOST", "1")
     mapped = logits()
-    monkeypatch.delenv("TF_NGRAM_HOST")
+    monkeypatch.delenv("PLI_NGRAM_HOST")
     on_ssd = logits(ple_on_ssd=True)
     assert on_gpu[0] is None and type(mapped[0].table) is HostTable and type(on_ssd[0].table) is SSDTable
     for a, b, c in zip(on_gpu[1:], mapped[1:], on_ssd[1:]):
         assert mx.array_equal(a, b).item() and mx.array_equal(a, c).item()
     on_ssd[0].close()
-    monkeypatch.setenv("TF_NGRAM_HOST", "0")
+    monkeypatch.setenv("PLI_NGRAM_HOST", "0")
     monkeypatch.setattr(mx, "load", lambda *a, **k: pytest.fail("read weights before refusing"))
-    with pytest.raises(ValueError, match="unset TF_NGRAM_HOST=0"):
+    with pytest.raises(ValueError, match="unset PLI_NGRAM_HOST=0"):
         q4.load(tmp_path, ple_on_ssd=True)
 
 
@@ -539,10 +539,10 @@ def test_tables_on_ssd_take_the_host_path_without_asking_the_gpu(tmp_path, monke
     from tensorfold.families.qwen4_exp import model as q4
 
     monkeypatch.setattr(mlx_cpu, "device_info", lambda: pytest.fail("asked the GPU"), raising=False)
-    monkeypatch.delenv("TF_NGRAM_HOST", raising=False)
+    monkeypatch.delenv("PLI_NGRAM_HOST", raising=False)
     assert q4.ngrams_on_host(tmp_path, ssd=True)
-    monkeypatch.setenv("TF_NGRAM_HOST", "1")
+    monkeypatch.setenv("PLI_NGRAM_HOST", "1")
     assert q4.ngrams_on_host(tmp_path, ssd=True)
-    monkeypatch.setenv("TF_NGRAM_HOST", "0")
-    with pytest.raises(ValueError, match="unset TF_NGRAM_HOST=0"):
+    monkeypatch.setenv("PLI_NGRAM_HOST", "0")
+    with pytest.raises(ValueError, match="unset PLI_NGRAM_HOST=0"):
         q4.ngrams_on_host(tmp_path, ssd=True)

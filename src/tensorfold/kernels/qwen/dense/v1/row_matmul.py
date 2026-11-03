@@ -29,7 +29,7 @@ class Backend:
 def simd_qmm_backend() -> Backend:
     """``simd_qmm`` for 4-bit, ``simd_qmm_bits`` for 5/6/8-bit groups of 64 or 128, else affine_rows."""
 
-    from tensorfold.kernels.qwen.dense.v1 import affine_rows, simd_qmm, simd_qmm_bits
+    from tensorfold.kernels.qwen.dense.v1 import affine_rows, qmm8, simd_qmm, simd_qmm_bits
 
     def prepare(weights: list[tuple[mx.array, mx.array, mx.array, int, int]]) -> None:
         seen: set[tuple[Any, ...]] = set()
@@ -38,6 +38,8 @@ def simd_qmm_backend() -> Backend:
             key = (*shape, bits, s.dtype)
             if key not in seen:
                 seen.add(key)
+                if qmm8.ENABLED and qmm8.fits(w, s, b, gs, bits) and not qmm8.check(w, s, b):
+                    print(f"[pli] PLI_V8: {shape[0]}x{shape[1]} not row-exact, simd_qmm keeps it", flush=True)
                 if fast(w, s, b, gs, bits):
                     if not simd_qmm.check(w, s, b, group_size=gs):
                         simd_qmm.mma_one_row.add(shape)
@@ -48,12 +50,18 @@ def simd_qmm_backend() -> Backend:
                     mx.eval(affine_rows.qmm(mx.zeros((1, shape[1]), dtype=mx.bfloat16), w, s, b, gs, bits))
 
     def fast(w: mx.array, s: mx.array, b: mx.array, gs: int, bits: int) -> bool:
-        if s.dtype == mx.uint32:          # PLI (P2 b+c) : matrice rangée (pli/range_poids.py), seuls les noyaux rg la lisent
+        if s.dtype == mx.uint32:          # PLI (P2 b+c): relaid-out matrix (pli/relayout.py), only the rg kernels read it
             return bits == 4 and gs == 64 and int(w.shape[0]) % 32 == 0
         return (bits == 4 and gs in (32, 64) and s.dtype == mx.bfloat16 and b.dtype == mx.bfloat16
                 and int(w.shape[0]) % 8 == 0)
 
     def qmm(x: mx.array, w: mx.array, s: mx.array, b: mx.array, gs: int, bits: int = 4) -> mx.array:
+        # PLI (28/10/2026, PLI_V8=1): Kapitsa's 8-row verify GEMM for every call of at most qmm8.MAX_ROWS rows (row-exact)
+        if qmm8.ENABLED and qmm8.fits(w, s, b, gs, bits):
+            k = int(x.shape[-1])
+            rows8 = x.size // k
+            if rows8 <= qmm8.MAX_ROWS:
+                return qmm8.qmm(x.reshape(rows8, k), w, s, b).reshape(*x.shape[:-1], int(w.shape[0]))
         if not fast(w, s, b, gs, bits):
             if simd_qmm_bits.fits(w, s, b, gs, bits):
                 return simd_qmm_bits.qmm(x, w, s, b, bits, gs)
@@ -179,6 +187,8 @@ def draft_matmul(x: mx.array, weight: mx.array, scales: mx.array, biases: mx.arr
     """Use the backend's multi-row matmul when available and MLX otherwise; draft logits need no row-exactness."""
 
     rows = x.size // int(x.shape[-1])
+    if scales.dtype == mx.uint32:      # PLI (PLI_RELAYOUT_DRAFT): relaid-out matrix, only the decode kernel reads it
+        return BACKEND.qmm(x, weight, scales, biases, group_size)
     if (BACKEND is not None and BACKEND.name == "simd_qmm" and 2 <= rows <= WINDOW_ROWS and bits == 4
             and group_size == 64):
         return BACKEND.qmm(x, weight, scales, biases, group_size)
@@ -188,6 +198,11 @@ def draft_matmul(x: mx.array, weight: mx.array, scales: mx.array, biases: mx.arr
 def _draft_call(self: Any, x: mx.array) -> mx.array:
     if not getattr(self, _DRAFT_ATTR, False):
         return _draft_orig(self, x)
+    if getattr(self, "_pli_small", None) is not None:   # PLI (PLI_DRAFT_STACK): relaid-out copy (fc), same bits
+        from tensorfold.pli import draft_stack
+        y = draft_stack.small(self, x)
+        if y is not None:
+            return y
     y = draft_matmul(x, self["weight"], self["scales"], self["biases"], self.group_size, self.bits)
     if "bias" in self:
         y = y + self["bias"]

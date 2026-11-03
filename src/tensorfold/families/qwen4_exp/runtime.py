@@ -56,15 +56,15 @@ class FlashNext(MTPDrafts):
             mx.eval(*self._mtp_scales)
             import os
 
-            # TF_FLASH_DRAFT_VOCAB=0 scores the full vocabulary; TF_FLASH_QUEUED=0 reads each chained draft immediately.
+            # PLI_FLASH_DRAFT_VOCAB=0 scores the full vocabulary; PLI_FLASH_QUEUED=0 reads each chained draft immediately.
             self._draft_ids = self._draft_head = None
-            if os.environ.get("TF_FLASH_DRAFT_VOCAB", "1") != "0":
+            if os.environ.get("PLI_FLASH_DRAFT_VOCAB", "1") != "0":
                 from tensorfold.families.qwen4_exp.draft_head import cut_head, draft_ids
 
                 ids = draft_ids()
                 self._draft_ids = mx.array(ids)
                 self._draft_head = cut_head(model.lm_head, ids)
-            self.queued_chains = os.environ.get("TF_FLASH_QUEUED", "1") != "0"
+            self.queued_chains = os.environ.get("PLI_FLASH_QUEUED", "1") != "0"
             self.mtp_step_ms = self._time_mtp_step()
 
     queued_chains = False
@@ -424,7 +424,7 @@ class FlashNext(MTPDrafts):
 
 def load(model_dir: Path, *, drafts: int | None = None, ple_on_ssd: bool = False,
          ssd_experts: float | None = None) -> tuple[FlashNext, Any]:
-    """Load with an MTP draft cap from ``drafts`` or TF_FLASH_MTP, defaulting to 3; zero disables drafts."""
+    """Load with an MTP draft cap from ``drafts`` or PLI_FLASH_MTP, defaulting to 3; zero disables drafts."""
 
     import os
 
@@ -433,7 +433,7 @@ def load(model_dir: Path, *, drafts: int | None = None, ple_on_ssd: bool = False
     from tensorfold.families.qwen4_exp import mtp as mtp_module
 
     model, tokenizer = q4.load(Path(model_dir), ple_on_ssd=ple_on_ssd, ssd_experts=ssd_experts)
-    drafts = int(os.environ.get("TF_FLASH_MTP", "3")) if drafts is None else int(drafts)
+    drafts = int(os.environ.get("PLI_FLASH_MTP", "3")) if drafts is None else int(drafts)
     head = mtp_module.load(Path(model_dir), model.args) if drafts > 0 and model.__dict__.get("fused") else None
     missed = decode.unreadable(model, head) if decode.DENSE == "lane" else {}   # simd_qmm checks a shape on first use
     if missed:

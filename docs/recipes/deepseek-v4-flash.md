@@ -102,7 +102,7 @@ equal their solo replies (63 tok/s together at 4).
 
 The family keeps the default allowance, 70% of RAM for the whole process (179.2 GiB on 256 GB). With 151 GiB of
 weights resident the admission fits one request of 349,184 tokens; a token costs 6.7 KB of pools after the fixed
-rings. `TENSORFOLD_MEMORY_LIMIT_GB` raises the budget on a machine with nothing else loaded.
+rings. `PLI_MEMORY_LIMIT_GB` raises the budget on a machine with nothing else loaded.
 
 ## Not yet
 

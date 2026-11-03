@@ -437,7 +437,7 @@ def load(model_dir: Path, *, lazy: bool = False, ple_on_ssd: bool = False,
             raise ValueError(f"{key}: checkpoint {shipped} != derived {derived}")
     if not lazy:
         mx.eval(model.parameters())
-        if os.environ.get("TF_FLASH_FUSED", "1") != "0":
+        if os.environ.get("PLI_FLASH_FUSED", "1") != "0":
             from tensorfold.families.qwen4_exp.decode import FusedDecode
 
             # kept out of the module tree (a plain attribute), so parameters() stays the checkpoint's

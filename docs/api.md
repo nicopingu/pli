@@ -4,7 +4,7 @@ The base URL is `http://127.0.0.1:8080/v1` with the default server settings.
 
 ## API keys
 
-The server accepts repeated `--api-key KEY`, comma-separated `TENSORFOLD_API_KEY`, and `--api-key-file PATH`.
+The server accepts repeated `--api-key KEY`, comma-separated `PLI_API_KEY`, and `--api-key-file PATH`.
 The sources add keys together. A file has one key per line, optional `label: key` entries, and lines starting with
 `#` for comments. Set its permissions to `0600`; startup refuses a file readable by other users.
 The server stores SHA-256 digests and compares every configured digest for each authentication attempt.
@@ -75,7 +75,7 @@ For decisions, `chat_template_kwargs` may be omitted, null, or an object contain
 | `parallel_tool_calls` | False returns at most one completed call |
 | `max_tokens`, `max_completion_tokens` | Explicit reply limit; rejected if prompt plus reply exceeds the window |
 | `temperature`, `top_p`, `top_k`, `min_p` | Sampling overrides; zero temperature is greedy |
-| `seed` | Sampling key; otherwise derived from the prompt (and `TENSORFOLD_SEED_SALT`) |
+| `seed` | Sampling key; otherwise derived from the prompt (and `PLI_SEED_SALT`) |
 | `stream` | Server-sent events; the last event carries usage |
 | `stream_options.include_usage` | Usage in its own final event with `"choices": []`, not on the finish event |
 | `chat_template_kwargs.enable_thinking` | Template thinking toggle; `chat_template_kwargs.thinking` (`true`/`false` or `{"type": "enabled"}`/`{"type": "disabled"}`, as DeepSeek-V4 clients send it) is read the same way when `enable_thinking` is absent; other values are ignored |
@@ -179,7 +179,7 @@ Effort support depends on the checkpoint's template, and effort does not set a
 token budget. With thinking off, GLM-5.3's prompt is its thinking-off template's: no reasoning-effort line and an
 empty think block. GLM-5.3 keeps every earlier assistant turn's reasoning in the prompt, as zai-org's template does by
 default (`clear_thinking` false), also on checkpoints whose template still clears it before the last user message, so
-a new user message leaves the earlier turns' tokens, and their kept prompt states, as they were. `TF_GLM_CLEAR_THINKING=1` sets
+a new user message leaves the earlier turns' tokens, and their kept prompt states, as they were. `PLI_GLM_CLEAR_THINKING=1` sets
 `clear_thinking` for the server, which drops it, as the model card advises for plain chat.
 
 A tool call written before the think block closes is the reply's tool call when the reply ends inside the block;
@@ -227,7 +227,7 @@ prefixes, and compare each MLX concurrent request with its solo run.
 A request without `seed` takes one derived from its prompt, so running the same evaluation twice against one server
 repeats the same samples wherever the conversations agree (an agent benchmark's second pass then mostly replays its
 first). To draw independent repeats, send a `seed` per run, or start each run's server with a different
-`TENSORFOLD_SEED_SALT` (an integer mixed into every prompt-derived seed; 0, the default, keeps today's seeds).
+`PLI_SEED_SALT` (an integer mixed into every prompt-derived seed; 0, the default, keeps today's seeds).
 
 ## Metrics
 

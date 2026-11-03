@@ -18,8 +18,13 @@ from tensorfold.kernels.qwen.dense.v1.row_matmul import WINDOW_ROWS, logits, pro
 PROMPT_ROWS = 128
 
 
-# TF_ROW_ATTENTION selects row-exact tree attention; otherwise use exact_attention query by query for chains.
-ROW_ATTENTION = os.environ.get("TF_ROW_ATTENTION", "0") == "1"
+# PLI_ROW_ATTENTION selects row-exact tree attention; otherwise use exact_attention query by query for chains.
+ROW_ATTENTION = os.environ.get("PLI_ROW_ATTENTION", "0") == "1"
+# PLI (16/10/2026, D2): PLI_TREES_ATTM=1 lets the draft propose trees and sends them through the attm attention with an ancestor mask
+# (pli/attention_attm.sdpa_tree); the chains keep their path and their bits. Off by default.
+TREES_ATTM = os.environ.get("PLI_TREES_ATTM", "0") == "1"
+# PLI (24/10/2026): PLI_TREE_EXACT=1: tree attention at the chain's bits (attention_attm.sdpa_tree_exact)
+TREE_EXACT = os.environ.get("PLI_TREE_EXACT", "0") == "1"
 
 
 class Record(list):
@@ -98,6 +103,31 @@ def _attend(attn: Any, queries: mx.array, keys: mx.array, values: mx.array, cach
     keys, values = cache.update_and_fetch(keys, values)
     if ROW_ATTENTION:
         # the cache's whole buffers: the window's rows sit at start + row
+        return row_attention.row_sdpa(queries, cache.keys, cache.values, attn.scale, int(cache.offset) - L, parents)
+    if not chain and TREES_ATTM:
+        from tensorfold.pli import attention_attm
+
+        # PLI (item D, 21/10/2026): reduced prefill like the chains (exact_attention._reduce, same settings): past the threshold, on
+        # the non-full layers, the tree reads only the kept tiles + the tail (including its T rows, at the end: attm tree expects them there).
+        red = exact_attention.REDUCED
+        T_ = int(queries.shape[2])
+        layer = getattr(cache, "pli_layer", None)
+        if red and exact_attention.ANCHOR and int(keys.shape[2]) - T_ >= exact_attention.REDUCED_THRESHOLD - exact_attention.ANCHOR:
+            # PLI (item D, 24/10/2026): anchored reduced prefill (the choice depends only on the written tokens), else full tree attention
+            out = exact_attention._anchored_tree(queries, keys, values, cache, attn.scale, parents)
+            if out is not None:
+                return out
+        elif red and exact_attention.REDUCED_MIN_ROWS <= T_ <= exact_attention.REDUCED_MAX_ROWS and int(keys.shape[2]) >= exact_attention.REDUCED_THRESHOLD \
+                and layer is not None and layer not in exact_attention.REDUCED_FULL_LAYERS:
+            kr, vr = exact_attention._reduce(queries, keys, values)
+            out = attention_attm.sdpa_tree(queries, kr, vr, int(kr.shape[2]), attn.scale, parents)
+            if out is not None:
+                exact_attention.COUNT["reduced"] += 1
+                return out
+        out = (attention_attm.sdpa_tree_exact if TREE_EXACT else attention_attm.sdpa_tree)(
+            queries, cache.keys, cache.values, int(cache.offset), attn.scale, parents)
+        if out is not None:
+            return out
         return row_attention.row_sdpa(queries, cache.keys, cache.values, attn.scale, int(cache.offset) - L, parents)
     if not chain:
         raise NotImplementedError("row_forward: draft trees need row_attention")
@@ -255,7 +285,7 @@ def _gate_up(mlp: Any, x: mx.array) -> mx.array:
 
 
 # Qwen3.6 MoE rows: "batched" (one gather_qmm for all rows) or "rows" (each alone); one-row steps take the same path
-MOE_ROWS = os.environ.get("TF_MOE_ROWS", "batched")
+MOE_ROWS = os.environ.get("PLI_MOE_ROWS", "batched")
 
 
 def _per_row(fn: Callable[[mx.array], mx.array], x: mx.array) -> mx.array:

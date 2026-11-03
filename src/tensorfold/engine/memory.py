@@ -70,34 +70,34 @@ class Admission:
         self.used = used or _mlx_used
         self.lanes = max(1, int(lanes))      # the streams ``round_bytes`` was measured at
         self.refused = 0
-        # PLI (lot 2 du plan 2.2) : si posé (PLI_ADMISSION_TRAVAIL=1, server/scheduler.py), le travail de lecture d'un prompt est
-        # celui que compte la garde PromptMemory (relevé sur un vrai morceau) au lieu de la droite prefill_bytes. None : d'origine.
-        self.travail: Callable[[int], int] | None = None
-        # PLI_ADMISSION_PETITES=N : le relevé ne sert que pour une demande d'au plus N jetons (les autres gardent la droite d'origine,
-        # qui sert de marge quand plusieurs grandes lectures sont ouvertes : banc pli-quatre27c du 11/10). 0 : pour toutes.
-        self.petites = 0
+        # PLI (item 2 of plan 2.2): if set (PLI_ADMIT_BY_WORK=1, server/scheduler.py), the prefill work of a prompt is
+        # the one the PromptMemory guard counts (measured on a real chunk) instead of the prefill_bytes line. None: original.
+        self.work_bytes: Callable[[int], int] | None = None
+        # PLI_ADMIT_SMALL=N: the measurement serves only for a request of at most N tokens (the others keep the original line,
+        # which serves as a margin when several large prefills are open: measured on the 27B on 11/10). 0: for all.
+        self.small_max = 0
 
-    def lecture_bytes(self, prompt: int, demande: int | None = None) -> int:
-        """Travail de lecture compté pour ``prompt`` jetons ; ``demande`` : taille de la demande qui veut entrer (None : hors admission)."""
+    def prefill_work_bytes(self, prompt: int, request: int | None = None) -> int:
+        """Prefill work counted for ``prompt`` tokens; ``request``: size of the request that wants in (None: outside admission)."""
 
-        if self.travail is None or (self.petites and (demande is None or int(demande) > self.petites)):
+        if self.work_bytes is None or (self.small_max and (request is None or int(request) > self.small_max)):
             return self.memory.prefill_bytes(prompt)
-        return int(self.travail(int(prompt)))
+        return int(self.work_bytes(int(prompt)))
 
     def round_bytes(self, streams: int) -> int:
         """A shared round's working memory at ``streams`` streams: the measured round's (at ``lanes``), its share."""
 
         return -(-self.memory.round_bytes * min(max(1, int(streams)), self.lanes) // self.lanes)
 
-    def projected(self, prompt: int, longest: int, live: Sequence[tuple[int, int]], demande: int | None = None) -> int:
+    def projected(self, prompt: int, longest: int, live: Sequence[tuple[int, int]], request: int | None = None) -> int:
         """Project the new stream from ``prompt`` to ``longest`` tokens and every live stream from its current to longest length."""
 
         grow = sum(max(0, most - now) for now, most in live) * self.memory.per_token
-        work = max(self.round_bytes(len(live) + 1), self.lecture_bytes(prompt, demande))
+        work = max(self.round_bytes(len(live) + 1), self.prefill_work_bytes(prompt, request))
         return int(self.used() + grow + self.memory.stream_bytes(longest) + work)
 
-    def admits(self, prompt: int, longest: int, live: Sequence[tuple[int, int]], demande: int | None = None) -> bool:
-        ok = self.projected(prompt, longest, live, demande) <= self.budget
+    def admits(self, prompt: int, longest: int, live: Sequence[tuple[int, int]], request: int | None = None) -> bool:
+        ok = self.projected(prompt, longest, live, request) <= self.budget
         self.refused += 0 if ok else 1
         return ok
 

@@ -32,7 +32,7 @@ TEXT = {
 def _gpu(monkeypatch):
     previous = mx.default_device()
     mx.set_default_device(mx.gpu)
-    monkeypatch.setenv("TF_FLASH_PREFILL", "1")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "1")
     yield
     mx.set_default_device(previous)
 
@@ -79,7 +79,7 @@ def test_linear_falls_back_off_the_fast_path(monkeypatch):
     layer = q4bits(nn.Linear(256, 64, bias=False))
     small = mx.random.normal((1, 8, 256)).astype(mx.bfloat16)           # under 64 rows: layer(x)
     assert bool(mx.array_equal(prefill_mm.linear(layer, small), layer(small)).item())
-    monkeypatch.setenv("TF_FLASH_PREFILL", "0")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "0")
     big = mx.random.normal((1, 96, 256)).astype(mx.bfloat16)
     assert not prefill_mm.active(96)
     assert bool(mx.array_equal(prefill_mm.linear(layer, big), layer(big)).item())
@@ -120,7 +120,7 @@ def test_mlx_matmuls_serve_when_the_tiles_step_aside(monkeypatch, why):
     moe = q4bits(q4.SparseMoE(config()), keep=("gate",))
     x = (mx.random.normal((1, 128, 256)) * 0.5).astype(mx.bfloat16)
     fast = moe(x)
-    monkeypatch.setenv("TF_FLASH_PREFILL", "0")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "0")
     assert bool(mx.array_equal(fast, moe(x)).item())
 
 
@@ -159,7 +159,7 @@ def test_moe_is_the_reference_bit_for_bit(monkeypatch, experts, rows):
     x = (mx.random.normal((1, rows, 256)) * 0.5).astype(mx.bfloat16)
     assert prefill_mm.moe_applies(moe, x)
     fast = moe(x)
-    monkeypatch.setenv("TF_FLASH_PREFILL", "0")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "0")
     assert not prefill_mm.moe_applies(moe, x)
     assert bool(mx.array_equal(fast, moe(x)).item())
 
@@ -379,7 +379,7 @@ def test_whole_model_prefill_is_as_exact_as_the_reference(monkeypatch):
     model = tiny_model()
     fused = model.__dict__["fused"]
     fast = run(model, fused)
-    monkeypatch.setenv("TF_FLASH_PREFILL", "0")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "0")
     ref = run(model, fused)
     exact = tiny_model()                                                # the same weights, fp32 activations
     del exact.__dict__["fused"]
@@ -437,9 +437,9 @@ def test_snapshot_keys_name_the_prefill_path(monkeypatch):
     runtime = FlashNext.__new__(FlashNext)                              # the key reads ``fused`` alone
     runtime.fused = object()
     fast = runtime.prefill_key
-    monkeypatch.setenv("TF_FLASH_PREFILL", "0")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "0")
     reference = runtime.prefill_key
-    monkeypatch.setenv("TF_FLASH_PREFILL", "1")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "1")
     runtime.fused = None                                                # no fused decode: MLX's forward
     assert fast != reference == runtime.prefill_key
     family = SimpleNamespace(package=SimpleNamespace(KERNEL_VERSION="v1"), module="tensorfold.families.qwen4_exp",
@@ -462,7 +462,7 @@ def test_prefill_identity_is_fixed_before_snapshot_keys(monkeypatch):
     runtime.resolve_prefill_identity()
     key = runtime.prefill_key
     assert "matmul=pending" not in key and ("matmul=custom" in key) == prefill_mm.tiles()
-    monkeypatch.setenv("TF_FLASH_PREFILL", "0")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "0")
     with pytest.raises(RuntimeError):
         runtime.prefill_key
 

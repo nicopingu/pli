@@ -4,87 +4,355 @@ PLI ("Parallel Linked Inference") is an LLM inference server for Apple Silicon, 
 It is a fork of [TensorFold](https://github.com/ashhart/TensorFold) 0.6.6 (Apache-2.0) and keeps its
 OpenAI- and Anthropic-compatible HTTP API, its exact speculative decoding and its model families.
 
-PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, and kernels measured
-for the dense Qwen3.8-27B. It is validated on one machine: a Mac Studio M1 Ultra, 64 GB, macOS 27.
+PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, kernels measured for the dense
+Qwen3.8-27B, and a draft that picks, per conversation, between DFlash2 and the model's own MTP head.
 
-- **Apple Silicon only.** The CUDA backend of TensorFold is removed; `pli serve` refuses to start elsewhere.
-- **Main target: Qwen3.8-27B (dense)** with a DFlash2 draft model. The other families inherited from
-  TensorFold run on the standard MLX path; see [docs/recipes](docs/recipes/README.md).
-- **Settings by machine profile.** PLI's additions are off by default and switched on by `PLI_*`
-  variables, grouped in profiles (`--profile m1-ultra`).
+**4.0.0 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
+[CHANGELOG.md](CHANGELOG.md); every `PLI_*` setting is in [docs/switches.md](docs/switches.md).
+
+- **A dedicated Mac.** PLI is made for a Mac that runs nothing else: with the 27B it keeps about 36 GB of memory
+  wired, uses the whole GPU and the Neural Engine, and writes up to 40 GB of conversation snapshots to disk. Other
+  heavy programs running at the same time slow it down and can make it refuse requests for lack of memory.
+- **Apple Silicon only.** The CUDA backend of TensorFold is removed; `pli serve` refuses to start on a system other
+  than macOS, and MLX itself needs Apple Silicon.
+- **Main target: Qwen3.8-27B (dense)** with the DFlash2 draft and the 27B's MTP head. The other families inherited
+  from TensorFold run on the standard MLX path and are not validated under PLI (see [Model families](#model-families)).
+- **Settings by machine profile.** PLI's additions are off by default and switched on by `PLI_*` variables, grouped in
+  profiles (`--profile m1-ultra`). Three are on by default in the code: `PLI_CONTROL_AS_TEXT`, `PLI_SPILL_PROMPT` and
+  `PLI_FORK_MIN`.
+
+## Quick start
+
+```bash
+git clone https://github.com/nicopingu/pli.git
+cd pli
+./install.sh install
+```
+
+`install.sh` checks the Mac (Apple Silicon, macOS 14 or later, memory, free disk, Python 3.11 to 3.14, Xcode Command
+Line Tools for the Neural Engine), installs PLI in its own virtual environment under `~/pli`, downloads
+Qwen3.8-27B 4-bit, the DFlash2 draft and the MTP head (about 20 GB), writes the MTP head in 4 bits, and starts PLI as a
+per-user service that starts again at login and after a crash. Then:
+
+| Command | What it does |
+| --- | --- |
+| `./install.sh status` | is the service loaded, is the server answering, which model |
+| `./install.sh start`, `stop`, `restart` | start or stop the server (stopping lets it finish writing its snapshots) |
+| `./install.sh logs` | the last lines of the server log |
+| `./install.sh uninstall` | removes the service, `~/pli`, the settings, the logs and the snapshots on disk; asks before deleting each downloaded model (`--keep-models` keeps them; `--yes` deletes them without asking) |
+
+Options of `install`: `--prefix DIR`, `--port N` (default 8080), `--model REPO` (a Qwen3.8-27B checkpoint or
+fine-tune: the drafts are the 27B's), `--context N`, `--no-hybrid`, `--no-start`, `--no-models` (the service then uses
+the DFlash2 draft alone; run `./install.sh install` again for the hybrid draft), `--yes`. On a Mac without a screen, turn on automatic login so that PLI starts after a
+reboot.
+
+The server answers OpenAI clients at `http://127.0.0.1:8080/v1` and Anthropic clients at `http://127.0.0.1:8080`.
+PLI ships no model weights. Each checkpoint keeps its own license (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+
+## Validated hardware
+
+| Item | Validated |
+| --- | --- |
+| Machine | Mac Studio, M1 Ultra (20-core CPU, 64-core GPU, two Neural Engine blocks), 64 GB unified memory |
+| OS | macOS 27 (27.0.1) |
+| Models | Qwen3.8-27B dense in MLX 4-bit ([mlx-community/Qwen3.8-27B-4bit](https://huggingface.co/mlx-community/Qwen3.8-27B-4bit), license: Apache-2.0), and [sabicap/sabi-noema](https://huggingface.co/sabicap/sabi-noema) (license: Apache-2.0), a Qwen3.8-27B fine-tune with the same architecture, in MLX 4-bit |
+| Drafts | DFlash2 ([z-lab/Qwen3.8-27B-DFlash2](https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2), license: Apache-2.0) and the MTP head published with Qwen3.8-27B |
+| Profile | `m1-ultra` |
+
+Other Apple Silicon Macs can run PLI with its additions off, or with a profile of their own; they are not measured.
+`install.sh` gives the `m1-ultra` profile to any Ultra chip with 64 GB or more: an M2 Ultra or M3 Ultra gets it
+without having been measured.
 
 ## What PLI adds to TensorFold 0.6.6
 
 | Area | What it does | Where |
 | --- | --- | --- |
-| Prompt reading (27B) | Weights unpacked before the product, attention in f16, tuned GEMM tiles | `tensorfold/pli/deplie.py`, `kernels/qwen/dense/v1/` |
-| Neural Engine (27B) | Part of each FFN layer runs on the Neural Engine while the GPU reads the prompt (one or two blocks) | `tensorfold/pli/ane/` |
-| Writing (27B) | Own decode attention (`attm`), weights laid out for the decode kernel, optional reduced attention on long contexts | `tensorfold/pli/attention_attm.py`, `pli/range_poids.py` |
-| Scheduling | Cost arbiter, small requests first, several conversations sharing a round | `tensorfold/pli/arbitre.py`, `server/scheduler.py` |
-| Drafts | Recall: drafts copied from finished requests | `tensorfold/pli/rappel.py` |
-| Operations | Host/Origin guard, per-conversation event journal (no message content) | `server/host_guard.py`, `pli/evenements.py` |
+| Prompt reading (27B) | Weights unpacked before the product, attention in f16, tuned GEMM tiles, last tokens read with the chunk before | `src/tensorfold/pli/unpack.py`, `src/tensorfold/pli/merge_tail.py`, `src/tensorfold/kernels/qwen/dense/v1/` |
+| Neural Engine (27B) | Part of each FFN layer runs on the Neural Engine while the GPU reads the prompt; its weights are requantized on the CPU | `src/tensorfold/pli/ane/` |
+| Writing (27B) | Own decode attention (`attm`), weights laid out for the decode kernel, reduced attention on long contexts anchored to positions, Kapitsa's 8-row verify GEMM | `src/tensorfold/pli/attention_attm.py`, `src/tensorfold/pli/relayout.py`, `src/tensorfold/kernels/qwen/dense/v1/qmm8.py` |
+| Scheduling | Cost arbiter, small requests first, several conversations sharing a round, heartbeat between requests | `src/tensorfold/pli/arbiter.py`, `src/tensorfold/server/scheduler.py` |
+| Drafts | Hybrid DFlash2 + MTP head chosen per conversation; Recall drafts copied from finished requests | `src/tensorfold/families/qwen3_5_moe/hybrid.py`, `src/tensorfold/pli/recall.py` |
+| Agent turns | The reply is kept for the next turn instead of being read again; checkpoints keep a length instead of a copy of the KV cache; control tokens written in a request stay text | `src/tensorfold/server/text.py`, `src/tensorfold/server/prompt_fill.py`, `src/tensorfold/pli/kv_sharing.py` |
+| Operations | Host/Origin guard, per-conversation event journal (no message content), step trace for debugging | `src/tensorfold/server/host_guard.py`, `src/tensorfold/pli/events.py`, `src/tensorfold/pli/trace.py` |
 
-Each change and its measurement is listed in [CHANGELOG.md](CHANGELOG.md).
+## Stable features
 
-## Requirements
+In production on the validated machine. All are set by `--profile m1-ultra`, except the machine settings marked
+(env). "Same bits" means the result is bit-identical to the path it replaces; "text can change" means another
+arithmetic, judged on whole conversations before it went into production.
 
-- A Mac with Apple Silicon. The `m1-ultra` profile assumes an Ultra chip (two Neural Engines) and 64 GB.
-- macOS 14 or later (validated on macOS 27), Python 3.11 or later.
-- For the Neural Engine path: the Xcode Command Line Tools (`xcode-select --install`). The client library is
-  compiled on first use; without it PLI keeps the GPU path.
+| Feature | Settings | Text | New in |
+| --- | --- | --- | --- |
+| Unpacked 4-bit weights in prompt reading, one-pass unpacking kernel | `PLI_PREFILL_UNPACK`, `_MLP`, `_NN`, `_KERNEL` | can change (f16) | 3.6.0 or earlier |
+| Prompt attention: f16 products, tuned GEMM tiles | `PLI_ATTENTION_F16`, `PLI_ATTENTION_GEMM` | can change (f16) | 3.6.0 or earlier |
+| Neural Engine share of the FFN on two blocks | `PLI_ANE_FFN`, `PLI_ANE_BLOCKS`, `PLI_ANE_FFN_UNITS` | can change | 3.6.0 or earlier |
+| Neural Engine kept awake, units by chunk size | `PLI_ANE_KEEPAWAKE`, `PLI_ANE_STEPS` | can change | 3.7.0 |
+| Neural Engine weights requantized on the CPU | `PLI_ANE_REQUANT_CPU`, `PLI_ANE_REQUANT_THREADS` | same bits | 3.7.0 |
+| Decode attention `attm`, 128-key slices on short calls | `PLI_ATTENTION_ATTM`, `PLI_ATTM_SHORT` (fallbacks: `PLI_ATTENTION_ATTEC`, `PLI_ATTENTION_PER_ROW`) | can change | 3.7.0: `PLI_ATTM_SHORT` |
+| Reduced attention beyond 20,000 tokens, anchored to positions | `PLI_ATTENTION_REDUCED`, `PLI_REDUCED_ROUNDS`, `PLI_REDUCED_ANCHOR` | can change | 3.7.0: `_ROUNDS`, `_ANCHOR` |
+| Decode kernels: weight layout, bf16 fragments, one tile per threadgroup | `PLI_RELAYOUT`, `PLI_XF_BF16`, `PLI_TILES_PER_GROUP` | same bits | 3.7.0: `PLI_TILES_PER_GROUP` |
+| Cost arbiter, small requests first, prompt chunks between decode rounds | `PLI_ARBITER`, `PLI_ADMIT_SMALL`, `PLI_ROUNDS_BETWEEN_PREFILLS`, `PLI_CHUNK_LAYERS`, `PLI_INTERLEAVE_DENSE` | same text | 3.6.0 or earlier |
+| Last prompt tokens read with the chunk before | `PLI_MERGE_TAIL` | can change | 3.7.0 |
+| Reply kept for the next agent turn | `PLI_KEEP_REPLY` | can change | 3.7.0 |
+| Heartbeat between requests | `PLI_HEARTBEAT_MS` | same text | 3.7.0 |
+| Recall drafts | `PLI_RECALL` | same text | 3.6.0 or earlier |
+| Hybrid draft: DFlash2 and the MTP head, chosen per conversation; one-turn questions with DFlash2 alone | `PLI_HYBRID` (env), `PLI_MTP_HEAD` (env), `PLI_MTP_DRAFTS`, `PLI_MTP_WINDOW`, `PLI_HYBRID_MESSAGES` | same text | 3.7.0 |
+| Kapitsa's 8-row verify GEMM for rounds of up to 128 rows | `PLI_V8` | can change | 3.7.0 |
+| Checkpoints without a copy of the KV cache | `PLI_KV_SHARING` | same text | 3.7.0 |
+| Control tokens written in a request kept as text | `PLI_CONTROL_AS_TEXT` (on by default) | same text without control tokens | 3.7.0 |
+| Host/Origin guard, arrival and end times in the log | `PLI_HOST_GUARD`, `PLI_LOG_TIMES` | same text | 3.6.0 or earlier |
+| Draft trees for one-turn questions (KFlash, verified through `attm`): the DFlash2 chain stays while it keeps 4.5 tokens per round; agent sessions keep the chain | `PLI_KFLASH`, `PLI_TREES_ATTM`, `PLI_HYBRID_TREES`, `PLI_TREE_DELTANET`, `PLI_TREES_SHORT_ONLY`, `PLI_TREES_TOKEN_THRESHOLD` | can change (near ties) | 4.0.0 |
+| Copy of the context or DFlash2 chain, chosen per stream from what each would have given | `PLI_HEAD_BEFORE_COPY` | same text | 4.0.0 |
+| Extended draft lists: a file of 2,515 token ids, one per line, added to the reduced vocabularies of both drafts (for each draft, the 2,048 tokens it missed most, merged; shipped with PLI). Learned on the author's traffic, mostly French; its gain for other use is not measured | `PLI_EXTENDED_DRAFT_LIST` | same text | 4.0.0 |
+| Draft kernels: attention, stacked projections, q and k norms with RoPE in one kernel, top-16 spread, block projections laid out | `PLI_DRAFT_ATTN`, `PLI_DRAFT_STACK`, `PLI_DRAFT_QKR`, `PLI_DRAFT_TOPK`, `PLI_RELAYOUT_DRAFT` | same text (drafts are verified) | 4.0.0 |
+| `attm` fragments loaded by simdgroup; 8-row tables prepared in parallel | `PLI_ATTM_LOAD`, `PLI_V8_PREP2` | same bits | 4.0.0 |
+| Reduced attention, anchored, for prompt chunks of up to 2,047 rows beyond 65,536 tokens of context | `PLI_S3B`, `PLI_S3B_THRESHOLD` | can change | 4.0.0 |
+| Snapshot on disk read again at the first slice of a resumed prompt | `PLI_REREAD_DISK` | see CHANGELOG | 4.0.0 |
+| Prompt checkpoint spilled to disk even when a reply extends it; checkpoint where a prompt forks in its last message (both on by default) | `PLI_SPILL_PROMPT`, `PLI_FORK_MIN` | same text | 4.0.0 |
+| MLX command buffers of at most 500 MB and 100 operations (env, set by `install.sh`) | `MLX_MAX_MB_PER_BUFFER`, `MLX_MAX_OPS_PER_BUFFER` | same text | 4.0.0 |
 
-## Install
+## Experimental features
+
+In the code, off by default, not in any profile. They are there to be measured; none is supported.
+
+| Feature | Settings | Status |
+| --- | --- | --- |
+| FALCON: capture of training examples for the MTP head (hidden state, chosen token, top logits, prompt rows in 8 bits) | `PLI_FALCON`, `PLI_FALCON_MAX_GB`, `PLI_FALCON_*` | Experimental. Same text; rounds slower by 0.7%, prompt reading slower by 1.5%. No learned head is served. |
+| FALCON hot swap of a published MTP head | `PLI_FALCON_HEAD` | Experimental, not in production |
+| MTP head alone in place of DFlash2 | `PLI_MTP_HEAD` without `PLI_HYBRID` | Experimental |
+| Tree gain floor: a KFlash tree only when it brings that many more expected tokens than the chain | `PLI_TREE_GAIN_MIN` | Experimental |
+| Round profile, copy log, lattice log (to replay drafts offline) | `PLI_ROUND_PROFILE*`, `PLI_COPY_LOG`, `PLI_LATTICE_LOG` | Diagnostic, off by default |
+| DFlash2 chain drawn on the GPU | `PLI_GPU_CHAIN` | Experimental, no gain measured |
+| Checkpoint log | `PLI_CHECKPOINT_LOG` | Diagnostic, off by default |
+| Part of the prompt rows computed on the CPU | `PLI_PREFILL_CPU*` | Experimental, text can change |
+| Arbiter cost table observed in service, draft floor | `PLI_ARBITER_TABLE`, `PLI_ARBITER_MIN_ROWS` | Experimental |
+| Row-invariant attention for windows | `PLI_ATTENTION=gemm` or `m1`, `PLI_ATTN_*` | Experimental |
+| Neural Engine call at the heartbeat's pace | `PLI_HEARTBEAT_ANE` | Experimental |
+
+The full list, with each variable's code default, is in [docs/switches.md](docs/switches.md). Every setting starts with
+`PLI_`; the names used before 3.7.0 and 4.0.0 (French `PLI_*` names, `TF_*`, `TENSORFOLD_*`) are still accepted.
+
+## Model families
+
+PLI's kernels, Neural Engine path and drafts are written and measured for the dense Qwen3.8-27B. The other families
+come from TensorFold 0.6.6 and keep its MLX engines; PLI has not validated them.
+
+| Family | `model_type` | Status under PLI | Recipe |
+| --- | --- | --- | --- |
+| Qwen3.8-27B (dense) and its fine-tunes | `qwen3_5` | **Validated** (M1 Ultra, 64 GB, `m1-ultra` profile) | [qwen3.8-27b.md](docs/recipes/qwen3.8-27b.md) |
+| Qwen3.6-35B-A3B (MoE) | `qwen3_5_moe` | Not validated under PLI | [qwen3.6-moe.md](docs/recipes/qwen3.6-moe.md) |
+| GLM-5.3-Flash | `glm5_next` | Not validated under PLI (written for a 256 GB Mac) | [glm-5.3-flash.md](docs/recipes/glm-5.3-flash.md) |
+| DeepSeek-V4-Flash | `deepseek_v4` | Not validated under PLI (written for a 256 GB Mac) | [deepseek-v4-flash.md](docs/recipes/deepseek-v4-flash.md) |
+| Nemotron 3.5 Lightning | `nemotron_h` | Not validated under PLI | [nemotron-3.5.md](docs/recipes/nemotron-3.5.md) |
+| Gemma 4 26B-A4B | `gemma4` | Not validated under PLI | [gemma-4.md](docs/recipes/gemma-4.md) |
+| Qwen3.8 Flash Next | `qwen4_exp` | Not validated under PLI (sized for a 128 GB Mac) | [qwen3.8-flash-next.md](docs/recipes/qwen3.8-flash-next.md) |
+| Ternary Bonsai 2 27B | `bonsai` | Not validated under PLI | [ternary-bonsai-2.md](docs/recipes/ternary-bonsai-2.md) |
+
+The recipes are TensorFold's; their CUDA sections describe the upstream project and do not apply to PLI.
+
+## Neural Engine
+
+> **Warning.** The Neural Engine path relies on private Apple APIs; a macOS update can break it.
+
+The `m1-ultra` profile switches it on (`PLI_ANE_FFN=1`). Its client library is compiled on first use, which needs the
+Xcode Command Line Tools; without them PLI keeps the GPU path. Two Neural Engine blocks are used only on an Ultra chip.
+On the first error, PLI computes the layer on the GPU. To run without it, set `PLI_ANE_FFN=0` in the environment.
+
+## Manual install and run
+
+What `install.sh` does, by hand:
 
 ```bash
-git clone git@github.com:nicopingu/pli.git
-python3 -m venv ~/venvs/pli
-~/venvs/pli/bin/pip install -e ./pli            # add [vision] for image input, [test] for the test suite
-~/venvs/pli/bin/pli --version
+git clone https://github.com/nicopingu/pli.git
+python3 -m venv ~/pli/venv
+~/pli/venv/bin/pip install ./pli            # add [vision] for image input, [test] for the test suite
+~/pli/venv/bin/pli pull mlx-community/Qwen3.8-27B-4bit z-lab/Qwen3.8-27B-DFlash2
+~/pli/venv/bin/pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto --port 8080
 ```
 
-Step-by-step checks, memory sizing and service setup are in [RUNBOOK.md](RUNBOOK.md).
+`pli serve --help` lists every option; `pli info MODEL` shows what a checkpoint needs; `pli models` lists the families
+and their tested checkpoints; `pli service --help` manages the per-user service. Memory sizing, health checks and
+updates are in [RUNBOOK.md](RUNBOOK.md).
 
-## Run
+### Profile `m1-ultra`
 
-```bash
-pli pull mlx-community/Qwen3.8-27B-4bit z-lab/Qwen3.8-27B-DFlash2
-pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto --port 8080
-```
-
-The server answers OpenAI clients at `http://127.0.0.1:8080/v1` and Anthropic clients at `http://127.0.0.1:8080`.
-`pli serve --help` lists every option; `pli info MODEL` shows what a checkpoint needs; `pli models` lists the
-families and their tested checkpoints.
-
-### Profiles
-
-A profile is a folder of `tensorfold/pli/profils/`: `commun.env` for every model and `<model_type>.env` for one
-family (`qwen3_5` for the Qwen3.8 dense models). `--profile NAME` or `PLI_PROFIL=NAME` loads it before any kernel is
+A profile is a folder of `src/tensorfold/pli/profiles/`: `common.env` for every model and `<model_type>.env` for one
+family (`qwen3_5` for the Qwen3.8 dense models). `--profile NAME` or `PLI_PROFILE=NAME` loads it before any kernel is
 imported. A variable already set in the environment always wins over the profile.
 
-Machine-specific values stay out of profiles and go in the environment:
+`m1-ultra` sets every stable production setting of the validated machine. What names a file, a directory or a host
+stays out of it and goes in the environment:
 
 | Variable | Use |
 | --- | --- |
-| `PLI_HOTES_ADMIS` | extra host names accepted by the Host/Origin guard (e.g. the machine's LAN name) |
-| `PLI_EVENEMENTS` | path of the event journal (one JSON line per scheduler action) |
+| `PLI_HYBRID=1` and `PLI_MTP_HEAD=<file>` | hybrid draft: DFlash2 and the 27B's MTP head (4-bit safetensors). `PLI_HYBRID` needs `PLI_MTP_HEAD` and `--drafter`. The head: [EigenLabs/Qwen3.8-27B-MTP-bf16](https://huggingface.co/EigenLabs/Qwen3.8-27B-MTP-bf16) (license: Apache-2.0), the 15 `mtp.*` tensors of Qwen3.8-27B copied unchanged; `tools/quantize_mtp_head.py` writes it in 4 bits (810 MiB to 228 MiB) |
+| `MLX_MAX_MB_PER_BUFFER=500`, `MLX_MAX_OPS_PER_BUFFER=100` | MLX command-buffer limits; MLX reads them when it starts, before any profile, so they go in the environment |
+| `PLI_ALLOWED_HOSTS` | extra host names accepted by the Host/Origin guard (for example the machine's LAN name) |
+| `PLI_EVENTS` | path of the event journal (one JSON line per scheduler action, no message content) |
+| `PLI_FALCON`, `PLI_FALCON_MAX_GB` | experimental FALCON capture: directory and disk cap in GB |
+
+Production setup of the validated machine:
+
+```bash
+export PLI_HYBRID=1
+export PLI_MTP_HEAD=~/pli/models/mtp-head-4bit.safetensors
+export PLI_EVENTS=~/pli/logs/events.jsonl
+export MLX_MAX_MB_PER_BUFFER=500 MLX_MAX_OPS_PER_BUFFER=100
+pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto --context 229376 --parallel 4 --spill-gib 40
+```
+
+## Benchmark
+
+`tools/pli_bench.py` measures prompt reading and writing speed against any server that speaks the OpenAI chat API with
+streaming, so PLI and other engines can be compared on the same Mac with the same requests. It needs only standard
+Python.
+
+```bash
+python3 tools/pli_bench.py --url http://127.0.0.1:8080/v1 --salt pub --only single --sizes code,1k,8k,32k,64k
+python3 tools/pli_bench.py --url http://127.0.0.1:8080/v1 --salt pub --only single --sizes 96k
+python3 tools/pli_bench.py --url http://127.0.0.1:8080/v1 --salt pub --only agent
+```
+
+The requests are fixed: they come from the suite `tools/bench_data/suite-v1.json` and its corpus (PLI's own source
+code), checked by SHA-256 before the run, so every run on every machine sends the same texts.
+
+| Part | Requests |
+| --- | --- |
+| `single` | one message each: a short code request (400 tokens written), then prompts of 1k, 8k, 32k, 64k and 96k tokens (Qwen3.8 tokenizer) followed by one question (200 tokens written) |
+| `agent` | one session of an agent reading 25 files of a repository, growing from about 6k to 50k tokens; at 8 points a question is asked and its answer measured (200 tokens), then the session goes on without it, so the prompt prefix is shared as in real agent work |
+
+Only the first line of each conversation changes with `--salt` (random by default), so that no prompt cache from an
+earlier run serves it; with `--salt pub` the texts are those of the measurements below. For each request: reading =
+prompt tokens / time to the first written token (in the agent part the prefix may come from the cache); writing =
+(written tokens - 1) / (end - first written token); the agent result is all written tokens over all writing time.
+Decoding is greedy. Memory (wired, available, swap, server resident memory with `--pid`) is sampled every second.
+Results go to a JSON file (`--out`). `--free` keeps the older mode with free sizes (`--contexts`).
+
+The bench sends no thinking field, so measure with thinking off: start PLI with `pli serve ... --no-thinking`, or pass
+`--extra` for other servers (`'{"chat_template_kwargs": {"enable_thinking": false}}'` for PLI and mlx-lm,
+`'{"reasoning_effort": "none"}'` for Kapitsa); for llama.cpp, start its server with `--reasoning off`.
+
+## Measurements
+
+The figures in [CHANGELOG.md](CHANGELOG.md) come from the validated machine below with PLI's own benches, as each
+line says. The figures in this section come from the public suite (see [Benchmark](#benchmark)), run with
+`--salt pub`, so the texts are the same for every engine and can be run again on another Mac.
+
+| Item | Value |
+| --- | --- |
+| Machine | Mac Studio, M1 Ultra (20-core CPU: 16 performance and 4 efficiency cores; 64-core GPU; two Neural Engine blocks), 64 GB |
+| OS | macOS 27.0.1 |
+| Suite | `tools/bench_data/suite-v1.json`, `--salt pub`; one engine at a time, nothing else running; greedy decoding, thinking off |
+| PLI 4.0.0 | set up as `install.sh` does: `--profile m1-ultra`, hybrid draft (DFlash2 and the MTP head of Qwen3.8-27B in 4 bits), `--context 229376 --parallel 4`; Python 3.12, MLX 0.32.3, mlx-lm 0.32.0 |
+| [Kapitsa](https://github.com/nace-ai/kapitsa) 0.2.24 | its defaults with the DFlash2 draft, `--context 131072 --slots 4`, `reasoning_effort: none` |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) b11926 | Qwen3.8-27B in GGUF Q4_K_M with its MTP head (GGUF Q8_0) as draft (`--spec-type draft-mtp --spec-draft-n-max 2`), `-fa on -ngl all`, `--reasoning off` |
+| [mlx-lm](https://github.com/ml-explore/mlx-lm) 0.32.2 | `mlx_lm.server` (MLX 0.32.4), no draft, thinking off |
+| Models | mlx-community/Qwen3.8-27B-4bit for PLI, Kapitsa and mlx-lm; drafts z-lab/Qwen3.8-27B-DFlash2 |
+| Units | tokens per second (tok/s), prompt sizes in tokens (Qwen3.8 tokenizer) |
+| Dates | 2 and 3 November 2026 |
+
+### One request at a time
+
+Prompt reading / writing, in tok/s (higher is better):
+
+| Prompt | Tokens read | PLI 4.0.0 | Kapitsa 0.2.24 | llama.cpp | mlx-lm |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| short code request (400 tokens written) | 62 | 191 / 111.2 | 156 / 116.1 | 121 / 31.1 | 91 / 24.1 |
+| 1k | 1,001 | 294 / 53.2 | 210 / 65.3 | 193 / 25.1 | 159 / 24.0 |
+| 8k | 8,001 | 323 / 45.8 | 209 / 54.2 | 192 / 23.0 | 165 / 22.6 |
+| 32k | 32,002 | 285 / 49.2 | 189 / 43.1 | 168 / 19.9 | 153 / 18.8 |
+| 64k | 64,002 | 245 / 40.8 | 167 / 32.9 | 144 / 17.1 | 136 / 17.2 |
+| 96k | 96,002 | 213 / 34.1 | 151 / 33.6 | 126 / 15.5 | not measured (prompt reading over 13 min) |
+
+PLI reads prompts 1.4 to 1.5 times as fast as Kapitsa from 1k to 96k (1.2 times on the short code request). Kapitsa
+writes faster on short prompts (code request, 1k, 8k); PLI writes faster at 32k and 64k, and level at 96k. Both draft with DFlash2; llama.cpp drafts with the MTP head, mlx-lm
+without a draft. Writing speed depends on how many drafted tokens the model accepts, so it depends on the text: two
+prompts of the same size can differ by several percent.
+
+### Agent session
+
+One session that grows from 6,468 to 50,706 tokens, with 8 measured answers of 200 tokens (see
+[Benchmark](#benchmark)). Each run was stopped after 13 minutes.
+
+| | PLI 4.0.0 | Kapitsa 0.2.24 | llama.cpp | mlx-lm |
+| --- | ---: | ---: | ---: | ---: |
+| Answers measured in 13 minutes | 8 of 8 | 6 of 8 | 8 of 8 | 6 of 8 |
+| Writing, first 6 answers (tok/s) | 47.0 | 46.7 | 24.3 | 20.9 |
+| Writing, all 8 answers (tok/s) | 47.1 | | 22.7 | |
+| Mean time to the first token, first 6 answers (s) | 31.1 | 97.3 | 31.3 | 121.4 |
+| Prompt tokens served from the cache, first 6 answers | 57 % | 0 % | 73 % | 0 % |
+
+The session drops each measured answer before it goes on, so a cache must reuse a prefix that ends inside the
+conversation. llama.cpp reuses any common prefix of the previous request; PLI reuses the checkpoint kept where an
+earlier prompt forked, which here is one request older, and reads the rest again, faster. Kapitsa and mlx-lm read the
+whole prompt again at each request in this run.
+
+## Debugging
+
+The step trace writes one JSON line per engine step of each request. It is off by default and costs nothing while
+off; use it to find where time goes, not in normal service.
+
+| Variable | Use |
+| --- | --- |
+| `PLI_TRACE_DIR=<dir>` | trace available but off; switch it on without a restart: `python -m tensorfold.pli.trace on --dir <dir> [--duration 24h]`, off with `off`; read it with `python -m tensorfold.pli.trace_analysis` |
+| `PLI_TRACE=<file>` | trace on from the start (benches, tests) |
+| `PLI_TRACE_LAYERS`, `PLI_ANE_STATS`, `PLI_ANCHOR_LOG`, `PLI_HYBRID_LOG` | per-chunk layer times, Neural Engine load, reduced-attention reasons, hybrid draft switches |
 
 ## Tests
 
 ```bash
-~/venvs/pli/bin/pip install -e "./pli[test]"
-TENSORFOLD_NO_UPDATE_CHECK=1 ~/venvs/pli/bin/python -m pytest -q tests
+~/pli/venv/bin/pip install "./pli[test]"
+PLI_NO_UPDATE_CHECK=1 ~/pli/venv/bin/python -m pytest -q tests
 ```
 
 Tests that need hardware PLI's GPU lacks are skipped with the reason (Metal 4 tensor units on M5-generation GPUs,
 or 1,024 threads per threadgroup for GLM-5.3-Flash's kernels). Measurement probes that are not unit tests live in
-`tools/sondes/`.
+`tools/probes/`.
+
+## Inspirations and third-party code
+
+Code taken from other projects, with its license, is listed file by file in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). What PLI adds to TensorFold's list:
+
+| Source | What PLI takes | License |
+| --- | --- | --- |
+| [Splash](https://github.com/incoai/splash), as ported to M1/M2 GPUs by [paperniuk/splash](https://github.com/paperniuk/splash) (1.3.2-m1, commit 5c484b2) | Neural Engine client (`src/tensorfold/pli/ane/native/`): `ane/ProgramInstrumentation.hpp`, `AwakeClock.hpp` and `Checked.hpp` unmodified; `ane/Program.mm` and `ane/Program.hpp` modified by PLI to pin a program to one Neural Engine block (each change marked `PLI`); the MIL program of the shared FFN and its split rewritten in Python from Splash's `runtime/ops/AneFfn.cpp` | Apache-2.0 (`src/tensorfold/pli/ane/native/LICENSE-splash`) |
+| [Kapitsa](https://github.com/nace-ai/kapitsa) v0.2.23 | 8-row verify GEMM (`src/tensorfold/kernels/qwen/dense/v1/qmm8.py`): the X8 input table and the dense 4-bit GEMM of `src/kernels/verify8.metal`, with Kapitsa's M1 tiling, turned into MLX kernels | Apache-2.0 ([LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt)) |
+
+`pli_ane.mm`, `metal/MetalBackend.hpp`, the Host/Origin guard (`src/tensorfold/server/host_guard.py`) and everything
+else under `src/tensorfold/pli/` are written for PLI.
+
+Ideas used without their code:
+
+- **Recall drafts** (`PLI_RECALL`): the "Recall" of
+  [TensorFold 1.0.12](https://github.com/ashhart/TensorFold/releases/tag/v1.0.12) (written in Zig; no code copied).
+- **Checkpoint at the fork point** (`PLI_FORK_MIN`): the rule of TensorFold pull request
+  [#1291](https://github.com/ashhart/TensorFold/pull/1291) (Zig, closed without merging), rewritten in Python.
+- **Control tokens kept as text** (`PLI_CONTROL_AS_TEXT`): the behaviour of
+  [TensorFold 1.1.2](https://github.com/ashhart/TensorFold/releases/tag/v1.1.2) for issue
+  [#1117](https://github.com/ashhart/TensorFold/issues/1117), rewritten in Python.
+- **Heartbeat between requests** (`PLI_HEARTBEAT_MS`, `PLI_HEARTBEAT_ANE`): [Kapitsa](https://github.com/nace-ai/kapitsa)
+  [#206](https://github.com/nace-ai/kapitsa/pull/206) (residency heartbeat); keeping the Neural Engine awake between
+  requests follows the same idea.
+- **CPU requantization for the Neural Engine** (`PLI_ANE_REQUANT_CPU`): the CPU as a third unit writing straight into
+  the Neural Engine's surfaces, from [ane-infer](https://github.com/thebasedcapital/ane-infer) and
+  [ANEDVD](https://github.com/midasdf/ANEDVD).
+- **FALCON** (`PLI_FALCON`): training the draft head by unrolling its chain, as EAGLE-3 does (["EAGLE-3: Scaling up
+  Inference Acceleration of Large Language Models via Training-Time Test"](https://arxiv.org/abs/2503.01840)).
+
+Drafts used, weights not distributed: [DFlash2](https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2) by z-lab (license:
+Apache-2.0; its MLX model code is vendored from [z-lab/dflash](https://github.com/z-lab/dflash), MIT) and the MTP head
+that Qwen publishes with Qwen3.8-27B ([EigenLabs/Qwen3.8-27B-MTP-bf16](https://huggingface.co/EigenLabs/Qwen3.8-27B-MTP-bf16),
+license: Apache-2.0).
 
 ## Naming
 
-The Python module is still called `tensorfold`, and so are its log prefix (`[tensorfold]`) and its `TENSORFOLD_*`
-variables; the command is `pli` (`tensorfold` remains an alias).
+PLI stands for "Parallel Linked Inference". The Python module is still called `tensorfold` and its log prefix is
+still `[tensorfold]`; the command is `pli` (`tensorfold` remains an alias). Every setting is a `PLI_*` variable, and
+PLI's own log lines start with `[pli]`.
 
 ## License
 
-Apache-2.0, as TensorFold. See [LICENSE](LICENSE), [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-The Neural Engine client reuses code from Splash 1.3.2-m1 (Apache-2.0, `tensorfold/pli/ane/natif/LICENSE-splash`).
+Apache-2.0, as TensorFold. PLI is a fork of TensorFold 0.6.6 (commit cb2ebf05); copyright 2026 Nicolas F. (nicopingu)
+for PLI's changes, and the TensorFold contributors for TensorFold. See [LICENSE](LICENSE), [NOTICE](NOTICE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

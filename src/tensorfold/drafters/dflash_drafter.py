@@ -114,8 +114,11 @@ class DFlashDrafter:
             from tensorfold.kernels.qwen.dense.v1.row_matmul import draft_matmul
 
             parts, ids, group_size, bits = plain
-            logits = mx.concatenate([draft_matmul(hidden, w, sc, b, group_size, bits) for w, sc, b in parts],
-                                    axis=-1)
+            from tensorfold.pli import draft_stack as _bp     # PLI (PLI_DRAFT_STACK): relaid-out head, same bits
+            logits = _bp.head_of(self, hidden) if _bp.ENABLED else None
+            if logits is None:
+                logits = mx.concatenate([draft_matmul(hidden, w, sc, b, group_size, bits) for w, sc, b in parts],
+                                        axis=-1)
             logits = logits * self.model.config.output_multiplier
             cap = self.model.config.final_logit_softcapping
             if cap is not None and cap > 0:
@@ -167,13 +170,19 @@ class DFlashDrafter:
             import mlx.nn as nn
 
             head = self._matmul_head()
-            if os.environ.get("TF_DRAFT_VOCAB", "") != "full" and isinstance(head, nn.QuantizedLinear) \
+            if os.environ.get("PLI_DRAFT_VOCAB", "") != "full" and isinstance(head, nn.QuantizedLinear) \
                     and "bias" not in head and not getattr(head, "_lane_tiled", False):
                 n = int(head["weight"].shape[0])
                 spans = [(a, min(b, n)) for a, b in self.draft_vocab if a < n]
                 if sum(b - a for a, b in spans) < n:
                     parts = [(head["weight"][a:b], head["scales"][a:b], head["biases"][a:b]) for a, b in spans]
                     ids = mx.concatenate([mx.arange(a, b, dtype=mx.int32) for a, b in spans])
+                    from tensorfold.pli import extended_list as _lp
+                    added = _lp.outside(spans, n) if _lp.active() else []
+                    if added:                    # PLI: rows of the extended list's tokens
+                        parts.append(_lp.head_rows(head, added))
+                        ids = mx.concatenate([ids, mx.array(added, dtype=mx.int32)])
+                        _lp.say("DFlash2", len(added))
                     mx.eval(ids)
                     self._plain_sub = (parts, ids, int(head.group_size), int(head.bits))
         return self._plain_sub
@@ -184,7 +193,7 @@ class DFlashDrafter:
         if getattr(self, "_sub", False) is False:
             self._sub = None
             head = self._matmul_head()
-            if (os.environ.get("TF_DRAFT_VOCAB", "") != "full" and getattr(head, "_lane_tiled", False)
+            if (os.environ.get("PLI_DRAFT_VOCAB", "") != "full" and getattr(head, "_lane_tiled", False)
                     and getattr(head, "_lane_sbt", None) is not None):
                 n = int(head["weight"].shape[0])
                 nt = int(getattr(head, "_lane_nt", 32))
@@ -194,6 +203,17 @@ class DFlashDrafter:
                     weight = mx.concatenate([head["weight"][a:b] for a, b in spans], axis=0)
                     sbt = mx.concatenate([head._lane_sbt[:, a:b] for a, b in spans], axis=1)
                     ids = mx.concatenate([mx.arange(a, b, dtype=mx.int32) for a, b in spans])
+                    from tensorfold.pli import extended_list as _lp
+                    added = _lp.outside(spans, n, nt) if _lp.active() else []
+                    if added:                    # PLI: rows of the extended list, laid out in tiles
+                        from tensorfold.kernels.qwen.dense.v1 import lane_qmm as _lq
+
+                        w, s, b = _lp.head_rows(head, added)
+                        weight = mx.concatenate([weight, _lq.tile_weight(w, nt, int(head.group_size), bits=int(head.bits))],
+                                                axis=0)
+                        sbt = mx.concatenate([sbt, _lq.pack_scales(s, b)], axis=1)
+                        ids = mx.concatenate([ids, mx.array(added, dtype=mx.int32)])
+                        _lp.say("DFlash2", len(added))
                     mx.eval(weight, sbt, ids)
                     self._sub = (weight, sbt, ids, nt, int(getattr(head, "group_size", 64)))
         return self._sub

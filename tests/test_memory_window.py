@@ -119,7 +119,7 @@ def test_the_refusal_names_the_budget_that_would_fit_and_this_macs_ceiling(ceili
     with pytest.raises(ValueError, match="no room") as error:
         app(2**30 + 2**20, context_window=0, fit_context=True, memory_runtime=runtime)
     message = str(error.value)
-    hint = "Raise the budget past 1.3 GiB with TENSORFOLD_MEMORY_LIMIT_GB (this Mac takes up to 64.0"
+    hint = "Raise the budget past 1.3 GiB with PLI_MEMORY_LIMIT_GB (this Mac takes up to 64.0"
     assert (hint in message) is raise_it
     assert ("Serve it on a Mac with more memory" in message) is not raise_it
 

@@ -1,4 +1,4 @@
-"""Prompt kernels that don't build or don't match MLX's bits say so loudly, or stop with TF_REQUIRE_KERNELS=1 (#88)."""
+"""Prompt kernels that don't build or don't match MLX's bits say so loudly, or stop with PLI_REQUIRE_KERNELS=1 (#88)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def check(monkeypatch):
 
     monkeypatch.setattr(prefill_mm, "_tiles", [])
     monkeypatch.setattr(prefill_mm, "_tensor_units", lambda: False)
-    monkeypatch.delenv("TF_REQUIRE_KERNELS", raising=False)
+    monkeypatch.delenv("PLI_REQUIRE_KERNELS", raising=False)
     return lambda outcome: monkeypatch.setattr(prefill_mm, "_self_check", outcome)
 
 
@@ -29,7 +29,7 @@ def test_a_kernel_that_does_not_build_warns_loudly_and_prompts_use_mlx(check, ca
     assert prefill_mm.tiles() is False
     err = capsys.readouterr().err
     assert "WARNING" in err and "error: no matching function" in err and f"MLX {mx.__version__}" in err
-    assert "replies are the same" in err and "TF_REQUIRE_KERNELS=1" in err
+    assert "replies are the same" in err and "PLI_REQUIRE_KERNELS=1" in err
 
 
 def test_kernels_with_other_bits_warn_too(check, capsys):
@@ -40,7 +40,7 @@ def test_kernels_with_other_bits_warn_too(check, capsys):
 
 def test_require_kernels_stops_instead_of_falling_back(check, monkeypatch):
     check(_broken)
-    monkeypatch.setenv("TF_REQUIRE_KERNELS", "1")
+    monkeypatch.setenv("PLI_REQUIRE_KERNELS", "1")
     with pytest.raises(RuntimeError, match="prompt kernels did not build"):
         prefill_mm.tiles()
 

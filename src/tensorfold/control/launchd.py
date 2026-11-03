@@ -67,7 +67,7 @@ def plist(profile: Profile, paths: Paths) -> dict:
         "WorkingDirectory": str(paths.working(profile.name)),
         "EnvironmentVariables": {"PATH": f"{Path(profile.python).parent}:/usr/bin:/bin:/usr/sbin:/sbin",
                                  "HOME": str(paths.home), "PYTHONUNBUFFERED": "1",
-                                 "TENSORFOLD_NO_LIVE": "1", "TENSORFOLD_NO_UPDATE_CHECK": "1"},
+                                 "PLI_NO_LIVE": "1", "PLI_NO_UPDATE_CHECK": "1"},
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},
         "ThrottleInterval": 30,

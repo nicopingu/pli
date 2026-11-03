@@ -25,8 +25,8 @@ from tensorfold.server import metrics
 from tensorfold.server.stacks import Rearming
 from tensorfold.server.request_body import read_body
 
-# TENSORFOLD_REQUEST_LOG=path appends every request body (one JSON a line), for exact replays of real traffic
-_REQUEST_LOG = os.environ.get("TENSORFOLD_REQUEST_LOG", "")
+# PLI_REQUEST_LOG=path appends every request body (one JSON a line), for exact replays of real traffic
+_REQUEST_LOG = os.environ.get("PLI_REQUEST_LOG", "")
 
 
 def _memory(reset_peak: bool, *, admission: Any = None) -> dict[str, int]:

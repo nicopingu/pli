@@ -1,15 +1,15 @@
-/* qmm_cpu.c : PLI, noyau CPU du produit y = x . W^T, W lu dans le format 4 bits de MLX, sans copie des poids.
+/* qmm_cpu.c: PLI, CPU kernel of the product y = x . W^T, W read in MLX's 4-bit format, without copying the weights.
  *
- * Format lu (mlx/ops.cpp, v0.32.3) : weight = mots de 32 bits, 8 valeurs de 4 bits par mot, poids faible d'abord ;
- * scales et biases = une valeur par ligne de W et par groupe de 64 colonnes ; poids = valeur * echelle + decalage.
- * W : N lignes (sorties), K colonnes (entrees), K multiple de 64.
- * Trois variantes, meme interface : x [L, K], y [L, n1 - n0] en 32 bits, lignes de W n0 a n1.
- *   pli_qmm_f32  : NEON 32 bits, poids deplies au vol dans les registres.
- *   pli_qmm_f16  : NEON 16 bits (x en float16), somme par groupe en 16 bits puis cumul en 32 bits.
- *   pli_qmm_blas : poids deplies par blocs de lignes dans un tampon, puis sgemm d'Accelerate.
- * sb : type des echelles et decalages (0 = BF16, 1 = float16, 2 = float32).
- * fils : nombre de parts de travail (0 = parts de 64 lignes de W, reparties par le systeme).
- * Compilation : clang -O3 -mcpu=apple-m1 -shared -fblocks qmm_cpu.c -framework Accelerate -o libpliqmm.dylib
+ * Format read (mlx/ops.cpp, v0.32.3): weight = 32-bit words, 8 4-bit values per word, low nibble first;
+ * scales and biases = one value per row of W and per group of 64 columns; weight = value * scale + bias.
+ * W: N rows (outputs), K columns (inputs), K multiple of 64.
+ * Three variants, same interface: x [L, K], y [L, n1 - n0] in 32 bits, rows of W n0 to n1.
+ *   pli_qmm_f32  : NEON 32 bits, weights unpacked on the fly in the registers.
+ *   pli_qmm_f16  : NEON 16 bits (x in float16), per-group sum in 16 bits then accumulation in 32 bits.
+ *   pli_qmm_blas : weights unpacked by blocks of rows into a buffer, then Accelerate's sgemm.
+ * sb: type of the scales and biases (0 = BF16, 1 = float16, 2 = float32).
+ * threads: number of work parts (0 = parts of 64 rows of W, spread by the system).
+ * Compilation: clang -O3 -mcpu=apple-m1 -shared -fblocks qmm_cpu.c -framework Accelerate -o libpliqmm.dylib
  */
 #include <Accelerate/Accelerate.h>
 #include <arm_neon.h>
@@ -19,9 +19,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BL 16 /* lignes de x traitees ensemble */
+#define BL 16 /* rows of x handled together */
 
-static inline float lire_sb(const void *p, long i, int sb) {
+static inline float read_sb(const void *p, long i, int sb) {
     if (sb == 2) return ((const float *)p)[i];
     if (sb == 1) return (float)((const float16_t *)p)[i];
     uint32_t u = (uint32_t)((const uint16_t *)p)[i] << 16;
@@ -30,8 +30,8 @@ static inline float lire_sb(const void *p, long i, int sb) {
     return f;
 }
 
-/* 32 octets = 64 valeurs de 4 bits -> 4 registres de 16 octets, dans l'ordre des colonnes */
-static inline void deballer(const uint8_t *p, uint8x16_t q[4]) {
+/* 32 bytes = 64 4-bit values -> 4 registers of 16 bytes, in column order */
+static inline void unpack(const uint8_t *p, uint8x16_t q[4]) {
     const uint8x16_t m = vdupq_n_u8(15);
     uint8x16_t a = vld1q_u8(p), c = vld1q_u8(p + 16);
     uint8x16_t ae = vandq_u8(a, m), ao = vshrq_n_u8(a, 4), ce = vandq_u8(c, m), co = vshrq_n_u8(c, 4);
@@ -41,9 +41,9 @@ static inline void deballer(const uint8_t *p, uint8x16_t q[4]) {
     q[3] = vzip2q_u8(ce, co);
 }
 
-static inline void groupe_f32(const uint8_t *p, float s, float b, float32x4_t wv[16]) {
+static inline void group_f32(const uint8_t *p, float s, float b, float32x4_t wv[16]) {
     uint8x16_t q[4];
-    deballer(p, q);
+    unpack(p, q);
     const float32x4_t vs = vdupq_n_f32(s), vb = vdupq_n_f32(b);
     for (int i = 0; i < 4; i++) {
         uint16x8_t lo = vmovl_u8(vget_low_u8(q[i])), hi = vmovl_high_u8(q[i]);
@@ -54,9 +54,9 @@ static inline void groupe_f32(const uint8_t *p, float s, float b, float32x4_t wv
     }
 }
 
-static inline void groupe_f16(const uint8_t *p, float s, float b, float16x8_t wv[8]) {
+static inline void group_f16(const uint8_t *p, float s, float b, float16x8_t wv[8]) {
     uint8x16_t q[4];
-    deballer(p, q);
+    unpack(p, q);
     const float16x8_t vs = vdupq_n_f16((float16_t)s), vb = vdupq_n_f16((float16_t)b);
     for (int i = 0; i < 4; i++) {
         wv[2 * i + 0] = vfmaq_f16(vb, vcvtq_f16_u16(vmovl_u8(vget_low_u8(q[i]))), vs);
@@ -64,34 +64,34 @@ static inline void groupe_f16(const uint8_t *p, float s, float b, float16x8_t wv
     }
 }
 
-/* Priorite des fils du noyau : 0 = haute (defaut), 1 = moyenne, 2 = de fond (coeurs economes, ne gene pas le fil qui pilote le GPU). */
+/* Priority of the kernel's threads: 0 = high (default), 1 = medium, 2 = background (efficiency cores, does not disturb the thread driving the GPU). */
 static int pli_qos = 0;
-void pli_qmm_priorite(int niveau) { pli_qos = niveau; }
-static dispatch_queue_t file_de_travail(void) {
+void pli_qmm_priorite(int level) { pli_qos = level; }
+static dispatch_queue_t work_queue(void) {
     return dispatch_get_global_queue(pli_qos == 2 ? QOS_CLASS_BACKGROUND : pli_qos == 1 ? QOS_CLASS_UTILITY : QOS_CLASS_USER_INTERACTIVE, 0);
 }
 
-static void parts(long n0, long n1, int fils, void (^corps)(long a, long b)) {
+static void parts(long n0, long n1, int threads, void (^body)(long a, long b)) {
     long total = n1 - n0;
     if (total <= 0) return;
-    long pas = fils > 0 ? (total + fils - 1) / fils : 64;
-    if (pas < 1) pas = 1;
-    size_t nb = (size_t)((total + pas - 1) / pas);
+    long step = threads > 0 ? (total + threads - 1) / threads : 64;
+    if (step < 1) step = 1;
+    size_t nb = (size_t)((total + step - 1) / step);
     if (nb == 1) {
-        corps(n0, n1);
+        body(n0, n1);
         return;
     }
-    dispatch_apply(nb, file_de_travail(), ^(size_t i) {
-        long a = n0 + (long)i * pas, b = a + pas;
-        corps(a, b > n1 ? n1 : b);
+    dispatch_apply(nb, work_queue(), ^(size_t i) {
+        long a = n0 + (long)i * step, b = a + step;
+        body(a, b > n1 ? n1 : b);
     });
 }
 
 int pli_qmm_f32(const uint32_t *w, const void *s, const void *b, int sb, long N, long K, const float *x, long L,
-                float *y, long n0, long n1, int fils) {
+                float *y, long n0, long n1, int threads) {
     if (K % 64 || n0 < 0 || n1 > N || n0 > n1 || L < 1) return -1;
     const long G = K / 64, M = n1 - n0;
-    parts(n0, n1, fils, ^(long a, long bb) {
+    parts(n0, n1, threads, ^(long a, long bb) {
         float32x4_t wv[16], acc[BL][4];
         for (long l0 = 0; l0 < L; l0 += BL) {
             const long nl = L - l0 < BL ? L - l0 : BL;
@@ -100,7 +100,7 @@ int pli_qmm_f32(const uint32_t *w, const void *s, const void *b, int sb, long N,
                 for (long l = 0; l < nl; l++)
                     for (int j = 0; j < 4; j++) acc[l][j] = vdupq_n_f32(0.0f);
                 for (long g = 0; g < G; g++) {
-                    groupe_f32(pw + 32 * g, lire_sb(s, n * G + g, sb), lire_sb(b, n * G + g, sb), wv);
+                    group_f32(pw + 32 * g, read_sb(s, n * G + g, sb), read_sb(b, n * G + g, sb), wv);
                     for (long l = 0; l < nl; l++) {
                         const float *px = x + (l0 + l) * K + 64 * g;
                         float32x4_t a0 = acc[l][0], a1 = acc[l][1], a2 = acc[l][2], a3 = acc[l][3];
@@ -123,10 +123,10 @@ int pli_qmm_f32(const uint32_t *w, const void *s, const void *b, int sb, long N,
 }
 
 int pli_qmm_f16(const uint32_t *w, const void *s, const void *b, int sb, long N, long K, const float16_t *x, long L,
-                float *y, long n0, long n1, int fils) {
+                float *y, long n0, long n1, int threads) {
     if (K % 64 || n0 < 0 || n1 > N || n0 > n1 || L < 1) return -1;
     const long G = K / 64, M = n1 - n0;
-    parts(n0, n1, fils, ^(long a, long bb) {
+    parts(n0, n1, threads, ^(long a, long bb) {
         float16x8_t wv[8];
         float32x4_t acc[BL];
         for (long l0 = 0; l0 < L; l0 += BL) {
@@ -135,7 +135,7 @@ int pli_qmm_f16(const uint32_t *w, const void *s, const void *b, int sb, long N,
                 const uint8_t *pw = (const uint8_t *)(w + n * (K / 8));
                 for (long l = 0; l < nl; l++) acc[l] = vdupq_n_f32(0.0f);
                 for (long g = 0; g < G; g++) {
-                    groupe_f16(pw + 32 * g, lire_sb(s, n * G + g, sb), lire_sb(b, n * G + g, sb), wv);
+                    group_f16(pw + 32 * g, read_sb(s, n * G + g, sb), read_sb(b, n * G + g, sb), wv);
                     for (long l = 0; l < nl; l++) {
                         const float16_t *px = x + (l0 + l) * K + 64 * g;
                         float16x8_t a0 = vmulq_f16(wv[0], vld1q_f16(px)), a1 = vmulq_f16(wv[1], vld1q_f16(px + 8));
@@ -156,7 +156,7 @@ int pli_qmm_f16(const uint32_t *w, const void *s, const void *b, int sb, long N,
     return 0;
 }
 
-/* rr : lignes de W depliees par bloc (tampon de rr * K * 4 octets, rendu a la fin) */
+/* rr: rows of W unpacked per block (buffer of rr * K * 4 bytes, freed at the end) */
 int pli_qmm_blas(const uint32_t *w, const void *s, const void *b, int sb, long N, long K, const float *x, long L,
                  float *y, long n0, long n1, long rr) {
     if (K % 64 || n0 < 0 || n1 > N || n0 > n1 || L < 1 || rr < 1) return -1;
@@ -171,7 +171,7 @@ int pli_qmm_blas(const uint32_t *w, const void *s, const void *b, int sb, long N
                 const uint8_t *pw = (const uint8_t *)(w + n * (K / 8));
                 float *d = buf + (n - r0) * K;
                 for (long g = 0; g < G; g++) {
-                    groupe_f32(pw + 32 * g, lire_sb(s, n * G + g, sb), lire_sb(b, n * G + g, sb), wv);
+                    group_f32(pw + 32 * g, read_sb(s, n * G + g, sb), read_sb(b, n * G + g, sb), wv);
                     for (int v = 0; v < 16; v++) vst1q_f32(d + 64 * g + 4 * v, wv[v]);
                 }
             }
@@ -183,16 +183,16 @@ int pli_qmm_blas(const uint32_t *w, const void *s, const void *b, int sb, long N
     return 0;
 }
 
-/* Lot E (entiers d'abord). Activations en entiers : xh et xl sont les deux moities centrees (-128..127) d'un entier de 16 bits
- * (valeur = 256 * xh + xl) ; xl == NULL : activations de 8 bits (valeur = xh). ech : une echelle par ligne de x.
- * Par paquet de 64 colonnes, les sommes Ph = q.xh et Pl = q.xl sont des entiers exacts (instruction SDOT), comme les sommes
- * SXh et SXl des activations. L'etape flottante est la meme partout, dans cet ordre, sans multiplication-addition fusionnee,
- * en flottants 32 bits, avec kh = 256 (16 bits) ou 1 (8 bits) :
- *     acc = acc + ( ((s * kh) * Ph + s * Pl) + ((b * kh) * SXh + b * SXl) )      paquet apres paquet
- *     y = acc * ech
- * Tout organe qui calcule les memes entiers et suit cet ordre rend les memes bits (verifie contre numpy : produit_entiers_numpy). */
+/* Item E (integers first). Integer activations: xh and xl are the two centred halves (-128..127) of a 16-bit integer
+ * (value = 256 * xh + xl); xl == NULL: 8-bit activations (value = xh). scale: one scale per row of x.
+ * Per pack of 64 columns, the sums Ph = q.xh and Pl = q.xl are exact integers (SDOT instruction), like the sums
+ * SXh and SXl of the activations. The floating-point step is the same everywhere, in this order, without fused multiply-add,
+ * in 32-bit floats, with kh = 256 (16 bits) or 1 (8 bits):
+ *     acc = acc + ( ((s * kh) * Ph + s * Pl) + ((b * kh) * SXh + b * SXl) )      pack after pack
+ *     y = acc * scale
+ * Any device that computes the same integers and follows this order gives the same bits (checked against numpy: int_product_numpy). */
 int pli_qmm_ent(const uint32_t *w, const void *s, const void *b, int sb, long N, long K, const int8_t *xh, const int8_t *xl,
-                const float *ech, long L, float *y, long n0, long n1, int fils) {
+                const float *scale, long L, float *y, long n0, long n1, int threads) {
     if (K % 64 || n0 < 0 || n1 > N || n0 > n1 || L < 1) return -1;
     static const int8_t zeros[64] = {0};
     const long G = K / 64, M = n1 - n0, Lp = (L + 3) & ~3L;
@@ -205,9 +205,9 @@ int pli_qmm_ent(const uint32_t *w, const void *s, const void *b, int sb, long N,
             for (int j = 0; j < 64; j++) { a += xh[l * K + 64 * g + j]; if (xl) c += xl[l * K + 64 * g + j]; }
             sxh[g * Lp + l] = (float)a; sxl[g * Lp + l] = (float)c;
         }
-    parts(n0, n1, fils, ^(long a, long bb) {
+    parts(n0, n1, threads, ^(long a, long bb) {
         float32x4_t acc[BL / 4];
-        float sortie[4];
+        float out[4];
         for (long l0 = 0; l0 < L; l0 += BL) {
             const long nl = L - l0 < BL ? L - l0 : BL, nq = (nl + 3) / 4;
             for (long n = a; n < bb; n++) {
@@ -215,10 +215,10 @@ int pli_qmm_ent(const uint32_t *w, const void *s, const void *b, int sb, long N,
                 for (long v = 0; v < nq; v++) acc[v] = vdupq_n_f32(0.0f);
                 for (long g = 0; g < G; g++) {
                     uint8x16_t q[4];
-                    deballer(pw + 32 * g, q);
+                    unpack(pw + 32 * g, q);
                     const int8x16_t q0 = vreinterpretq_s8_u8(q[0]), q1 = vreinterpretq_s8_u8(q[1]), q2 = vreinterpretq_s8_u8(q[2]),
                                     q3 = vreinterpretq_s8_u8(q[3]);
-                    const float sv = lire_sb(s, n * G + g, sb), bv = lire_sb(b, n * G + g, sb);
+                    const float sv = read_sb(s, n * G + g, sb), bv = read_sb(b, n * G + g, sb);
                     const float32x4_t vs = vdupq_n_f32(sv), vsk = vdupq_n_f32(sv * kh), vb = vdupq_n_f32(bv), vbk = vdupq_n_f32(bv * kh);
                     for (long v = 0; v < nq; v++) {
                         int32x4_t h[4], lo[4];
@@ -247,8 +247,8 @@ int pli_qmm_ent(const uint32_t *w, const void *s, const void *b, int sb, long N,
                     }
                 }
                 for (long v = 0; v < nq; v++) {
-                    vst1q_f32(sortie, acc[v]);
-                    for (int e = 0; e < 4 && 4 * v + e < nl; e++) y[(l0 + 4 * v + e) * M + (n - n0)] = sortie[e] * ech[l0 + 4 * v + e];
+                    vst1q_f32(out, acc[v]);
+                    for (int e = 0; e < 4 && 4 * v + e < nl; e++) y[(l0 + 4 * v + e) * M + (n - n0)] = out[e] * scale[l0 + 4 * v + e];
                 }
             }
         }
@@ -257,11 +257,11 @@ int pli_qmm_ent(const uint32_t *w, const void *s, const void *b, int sb, long N,
     return 0;
 }
 
-/* SwiGLU sur place : g = g / (1 + exp(-g)) * u, n valeurs, par parts de 16 384 (vvexpf d'Accelerate). */
+/* SwiGLU in place: g = g / (1 + exp(-g)) * u, n values, in parts of 16,384 (Accelerate's vvexpf). */
 int pli_swiglu(float *g, const float *u, long n) {
     const long PT = 16384;
     long nb = (n + PT - 1) / PT;
-    dispatch_apply((size_t)nb, file_de_travail(), ^(size_t i) {
+    dispatch_apply((size_t)nb, work_queue(), ^(size_t i) {
       long a = (long)i * PT, b = a + PT > n ? n : a + PT;
       float t[1024];
       for (long j = a; j < b; j += 1024) {
@@ -274,14 +274,14 @@ int pli_swiglu(float *g, const float *u, long n) {
     return 0;
 }
 
-/* Lot E4 (entiers d'abord, memes bits que le noyau GPU simd_qmm « _ent » de TensorFold). x : entiers de 16 bits, |x| <= 16383.
- * Par groupe g de 64 colonnes : P = somme des q * x (entier exact, sous 2^24), SX = somme des x (entier exact).
- * S morceaux : le morceau c prend les groupes c, c + S, c + 2 S, ... dans l'ordre, avec
+/* Item E4 (integers first, same bits as TensorFold's GPU kernel simd_qmm "_int"). x: 16-bit integers, |x| <= 16383.
+ * Per group g of 64 columns: P = sum of the q * x (exact integer, under 2^24), SX = sum of the x (exact integer).
+ * S chunks: chunk c takes the groups c, c + S, c + 2 S, ... in order, with
  *     acc_c = fma(b_g, SX_g, fma(s_g, P_g, acc_c))
- * puis arbre : pour w = 1, 2, 4, ... : v[k] = v[k + w] + v[k] pour k = 0, 2 w, 4 w, ...  Sortie : v[0], en 32 bits, sans echelle.
- * S est celui de simd_qmm.splits : 32 si N <= 64, 16 si N <= 6144, sinon 8. */
+ * then tree: for w = 1, 2, 4, ...: v[k] = v[k + w] + v[k] for k = 0, 2 w, 4 w, ...  Output: v[0], in 32 bits, without scale.
+ * S is that of simd_qmm.splits: 32 if N <= 64, 16 if N <= 6144, else 8. */
 int pli_qmm_e15(const uint32_t *w, const void *s, const void *b, int sb, long N, long K, const int16_t *x, long L, float *y,
-                long n0, long n1, int S, int fils) {
+                long n0, long n1, int S, int threads) {
     if (K % 64 || n0 < 0 || n1 > N || n0 > n1 || L < 1 || S < 1 || S > 32 || (S & (S - 1))) return -1;
     const long G = K / 64, M = n1 - n0;
     float *sx = malloc((size_t)L * G * sizeof(float));
@@ -292,20 +292,20 @@ int pli_qmm_e15(const uint32_t *w, const void *s, const void *b, int sb, long N,
             for (int j = 0; j < 64; j++) a += x[l * K + 64 * g + j];
             sx[l * G + g] = (float)a;
         }
-    parts(n0, n1, fils, ^(long a, long bb) {
+    parts(n0, n1, threads, ^(long a, long bb) {
         float *sc = malloc((size_t)G * 2 * sizeof(float)), *bi = sc + G;
         int16_t *qd = malloc((size_t)K * sizeof(int16_t));
         for (long n = a; n < bb; n++) {
             const uint8_t *pw = (const uint8_t *)(w + n * (K / 8));
             for (long g = 0; g < G; g++) {
                 uint8x16_t q[4];
-                deballer(pw + 32 * g, q);
+                unpack(pw + 32 * g, q);
                 for (int e = 0; e < 4; e++) {
                     vst1q_s16(qd + 64 * g + 16 * e, vreinterpretq_s16_u16(vmovl_u8(vget_low_u8(q[e]))));
                     vst1q_s16(qd + 64 * g + 16 * e + 8, vreinterpretq_s16_u16(vmovl_high_u8(q[e])));
                 }
-                sc[g] = lire_sb(s, n * G + g, sb);
-                bi[g] = lire_sb(b, n * G + g, sb);
+                sc[g] = read_sb(s, n * G + g, sb);
+                bi[g] = read_sb(b, n * G + g, sb);
             }
             for (long l = 0; l < L; l++) {
                 const int16_t *px = x + l * K;

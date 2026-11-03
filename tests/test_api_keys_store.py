@@ -108,9 +108,9 @@ def test_invalid_rotation_fails_closed_and_recovers(tmp_path, damage, capsys):
 
 def test_configuration_clears_plaintext_sources_and_warns_once(monkeypatch, capsys):
     args = SimpleNamespace(api_key=["fixture-command"], host="0.0.0.0")
-    monkeypatch.setenv("TENSORFOLD_API_KEY", "fixture-environment")
+    monkeypatch.setenv("PLI_API_KEY", "fixture-environment")
     store = configure(args)
-    assert args.api_key == [] and "TENSORFOLD_API_KEY" not in os.environ
+    assert args.api_key == [] and "PLI_API_KEY" not in os.environ
     assert store.match(bearer("fixture-environment")) == "env-1"
     assert not capsys.readouterr().out
     configure(SimpleNamespace(host="0.0.0.0"))

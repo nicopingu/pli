@@ -12,6 +12,17 @@ from tensorfold.families.qwen3_5.family import Qwen35Family
 DRAFTS = 4               # most MTP drafts a round; the depth rule picks fewer, or none, from measured costs
 
 
+
+def _kept_hidden(last_hidden, start, count, rows):
+    """PLI (28/10/2026): the kept rows of a round, consecutive or a tree path (taken by index)."""
+
+    import mlx.core as mx
+
+    if rows is None or list(rows) == list(range(int(rows[0]), int(rows[0]) + len(rows))):
+        return last_hidden[:, start:start + count]
+    return mx.take(last_hidden, mx.array([int(r) for r in rows], dtype=mx.int32), axis=1)
+
+
 class Qwen36Family(Qwen35Family):
     """The dense family's verify rounds; drafts come from the MTP layer reading each kept row's final normed state."""
 
@@ -43,7 +54,7 @@ class Qwen36Family(Qwen35Family):
         except ValueError as exc:                 # another model's layer: its shapes or names differ
             raise SystemExit(f"[tensorfold] {mtp_path} is not this checkpoint's MTP layer: {exc}") from None
         self.drafts = int(drafts)
-        if os.environ.get("TF_QWEN36_DRAFT_VOCAB", "1") != "0":      # 0 scores the full vocabulary
+        if os.environ.get("PLI_QWEN36_DRAFT_VOCAB", "1") != "0":      # 0 scores the full vocabulary
             import mlx.core as mx
 
             from tensorfold.families.qwen4_exp.draft_head import cut_head, draft_ids
@@ -62,7 +73,15 @@ class Qwen36Family(Qwen35Family):
     def _layers(cache: list[Any]) -> list[Any]:
         from tensorfold.families.qwen3_5_moe.mtp import MTPCache
 
-        return cache[:-1] if cache and isinstance(cache[-1], MTPCache) else cache
+        while cache and (isinstance(cache[-1], MTPCache) or type(cache[-1]).__name__ == "DraftSlot"):
+            cache = cache[:-1]
+        return cache
+
+    @staticmethod
+    def _mc(cache: list[Any]) -> Any:
+        """PLI (24/10/2026): the MTP head's cache, last or second to last (before DFlash2's DraftSlot)."""
+
+        return cache[-1] if type(cache[-1]).__name__ == "MTPCache" else cache[-2]
 
     def make_cache(self) -> list[Any]:
         caches = list(self.inner.make_cache())
@@ -94,10 +113,10 @@ class Qwen36Family(Qwen35Family):
         self._last_hidden = super().prefill(inputs, cache)
         return self._last_hidden
 
-    croise_ok = True     # PLI : découpe croisée mesurée sur le 35B (banc pli-croise, 10/10/2026) ; le 27B attend son banc
+    interleave_ok = True     # PLI: interleaved split measured on the 35B (10/10/2026); the 27B is not measured yet
 
-    def prefill_steps(self, inputs: Any, cache: list[Any], pas: int) -> Any:
-        hidden = yield from super().prefill_steps(inputs, cache, pas)
+    def prefill_steps(self, inputs: Any, cache: list[Any], step: int) -> Any:
+        hidden = yield from super().prefill_steps(inputs, cache, step)
         self._last_hidden = hidden
         return hidden
 
@@ -157,7 +176,7 @@ class Qwen36Family(Qwen35Family):
     def absorb_draft_context(self, hidden: Any, next_tokens: Any, cache: list[Any], start: int = 0) -> None:
         """Prompt rows into the head's attention context, drafting nothing from them."""
 
-        self._absorb(cache[-1], hidden, next_tokens, self._last[id(cache)][2] + int(start), "none")
+        self._absorb(self._mc(cache), hidden, next_tokens, self._last[id(cache)][2] + int(start), "none")
 
     def absorb_kept(self, cache: list[Any], tokens: Any, position: int, start: int = 0,
                     rows: Sequence[int] | None = None) -> None:
@@ -169,8 +188,8 @@ class Qwen36Family(Qwen35Family):
             start = int(rows[0])
         tokens = tokens.reshape(-1)
         count = int(tokens.shape[0])
-        self._absorb(cache[-1], self._last_hidden[:, start:start + count], tokens, int(position), "none")
-        mx.async_eval(*_buffers(cache[-1]))
+        self._absorb(self._mc(cache), _kept_hidden(self._last_hidden, start, count, rows), tokens, int(position), "none")
+        mx.async_eval(*_buffers(self._mc(cache)))
 
     def speculate(self, cache: list[Any], tokens: Any, position: int, sampling: Any, start: int = 0,
                   last_only: bool = False, rows: Sequence[int] | None = None) -> Any:
@@ -178,12 +197,10 @@ class Qwen36Family(Qwen35Family):
 
         if rows is not None:
             start = int(rows[0])
-            if list(rows) != list(range(start, start + len(rows))):
-                raise NotImplementedError("Qwen3.6's head reads consecutive rows")
-        mcache = cache[-1]
+        mcache = self._mc(cache)
         tokens = tokens.reshape(-1)
         count = int(tokens.shape[0])
-        out = self._absorb(mcache, self._last_hidden[:, start:start + count], tokens, int(position),
+        out = self._absorb(mcache, _kept_hidden(self._last_hidden, start, count, rows), tokens, int(position),
                            "last" if last_only else "all")
         mcache.speculation = (out, count, last_only)
         drafted = [position + 1 + count] if last_only else [position + 2 + i for i in range(count)]
@@ -194,7 +211,7 @@ class Qwen36Family(Qwen35Family):
 
         import mlx.core as mx
 
-        mcache = cache[-1]
+        mcache = self._mc(cache)
         out, rows, last_only = mcache.speculation
         mcache.speculation = None
         if rows > keep:
@@ -213,7 +230,7 @@ class Qwen36Family(Qwen35Family):
         return mx.concatenate(drafts) if len(drafts) > 1 else drafts[0]
 
     def unspeculate(self, cache: list[Any]) -> None:
-        mcache = cache[-1]
+        mcache = self._mc(cache)
         if mcache.speculation is not None:
             mcache.trim(mcache.speculation[1])
             mcache.speculation = None
@@ -227,12 +244,9 @@ class Qwen36Family(Qwen35Family):
 
         from tensorfold.families.qwen3_5_moe.mtp import absorb_attention
 
-        mcaches = [c[-1] for c in caches]
+        mcaches = [self._mc(c) for c in caches]
         lengths = [len(f) for f in follows]
-        for r in rows:
-            if list(r) != list(range(int(r[0]), int(r[0]) + len(r))):
-                raise NotImplementedError("Qwen3.6's head reads consecutive rows")
-        hidden = mx.concatenate([self._last_hidden[:, int(r[0]):int(r[0]) + n] for r, n in zip(rows, lengths)], axis=1)
+        hidden = mx.concatenate([_kept_hidden(self._last_hidden, int(r[0]), n, r) for r, n in zip(rows, lengths)], axis=1)
         x = self.mtp.inputs(hidden, self._embed(mx.array([int(t) for f in follows for t in f], dtype=mx.uint32)))
         firsts = [int(p) - 1 - n for p, n in zip(positions, lengths)]       # each stream's first kept row's position
         at = mx.array([p + i for p, n in zip(firsts, lengths) for i in range(n)], dtype=mx.int32)

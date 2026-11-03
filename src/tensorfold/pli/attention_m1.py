@@ -1,20 +1,20 @@
-"""PLI, rang 2 : attention causale à lecture unique pour les puces sans « tensor units » (M1 à M4).
+"""PLI, rank 2: single-read causal attention for chips without "tensor units" (M1 to M4).
 
-Reprend l'algorithme de ``kernels/qwen/dense/v1/lane_attention.py`` (écrit pour M5) avec les matrices 8 x 8 par simdgroup
-du M1. Toutes les lignes d'une fenêtre passent ensemble : les requêtes d'une tête clé/valeur (G têtes x T lignes) sont
-rangées par tuiles de 8, et chaque tuile parcourt les clés une seule fois.
-Une tuile occupe SPLIT simdgroups qui se partagent les dimensions : peu de registres par fil (limite des M1).
+Takes the algorithm of ``kernels/qwen/dense/v1/lane_attention.py`` (written for M5) with the M1's 8 x 8 matrices per
+simdgroup. All rows of a window go together: the queries of a key/value head (G heads x T rows) are
+laid out in tiles of 8, and each tile walks the keys only once.
+A tile takes SPLIT simdgroups that share the dimensions: few registers per thread (the M1's limit).
 
-Arithmétique fixée par la position absolue des clés (c'est ce qui rend une ligne identique seule ou dans une fenêtre) :
-- morceaux de clés à bornes fixes (table MORCEAUX : petits au début, plus grands ensuite), découpés en tuiles de TK clés,
-  elles-mêmes en blocs de 8 clés ;
-- score d'une requête pour une clé : un élément d'un produit de matrices 8 x 8 enchaîné sur les D / 8 blocs de dimensions ;
-- softmax en ligne par tuile de TK clés (maximum, poids, somme dans un ordre fixe), les clés masquées pèsent zéro ;
-- sortie : P x V par blocs 8 x 8, accumulée en fp32 ; les morceaux sont fusionnés dans l'ordre par un second noyau.
-Une ligne ne dépend ni des autres lignes de sa tuile (chaque élément d'un produit 8 x 8 a sa propre chaîne), ni du
-nombre de lignes, ni de la longueur du contexte au moment du calcul.
+Arithmetic fixed by the absolute position of the keys (this is what makes a row identical alone or in a window):
+- key slices with fixed bounds (table SLICES: small at the start, larger after), cut into tiles of TK keys,
+  themselves into blocks of 8 keys;
+- score of a query for a key: one element of a chain of 8 x 8 matrix products over the D / 8 dimension blocks;
+- online softmax per tile of TK keys (maximum, weights, sum in a fixed order), the masked keys weigh zero;
+- output: P x V in 8 x 8 blocks, accumulated in fp32; the slices are merged in order by a second kernel.
+A row depends neither on the other rows of its tile (each element of an 8 x 8 product has its own chain), nor on the
+number of rows, nor on the context length at the time of the computation.
 
-Chaînes seulement (pas d'arbre de brouillons) : la ligne t d'une fenêtre de T voit les clés 0 .. L - T + t.
+Chains only (no draft tree): row t of a window of T sees keys 0 .. L - T + t.
 """
 
 from __future__ import annotations
@@ -26,20 +26,20 @@ from typing import Any
 
 import mlx.core as mx
 
-# Morceaux de clés : (taille, nombre) à la suite, la dernière taille sans fin. Bornes fixées par la position absolue
-# (arithmétique). Mesuré le 09/10 (noyau seul) : 512 partout vaut ou bat les tables à tailles croissantes essayées.
-MORCEAUX = tuple(tuple(int(x) for x in m.split("x")) for m in os.environ.get("PLI_ATTN_MORCEAUX", "512x0").split(","))
+# Key slices: (size, count) one after the other, the last size without end. Bounds fixed by the absolute position
+# (arithmetic). Measured on 09/10 (kernel alone): 512 everywhere equals or beats the tables of increasing sizes tried.
+SLICES = tuple(tuple(int(x) for x in m.split("x")) for m in os.environ.get("PLI_ATTN_SLICES", "512x0").split(","))
 MAX_KEYS = 1 << 20
-TILE = int(os.environ.get("PLI_ATTN_TK", "64"))        # clés par pas de softmax (fixe une fois choisi : arithmétique)
+TILE = int(os.environ.get("PLI_ATTN_TK", "64"))        # keys per softmax step (fixed once chosen: arithmetic)
 MAX_QUERIES = 128
-# simdgroups par tuile de 8 requêtes : ils se partagent les D / 8 pas des produits, et leurs parts de score sont sommées
-# dans l'ordre (fixe une fois choisi : arithmétique). 4 : chaque simdgroup garde 8 matrices de sortie en registres.
+# simdgroups per tile of 8 queries: they share the D / 8 steps of the products, and their score parts are summed
+# in order (fixed once chosen: arithmetic). 4: each simdgroup keeps 8 output matrices in registers.
 SPLIT = int(os.environ.get("PLI_ATTN_NS", "4"))
-# tuiles de 8 requêtes par simdgroup (elles partagent la lecture des clés et des valeurs) ; sans effet sur les bits
+# tiles of 8 queries per simdgroup (they share the reads of keys and values); no effect on the bits
 ROW_TILES = int(os.environ.get("PLI_ATTN_RT", "1"))
 
 _HEADER = r"""
-// le bf16 d'indice e (0..7) parmi 8 bf16 rangés dans un uint4, en fp32
+// the bf16 of index e (0..7) among 8 bf16 packed in a uint4, in fp32
 inline float bf8(uint4 v, int e) {
   const uint w = v[e / 2];
   return as_type<float>((e % 2) ? (w & 0xFFFF0000u) : (w << 16));
@@ -47,35 +47,35 @@ inline float bf8(uint4 v, int e) {
 """
 
 _PARTIAL = r"""
-  // Un groupe de fils par (tête clé/valeur, morceau de clés, RT tuiles de 8 requêtes). Ses NS simdgroups se partagent
-  // les D / 8 pas des produits (JS pas chacun) ; chaque simdgroup traite les RT tuiles sur les mêmes clés et valeurs,
-  // lues et converties une seule fois. RT ne change pas les bits ; NS et TK font partie de l'arithmétique.
+  // One threadgroup per (key/value head, key slice, RT tiles of 8 queries). Its NS simdgroups share
+  // the D / 8 steps of the products (JS steps each); each simdgroup handles the RT tiles over the same keys and values,
+  // read and converted only once. RT does not change the bits; NS and TK are part of the arithmetic.
   const ushort lane = thread_index_in_simdgroup;
   const int sg = int(simdgroup_index_in_threadgroup);
-  const int tile0 = int(threadgroup_position_in_grid.z) * RT;            // première tuile de 8 requêtes
-  const uint hk = threadgroup_position_in_grid.x;                        // tête clé/valeur
-  const int c = int(threadgroup_position_in_grid.y);                     // morceau de clés (bornes dans CS)
-  const int L = dims[0], NCH = dims[1], NQ = dims[2], T8 = dims[3];      // T8 : tuiles, multiple de RT
+  const int tile0 = int(threadgroup_position_in_grid.z) * RT;            // first tile of 8 queries
+  const uint hk = threadgroup_position_in_grid.x;                        // key/value head
+  const int c = int(threadgroup_position_in_grid.y);                     // key slice (bounds in CS)
+  const int L = dims[0], NCH = dims[1], NQ = dims[2], T8 = dims[3];      // T8: tiles, multiple of RT
   const int RP = 8 * T8, RQ = G * NQ;
-  constexpr int DJ = D / 8, JS = DJ / NS, JU = JS / 8;   // pas d'un produit ; pas par simdgroup ; uint4 (8 bf16) par plage
-  // ce fil tient les éléments [fm][fn] et [fm][fn + 1] de chaque matrice 8 x 8 du simdgroup.
-  // Dimension d'un élément : DJ * (indice intérieur) + (pas j) ; chaque fil lit donc des plages contiguës.
+  constexpr int DJ = D / 8, JS = DJ / NS, JU = JS / 8;   // steps of a product; steps per simdgroup; uint4 (8 bf16) per range
+  // this thread holds the elements [fm][fn] and [fm][fn + 1] of each 8 x 8 matrix of the simdgroup.
+  // Dimension of an element: DJ * (inner index) + (step j); each thread thus reads contiguous ranges.
   const int qid = int(lane) >> 2;
   const int fm = (qid & 4) | ((int(lane) >> 1) & 3);
   const int fn = ((qid & 2) << 1) | ((int(lane) & 1) << 1);
-  const int j0 = sg * JS;                                                // premier pas de ce simdgroup
+  const int j0 = sg * JS;                                                // first step of this simdgroup
   const device bfloat* Kh = K + int64_t(hk) * int64_t(K_strides[1]) + j0;
   const device bfloat* Vh = V + int64_t(hk) * int64_t(V_strides[1]) + j0;
   const int64_t ks = int64_t(K_strides[2]), vs = int64_t(V_strides[2]);
   threadgroup float SP[RT * NS * 8 * TK];
-  int nq[RT];                                                            // clés que voit la requête de ce fil, par tuile
+  int nq[RT];                                                            // keys seen by this thread's query, per tile
   float qf[RT][JS][2];
   simdgroup_matrix<float, 8, 8> O[RT][JS];
   float m[RT], l[RT];
   for (int t = 0; t < RT; t++) {
-    const int r = (tile0 + t) * 8 + fm;                                  // requête t * G + g
+    const int r = (tile0 + t) * 8 + fm;                                  // query t * G + g
     nq[t] = (r < RQ) ? L - NQ + r / G + 1 : 0;
-    const device bfloat* qr = Qp + (int64_t(hk) * RQ + min(r, RQ - 1)) * D + j0;   // tuile incomplète : requête relue, masquée
+    const device bfloat* qr = Qp + (int64_t(hk) * RQ + min(r, RQ - 1)) * D + j0;   // incomplete tile: query read again, masked
     for (int u = 0; u < JU; u++) {
       const uint4 ya = ((const device uint4*)(qr + DJ * fn))[u], yb = ((const device uint4*)(qr + DJ * (fn + 1)))[u];
       for (int e = 0; e < 8; e++) { qf[t][8 * u + e][0] = bf8(ya, e); qf[t][8 * u + e][1] = bf8(yb, e); }
@@ -115,7 +115,7 @@ _PARTIAL = r"""
     float p[RT][TK / 4];
     for (int t = 0; t < RT; t++) {
       float s[TK / 4];
-      for (int i = 0; i < TK / 4; i++) {                   // clé kt + 8 (i / 2) + fn + (i % 2) : les NS parts dans l'ordre
+      for (int i = 0; i < TK / 4; i++) {                   // key kt + 8 (i / 2) + fn + (i % 2): the NS parts in order
         const int key = 8 * (i / 2) + fn + (i % 2);
         float v = SP[(t * NS * 8 + fm) * TK + key];
         for (int w = 1; w < NS; w++) v += SP[((t * NS + w) * 8 + fm) * TK + key];
@@ -169,7 +169,7 @@ _PARTIAL = r"""
 _MERGE = r"""
   const uint lane = thread_index_in_simdgroup;
   const uint hk = threadgroup_position_in_grid.x;
-  const uint r = threadgroup_position_in_grid.y;              // requête t * G + g
+  const uint r = threadgroup_position_in_grid.y;              // query t * G + g
   const int NCH = dims[1], NQ = dims[2], T8 = dims[3];
   const int RP = 8 * T8;
   constexpr int DP = D / 32;
@@ -194,32 +194,32 @@ _kernels: dict[str, Any] = {}
 _table: list[Any] = []
 
 
-def _morceaux() -> tuple[list[int], Any]:
-    """Bornes des morceaux (liste croissante) et le même tableau pour le noyau."""
+def _slices() -> tuple[list[int], Any]:
+    """Bounds of the slices (increasing list) and the same array for the kernel."""
 
     if not _table:
-        bornes = [0]
-        for i, (taille, nombre) in enumerate(MORCEAUX):
-            if taille % TILE or taille < TILE:
-                raise ValueError(f"pli attention : morceau de {taille} clés, pas multiple de {TILE}")
-            while bornes[-1] < MAX_KEYS and (nombre <= 0 or i == len(MORCEAUX) - 1 or nombre > 0):
-                bornes.append(bornes[-1] + taille)
-                nombre -= 1
-                if nombre == 0 and i < len(MORCEAUX) - 1:
+        bounds = [0]
+        for i, (size, count) in enumerate(SLICES):
+            if size % TILE or size < TILE:
+                raise ValueError(f"pli attention: slice of {size} keys, not a multiple of {TILE}")
+            while bounds[-1] < MAX_KEYS and (count <= 0 or i == len(SLICES) - 1 or count > 0):
+                bounds.append(bounds[-1] + size)
+                count -= 1
+                if count == 0 and i < len(SLICES) - 1:
                     break
-        _table.extend([bornes, mx.array(bornes, dtype=mx.int32)])
+        _table.extend([bounds, mx.array(bounds, dtype=mx.int32)])
     return _table[0], _table[1]
 _sg_cap: dict[int, int] = {}
 
 
 def sources() -> dict[str, str]:
-    """Le texte des noyaux et leurs constantes d'arithmétique (pour la version des instantanés)."""
+    """The text of the kernels and their arithmetic constants (for the snapshot version)."""
 
-    return {"header": _HEADER, "partial": _PARTIAL, "merge": _MERGE, "chunk": f"{MORCEAUX}/{TILE}/{SPLIT}"}
+    return {"header": _HEADER, "partial": _PARTIAL, "merge": _MERGE, "chunk": f"{SLICES}/{TILE}/{SPLIT}"}
 
 
 def _kernel(name: str, consts: tuple) -> Any:
-    """Un noyau par jeu de constantes, écrites dans le texte (les arguments « template » de MLX coûtent une regex par appel)."""
+    """One kernel per set of constants, written into the text (MLX's "template" arguments cost a regex per call)."""
 
     key = (name, consts)
     if key not in _kernels:
@@ -237,14 +237,14 @@ def _kernel(name: str, consts: tuple) -> Any:
 
 
 def sdpa(queries: mx.array, keys: mx.array, values: mx.array, scale: float, split: int = 0, row_tiles: int = 0) -> mx.array:
-    """Attention causale : requêtes [1, H, T, D], clés et valeurs [1, Hkv, L, D] (vues d'un tampon de cache admises)."""
+    """Causal attention: queries [1, H, T, D], keys and values [1, Hkv, L, D] (views of a cache buffer allowed)."""
 
     _, H, T, D = (int(s) for s in queries.shape)
     HKV, L = int(keys.shape[1]), int(keys.shape[2])
     if D % 64 or H % HKV or T > MAX_QUERIES or T > L or TILE % 8 or L > MAX_KEYS:
-        raise ValueError(f"pli attention : forme non prise q={queries.shape} k={keys.shape}")
+        raise ValueError(f"pli attention: shape not handled q={queries.shape} k={keys.shape}")
     if queries.dtype != mx.bfloat16 or keys.dtype != mx.bfloat16 or values.dtype != mx.bfloat16:
-        raise ValueError("pli attention : bf16 seulement")
+        raise ValueError("pli attention: bf16 only")
     G = H // HKV
     R = G * T
     RT = max(1, min(int(row_tiles) or ROW_TILES, (R + 7) // 8))
@@ -252,11 +252,11 @@ def sdpa(queries: mx.array, keys: mx.array, values: mx.array, scale: float, spli
     RP = 8 * T8
     NS = int(split) or SPLIT
     if (D // 8) % (8 * NS):
-        raise ValueError(f"pli attention : {NS} simdgroups ne divisent pas les {D // 8} pas en plages de 8")
-    # requêtes rangées [tête clé/valeur, ligne, tête du groupe] ; à une ligne c'est l'ordre d'origine, rien à copier
+        raise ValueError(f"pli attention: {NS} simdgroups do not divide the {D // 8} steps into ranges of 8")
+    # queries laid out [key/value head, row, head of the group]; at one row it is the original order, nothing to copy
     qp = mx.contiguous(queries if T == 1 else queries.reshape(HKV, G, T, D).transpose(0, 2, 1, 3))
-    bornes, cs = _morceaux()
-    nch = bisect.bisect_left(bornes, L)
+    bounds, cs = _slices()
+    nch = bisect.bisect_left(bounds, L)
     dims = mx.array([L, nch, T, T8], dtype=mx.int32)
     po, pm, pl = _kernel("partial", (("G", G), ("D", D), ("NS", NS), ("RT", RT), ("TK", TILE)))(
         inputs=[qp, keys, values, mx.array([float(scale)], dtype=mx.float32), dims, cs],
@@ -269,4 +269,4 @@ def sdpa(queries: mx.array, keys: mx.array, values: mx.array, scale: float, spli
         output_shapes=[(1, H, T, D)], output_dtypes=[mx.bfloat16])[0]
 
 
-__all__ = ["MAX_QUERIES", "MORCEAUX", "TILE", "sdpa", "sources"]
+__all__ = ["MAX_QUERIES", "SLICES", "TILE", "sdpa", "sources"]

@@ -47,12 +47,12 @@ class Authenticated:
         return False
 
     def _host_admitted(self):
-        # PLI (lot de patch 20261016-220013-4533) : garde Host/Origin, éteinte sans PLI_GARDE_HOTE=1 (host_guard.py)
+        # PLI: Host/Origin guard, off without PLI_HOST_GUARD=1 (host_guard.py)
         guard = getattr(self, "host_guard", None)
         reason = guard.refuse(self.headers) if guard is not None else None
         if reason is None:
             return True
-        print(f"[tensorfold] PLI garde : refusé {self.command} {self.path.split('?', 1)[0]} ({reason})", flush=True)
+        print(f"[tensorfold] PLI guard: refused {self.command} {self.path.split('?', 1)[0]} ({reason})", flush=True)
         self.close_connection = True
         payload = {"error": {"message": "Forbidden: request origin not allowed", "type": "invalid_request_error",
                              "param": None, "code": "forbidden_origin"}}

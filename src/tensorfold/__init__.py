@@ -1,9 +1,14 @@
 """PLI (fork of TensorFold): fast, exact LLM decoding on Apple Silicon behind an OpenAI-compatible endpoint."""
 
-__version__ = "3.6.0"
+# First, before any module reads its settings: environment variables set under their old names reach the new names.
+from tensorfold.pli import env_names as _env_names
 
-# PLI est un fork de TensorFold : le module Python garde le nom tensorfold (reprise de l amont plus simple),
-# le paquet installe s appelle pli.
+_env_names.apply()
+
+__version__ = "4.0.0"
+
+# PLI is a fork of TensorFold: the Python module keeps the name tensorfold (simpler to take upstream changes),
+# the installed package is called pli.
 DISTRIBUTION = "pli"
 NOM = "PLI"
 AMONT = "TensorFold 0.6.6"

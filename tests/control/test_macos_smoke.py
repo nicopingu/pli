@@ -16,8 +16,8 @@ SMOKE_NAME = "control-smoke"
 
 
 @pytest.mark.macos
-@pytest.mark.skipif(sys.platform != "darwin" or os.environ.get("TENSORFOLD_TEST_LAUNCHD") != "1",
-                    reason="requires explicit TENSORFOLD_TEST_LAUNCHD=1 in a logged-in macOS session")
+@pytest.mark.skipif(sys.platform != "darwin" or os.environ.get("PLI_TEST_LAUNCHD") != "1",
+                    reason="requires explicit PLI_TEST_LAUNCHD=1 in a logged-in macOS session")
 def test_real_launchd_lifecycle_without_model_load():
     # Files stay in a temp home. The label is the one reserved name.
     with tempfile.TemporaryDirectory(prefix=".tensorfold-control-smoke-", dir=Path.home()) as directory:

@@ -87,18 +87,18 @@ def test_service_definition_carries_limit_port_and_parallel(manager, monkeypatch
     service, _transport = manager
     args = parser().parse_args([
         "service", "install", "Org/Nemotron", "--name", "nemotron",
-        "--port", "8081", "--parallel", "1", "--env", "TENSORFOLD_MEMORY_LIMIT_GB=48",
+        "--port", "8081", "--parallel", "1", "--env", "PLI_MEMORY_LIMIT_GB=48",
     ])
     service.install(_profile(args))
     stored = service.store.get("nemotron")
     assert stored.port == 8081
-    assert stored.environment == {"TENSORFOLD_MEMORY_LIMIT_GB": "48"}
+    assert stored.environment == {"PLI_MEMORY_LIMIT_GB": "48"}
     command = stored.command()
     assert command[command.index("--port") + 1] == "8081"
     assert command[command.index("--parallel") + 1] == "1"
-    assert read_environment(stored)["TENSORFOLD_MEMORY_LIMIT_GB"] == "48"
+    assert read_environment(stored)["PLI_MEMORY_LIMIT_GB"] == "48"
     text = service.paths.profile("nemotron").read_text()
-    assert '"TENSORFOLD_MEMORY_LIMIT_GB": "48"' in text
+    assert '"PLI_MEMORY_LIMIT_GB": "48"' in text
     captured = {}
 
     def fake_supervise(argv, environment, log, stop, *, grace=15):
@@ -113,4 +113,4 @@ def test_service_definition_carries_limit_port_and_parallel(manager, monkeypatch
     assert argv[argv.index("--port") + 1] == "8081"
     assert argv[argv.index("--parallel") + 1] == "1"
     assert "serve" in argv
-    assert captured["environment"]["TENSORFOLD_MEMORY_LIMIT_GB"] == "48"
+    assert captured["environment"]["PLI_MEMORY_LIMIT_GB"] == "48"

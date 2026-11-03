@@ -1,4 +1,4 @@
-"""TF_FLASH_DENSE=matrix: a window matches its one-row steps, and stays near MLX's matmul."""
+"""PLI_FLASH_DENSE=matrix: a window matches its one-row steps, and stays near MLX's matmul."""
 
 import pytest
 
@@ -41,21 +41,21 @@ class _Shape:
 
 
 def test_default_matrix_is_only_the_stacked_gdn_shape(monkeypatch):
-    monkeypatch.delenv("TF_FLASH_DENSE", raising=False)
+    monkeypatch.delenv("PLI_FLASH_DENSE", raising=False)
     monkeypatch.setattr(decode, "DENSE", "rows")
     assert decode._default_matrix(_Shape(16480, 2560, 4, 64))
     assert not decode._default_matrix(_Shape(10240, 2560, 4, 64))
     assert not decode._default_matrix(_Shape(16480, 2560, 4, 128))
     assert not decode._default_matrix(_Shape(16480, 2560, 8, 64))
-    monkeypatch.setenv("TF_FLASH_DENSE", "rows")
+    monkeypatch.setenv("PLI_FLASH_DENSE", "rows")
     assert not decode._default_matrix(_Shape(16480, 2560, 4, 64))
-    monkeypatch.delenv("TF_FLASH_DENSE", raising=False)
+    monkeypatch.delenv("PLI_FLASH_DENSE", raising=False)
     monkeypatch.setattr(decode, "DENSE", "lane")
     assert not decode._default_matrix(_Shape(16480, 2560, 4, 64))
 
 
 def test_project_routes_the_stacked_shape_to_matrix(monkeypatch):
-    monkeypatch.delenv("TF_FLASH_DENSE", raising=False)
+    monkeypatch.delenv("PLI_FLASH_DENSE", raising=False)
     monkeypatch.setattr(decode, "DENSE", "rows")
     linear = _linear(16480, 2560, 4, 64, seed=16480)
     seen = {}

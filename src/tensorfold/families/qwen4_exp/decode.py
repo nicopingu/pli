@@ -81,7 +81,7 @@ def first(a: mx.array) -> mx.array:
 
 _checked: set[tuple[int, int, int]] = set()
 # "lane": lane_qmm. "rows": per-row kernels. "simd": 4-bit groups of 32. "matrix": every width before M5.
-DENSE = os.environ.get("TF_FLASH_DENSE") or ("lane" if tensor_units() else "rows")
+DENSE = os.environ.get("PLI_FLASH_DENSE") or ("lane" if tensor_units() else "rows")
 _lane: dict[int, tuple[mx.array, mx.array, mx.array, int]] = {}   # id(linear) -> weight, tiled copy, scales, tile
 
 
@@ -162,7 +162,7 @@ def unreadable(*models: Any) -> dict[str, int]:
 def _default_matrix(linear: Any) -> bool:
     """Unset switch: the fused GDN stack, 4-bit group 64 at 16480 x 2560, uses the matrix kernel."""
 
-    if os.environ.get("TF_FLASH_DENSE") or DENSE != "rows":
+    if os.environ.get("PLI_FLASH_DENSE") or DENSE != "rows":
         return False
     if (int(linear.bits), int(linear.group_size)) != (4, 64):
         return False

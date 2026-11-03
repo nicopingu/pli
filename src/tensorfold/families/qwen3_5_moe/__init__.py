@@ -31,7 +31,7 @@ def check(model_dir: str | Path) -> None:
 
 
 def mtp_file(model_dir: Path) -> Path | None:
-    """The MTP layer: TF_QWEN36_MTP (a path, or 0 for none), the checkpoint's side file, else the tested repo's."""
+    """The MTP layer: PLI_QWEN36_MTP (a path, or 0 for none), the checkpoint's side file, else the tested repo's."""
 
     import os
 
@@ -39,7 +39,7 @@ def mtp_file(model_dir: Path) -> Path | None:
 
     from .mtp import MTP_FILE, find
 
-    choice = os.environ.get("TF_QWEN36_MTP", "")
+    choice = os.environ.get("PLI_QWEN36_MTP", "")
     found = find(Path(model_dir), choice)
     if found is not None or choice == "0":
         return found
@@ -78,7 +78,7 @@ def engine_settings(model: Any) -> dict[str, Any]:
 
 
 def kernel_version(model: Any) -> str:
-    """Names the row decoder that computed a prefix snapshot; TF_MOE_ROWS's two paths give other bits."""
+    """Names the row decoder that computed a prefix snapshot; PLI_MOE_ROWS's two paths give other bits."""
 
     import hashlib
 

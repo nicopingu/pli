@@ -38,7 +38,7 @@ def test_serve_limits_memory_before_loading_without_changing_residency(monkeypat
     mlx.core = core
     monkeypatch.setitem(sys.modules, "mlx", mlx)
     monkeypatch.setitem(sys.modules, "mlx.core", core)
-    monkeypatch.setenv("TENSORFOLD_MEMORY_LIMIT_GB", "12")
+    monkeypatch.setenv("PLI_MEMORY_LIMIT_GB", "12")
     monkeypatch.setattr("faulthandler.register", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_config_dir", lambda model: tmp_path)
     monkeypatch.setattr(cli, "_model_context", lambda path: 262144)
@@ -80,14 +80,14 @@ def test_mlx_buffers_are_capped_at_the_budget_less_the_rest_of_the_process():
     calls = []
     mx = SimpleNamespace(set_memory_limit=lambda n: calls.append(("memory", n)),
                          set_cache_limit=lambda n: calls.append(("cache", n)))
-    budget = configure_mlx(mx, 8 * GIB, reserve_bytes=GIB, environ={"TENSORFOLD_MEMORY_LIMIT_GB": "2.5"},
+    budget = configure_mlx(mx, 8 * GIB, reserve_bytes=GIB, environ={"PLI_MEMORY_LIMIT_GB": "2.5"},
                            physical_bytes=128 * GIB)
     assert budget == int(2.5 * GIB)
     assert calls == [("memory", budget - GIB), ("cache", budget - GIB)]
     calls.clear()
     assert configure_mlx(mx, GIB // 2, environ={}, physical_bytes=48 * GIB) == int(0.70 * 48 * GIB)
     assert calls == [("memory", int(0.70 * 48 * GIB) - PROCESS_BYTES), ("cache", GIB // 2)]
-    budget = memory_limit_bytes(mx, environ={"TENSORFOLD_MEMORY_LIMIT_GB": "1000"}, physical_bytes=48 * GIB)
+    budget = memory_limit_bytes(mx, environ={"PLI_MEMORY_LIMIT_GB": "1000"}, physical_bytes=48 * GIB)
     assert budget == 48 * GIB
 
 
@@ -99,7 +99,7 @@ def test_mlx_buffers_are_capped_at_the_budget_less_the_rest_of_the_process():
 def test_explicit_budget_can_raise_or_lower_the_default_within_hardware_limits(legacy, value, recommended, expected):
     info = SimpleNamespace(device_info=lambda: {"max_recommended_working_set_size": recommended * GIB})
     mx = SimpleNamespace(metal=info) if legacy else info
-    assert memory_limit_bytes(mx, environ={"TENSORFOLD_MEMORY_LIMIT_GB": value},
+    assert memory_limit_bytes(mx, environ={"PLI_MEMORY_LIMIT_GB": value},
                               physical_bytes=128 * GIB) == expected * GIB
 
 
@@ -108,7 +108,7 @@ def test_raised_budget_keeps_the_process_reserve_and_cache_limit():
     mx = SimpleNamespace(device_info=lambda: {"max_recommended_working_set_size": 120 * GIB},
                          set_memory_limit=lambda n: calls.append(("memory", n)),
                          set_cache_limit=lambda n: calls.append(("cache", n)))
-    assert configure_mlx(mx, 8 * GIB, environ={"TENSORFOLD_MEMORY_LIMIT_GB": "110"},
+    assert configure_mlx(mx, 8 * GIB, environ={"PLI_MEMORY_LIMIT_GB": "110"},
                          physical_bytes=128 * GIB) == 110 * GIB
     assert calls == [("memory", 107 * GIB), ("cache", 8 * GIB)]
 
@@ -123,7 +123,7 @@ def test_concurrent_admission_respects_the_resolved_budget_and_other_processes(m
     from tensorfold.engine import memory
     from tensorfold.server.admission import concurrency
 
-    environ = {} if limit is None else {"TENSORFOLD_MEMORY_LIMIT_GB": limit}
+    environ = {} if limit is None else {"PLI_MEMORY_LIMIT_GB": limit}
     budget = memory_limit_bytes(SimpleNamespace(), environ=environ, physical_bytes=128 * GIB)
     prompt_memory = SimpleNamespace(process_budget=budget, budget=budget - PROCESS_BYTES, held=lambda: 90 * GIB)
     monkeypatch.setattr(memory, "ram_bytes", lambda: 128 * GIB)
@@ -140,8 +140,8 @@ def test_concurrent_admission_respects_the_resolved_budget_and_other_processes(m
 
 @pytest.mark.parametrize("value", ["", "0", "-1", "nan", "inf", "12GB"])
 def test_invalid_env_limit_is_refused(value):
-    with pytest.raises(ValueError, match="TENSORFOLD_MEMORY_LIMIT_GB"):
-        memory_limit_bytes(SimpleNamespace(), environ={"TENSORFOLD_MEMORY_LIMIT_GB": value},
+    with pytest.raises(ValueError, match="PLI_MEMORY_LIMIT_GB"):
+        memory_limit_bytes(SimpleNamespace(), environ={"PLI_MEMORY_LIMIT_GB": value},
                            physical_bytes=48 * GIB)
 
 
@@ -352,7 +352,7 @@ def test_weights_past_the_budget_are_refused_before_loading(monkeypatch, tmp_pat
     mlx.core = core
     monkeypatch.setitem(sys.modules, "mlx", mlx)
     monkeypatch.setitem(sys.modules, "mlx.core", core)
-    monkeypatch.setenv("TENSORFOLD_MEMORY_LIMIT_GB", "1")
+    monkeypatch.setenv("PLI_MEMORY_LIMIT_GB", "1")
     monkeypatch.setattr("faulthandler.register", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_config_dir", lambda model: tmp_path)
     monkeypatch.setattr(cli, "_model_context", lambda path: 262144)
@@ -431,7 +431,7 @@ def test_serve_applies_the_family_allowance_before_loading(monkeypatch, tmp_path
     mlx.core = core
     monkeypatch.setitem(sys.modules, "mlx", mlx)
     monkeypatch.setitem(sys.modules, "mlx.core", core)
-    monkeypatch.delenv("TENSORFOLD_MEMORY_LIMIT_GB", raising=False)
+    monkeypatch.delenv("PLI_MEMORY_LIMIT_GB", raising=False)
     monkeypatch.setattr("faulthandler.register", lambda *args, **kwargs: None)
     monkeypatch.setattr(memory_budget, "physical_memory_bytes", lambda: 256 * GIB)
     for name, value in (("_config_dir", lambda model: tmp_path), ("_model_context", lambda path: 262144),

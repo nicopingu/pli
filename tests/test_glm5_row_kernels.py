@@ -391,5 +391,5 @@ def test_prompt_experts_take_the_aligned_gather_with_mlx_bits(gpu, monkeypatch):
     calls, real = [], prefill_mm.gather_sorted
     monkeypatch.setattr(prefill_mm, "gather_sorted", lambda *a, **k: calls.append(1) or real(*a, **k))
     fast = mlp.MoE.experts(block, x, idx)
-    monkeypatch.setenv("TF_FLASH_PREFILL", "0")
+    monkeypatch.setenv("PLI_FLASH_PREFILL", "0")
     assert len(calls) == 3 and _same(fast, mlp.MoE.experts(block, x, idx))

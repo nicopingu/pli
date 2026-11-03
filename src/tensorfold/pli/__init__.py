@@ -1,1 +1,1 @@
-"""PLI : ce que le moteur ajoute à TensorFold 0.6.6 (rien n'est branché sans la variable d'environnement de chaque lot)."""
+"""PLI: what the engine adds to TensorFold 0.6.6 (nothing is wired in without each item's environment variable)."""

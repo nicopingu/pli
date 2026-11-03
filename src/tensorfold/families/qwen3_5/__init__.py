@@ -19,14 +19,14 @@ KERNEL_VERSION = "v1"
 WIDEST = 32
 # the widest window a lone stream's copies may earn without tensor units (M3 Ultra: edits +22%, chat and code level)
 ROW_COPY_ROWS = 128
-# the widest copy window TF_COPY_ROWS may ask for (the lane kernels' and the chain kernels' row limit)
+# the widest copy window PLI_COPY_ROWS may ask for (the lane kernels' and the chain kernels' row limit)
 COPY_ROWS_LIMIT = 128
 
 
 def copy_rows(first: int, default: int) -> int:
-    """The widest window a lone stream's copies may earn: TF_COPY_ROWS if set (0: ``first``), else ``default``."""
+    """The widest window a lone stream's copies may earn: PLI_COPY_ROWS if set (0: ``first``), else ``default``."""
 
-    value = os.environ.get("TF_COPY_ROWS", "").strip()
+    value = os.environ.get("PLI_COPY_ROWS", "").strip()
     if not value:
         return int(default)
     return max(int(first), min(int(value), COPY_ROWS_LIMIT)) if int(value) > 0 else int(first)
@@ -81,9 +81,9 @@ def install_row_decoder(model: Any) -> bool:
     # prompt chains of up to PROMPT_ROWS attend query by query too, so a prompt gets the bits decoding gives it
     exact_attention.EXACT_MAX_QUERIES = max(exact_attention.EXACT_MAX_QUERIES, row_forward.PROMPT_ROWS)
     row_matmul.install(model, backend)
-    from tensorfold.pli import range_poids   # PLI (P2 b+c) : PLI_RANGE=1, éteint par défaut
+    from tensorfold.pli import relayout   # PLI (P2 b+c): PLI_RELAYOUT=1, off by default
 
-    range_poids.installer(model)
+    relayout.install(model)
     model._tensorfold_row_decoder = True
     return True
 
@@ -153,7 +153,30 @@ def load(model_dir: Path, *, lane_kernels: str = "auto", drafter: str = "", draf
             raise ValueError("this format uses the packed affine row kernels; use --lane-kernels auto or off")
         lanes = False
     model, tokenizer = load_lane_model(Path(model_dir))
-    family = lane_family(model, lanes=lanes, drafter=drafter, drafter_bits=drafter_bits, title=TITLE, use=MODELS[0])
+    make = None
+    mtp27 = os.environ.get("PLI_MTP_HEAD", "").strip()
+    if mtp27:
+        # PLI (item B1 of 11/10/2026, taken over on 24/10 on main): PLI_MTP_HEAD=/path/model.safetensors makes the dense 27B decode with its native
+        # MTP head (mtp.* tensors published with Qwen3.8-27B) instead of DFlash2. Family of the 35B (Qwen36Family: same decoder,
+        # chain drafts checked by the model, so same text). PLI_MTP_DRAFTS = drafts per round at most.
+        from functools import partial
+
+        from tensorfold.families.qwen3_5_moe.family import DRAFTS, Qwen36Family
+
+        path = Path(mtp27).expanduser()
+        if not path.is_file():
+            raise SystemExit(f"[pli] PLI_MTP_HEAD: the file {path} does not exist")
+        if os.environ.get("PLI_HYBRID", "0") == "1" and drafter:
+            # PLI (24/10/2026): DFlash2 and the MTP head together, the draft chosen per conversation (hybrid.py)
+            from tensorfold.families.qwen3_5_moe.hybrid import Qwen38Hybrid
+
+            make = partial(Qwen38Hybrid, mtp_path=path, drafts=int(os.environ.get("PLI_MTP_DRAFTS", DRAFTS)))
+            print(f"[pli] DFlash2 and MTP head together: {path}", flush=True)
+        else:
+            make = partial(Qwen36Family, mtp_path=path, drafts=int(os.environ.get("PLI_MTP_DRAFTS", DRAFTS)))
+            drafter = ""
+            print(f"[pli] native MTP head instead of DFlash2: {path}", flush=True)
+    family = lane_family(model, lanes=lanes, drafter=drafter, drafter_bits=drafter_bits, title=TITLE, use=MODELS[0], make=make)
     if vision:
         from tensorfold.vision.qwen_mlx import QwenVisionFrontend
         from tensorfold.vision.rotary import install_rotary
@@ -216,10 +239,15 @@ def load_drafter(model: Any, drafter: str, drafter_bits: int = 4) -> Any:
             for rows in (2, row_matmul.WINDOW_ROWS):   # the draft-vocabulary head's shapes compiled now
                 mx.eval(loaded.candidate_logits(mx.zeros((1, rows, int(loaded.model.config.hidden_size)),
                                                          dtype=mx.bfloat16))[0])
+            from tensorfold.pli import draft_stack  # PLI (PLI_DRAFT_STACK=1, off): stacks before the modules are relaid out
+            draft_stack.install(loaded.model)
+            from tensorfold.pli import relayout     # PLI (PLI_RELAYOUT_DRAFT=1, off): block projections relaid out
+            relayout.install_draft(loaded.model)
+            draft_stack.install_head(loaded)        # PLI (PLI_DRAFT_STACK): draft head relaid out, same bits
     if getattr(model, "_tensorfold_lanes", False):
         from tensorfold.kernels.qwen.dense.v1 import lane_qmm
 
-        lane_qmm.install(loaded.model, rows=lane_qmm.MAX_ROWS, tile=os.environ.get("TF_LANE_TILE", "1") != "0",
+        lane_qmm.install(loaded.model, rows=lane_qmm.MAX_ROWS, tile=os.environ.get("PLI_LANE_TILE", "1") != "0",
                          wide=True)
         lane_qmm.warm(loaded.model)
         hidden = mx.zeros((1, 16, int(loaded.model.config.hidden_size)), dtype=mx.bfloat16)
@@ -234,8 +262,8 @@ def install_lane_kernels(model: Any) -> None:
     from tensorfold.kernels.qwen.dense.v1 import exact_attention, lane_attention, lane_fuse, lane_qmm
 
     exact_attention.install()      # verify windows attend query by query, as one-row steps do
-    # TF_LANE_TILE=0 keeps MLX's weight layout without changing results.
-    lane_qmm.install(model, rows=lane_qmm.MAX_ROWS, tile=os.environ.get("TF_LANE_TILE", "1") != "0", wide=True)
+    # PLI_LANE_TILE=0 keeps MLX's weight layout without changing results.
+    lane_qmm.install(model, rows=lane_qmm.MAX_ROWS, tile=os.environ.get("PLI_LANE_TILE", "1") != "0", wide=True)
     warmed = lane_qmm.warm(model)
     lane_fuse.enabled = True
     fused = lane_fuse.build(model)          # stacks share the weights' memory: no second copy
@@ -267,7 +295,7 @@ def kernel_version(model: Any) -> str:
                  *(path.read_text() for path in sorted(folder.glob("*.py")))]
         from tensorfold.kernels.qwen.dense.v1 import exact_attention
 
-        if exact_attention.PLI_ATTENTION:          # PLI : le noyau d'attention change les bits des instantanés
+        if exact_attention.PLI_ATTENTION:          # PLI: the attention kernel changes the snapshots' bits
             from tensorfold.pli import attention_gemm, attention_m1
 
             module = attention_gemm if exact_attention.PLI_ATTENTION == "gemm" else attention_m1

@@ -1,8 +1,221 @@
-# What's new in TensorFold
+# What's new in PLI
 
-`tensorfold update` prints the sections below that are newer than the version you had. Each release's page on
-GitHub has the full notes and the measurements behind them.
+Each release's section below lists its changes and the measurements behind them. `pli update` is disabled in this
+fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
+
+## 4.0.0 (2026-11-02)
+
+Everything below went into production between 27 October and 2 November 2026, after 3.7.0, and is switched on by
+`--profile m1-ultra` unless the line says otherwise. Measured on the validated machine: Mac Studio M1 Ultra, 64 GB,
+serving Qwen3.8-27B in MLX 4-bit with the DFlash2 draft. Terms as in 3.7.0: "same text" means replies identical to the
+previous production; "text can change" means another arithmetic. Every setting is described in
+[docs/switches.md](docs/switches.md).
+
+- **Profile `m1-ultra` aligned with production.** The profile now sets the production settings listed below (draft
+  trees, copy or chain per stream, extended draft list, draft kernels, S3b). MLX's command-buffer limits
+  (`MLX_MAX_MB_PER_BUFFER=500`, `MLX_MAX_OPS_PER_BUFFER=100`) go in the server's environment, not in the profile,
+  because MLX reads them when it starts, before any profile: `install.sh` sets them. Machine settings
+  (`PLI_HYBRID`, `PLI_MTP_HEAD`, hosts, paths) stay in the environment, as before.
+- **Public bench suite** (`tools/pli_bench.py`, suite `tools/bench_data/suite-v1.json`). By default the bench sends
+  fixed public requests: single requests of about 1k to 96k tokens and an agent session from 6k to 50k tokens, cut from
+  a fixed corpus (PLI 3.7.0's own source code) checked by SHA-256, so every run sends the same requests (only a
+  first-line tag changes). `--free` keeps the
+  older mode (free sizes, filler text).
+- **English names for the new settings.** The 23 settings added in production under French names have English names
+  (for example `PLI_BROUILLON_ATTN` is `PLI_DRAFT_ATTN`, `PLI_LISTE_PLUS` is `PLI_EXTENDED_DRAFT_LIST`,
+  `PLI_DEVERSE_INVITE` is `PLI_SPILL_PROMPT`); the old names are still accepted (165 in all), and the new name wins
+  when both are set. The draft list shipped with PLI is `extended-list-2048.txt` (`liste-plus-2048.txt` is still
+  found). The log lines of the new diagnostics use English keys.
+- **Draft trees for short questions** (`PLI_KFLASH=1`, `PLI_TREES_ATTM=1`, `PLI_HYBRID_TREES=1`,
+  `PLI_TREE_DELTANET=3`, `PLI_TREES_SHORT_ONLY=1`, `PLI_TREES_TOKEN_THRESHOLD=4.5`; 28 to 30 Oct). These settings were
+  in 3.7.0, off. DFlash2 proposes trees built in KFlash's manner (method of [Kapitsa](https://github.com/nace-ai/kapitsa),
+  Apache-2.0), verified through `attm`, only for prompts of at most 3 messages (`PLI_HYBRID_MESSAGES`); agent
+  sessions keep the chain. On a short question the chain stays while it keeps 4.5 tokens per round or more on average.
+  The model verifies every draft.
+- **Copy of the context or DFlash2's chain, chosen per stream** (`PLI_HEAD_BEFORE_COPY=3`, 30 Oct). When a copy of
+  the context and DFlash2's queued chain are both ready, both are scored afterwards on the written text, and the copy
+  goes first while the moving average of copy minus chain stays above minus 1 token (`PLI_HEAD_COPY_WEIGHT`,
+  `PLI_HEAD_COPY_THRESHOLD`). The MTP head keeps one draft when a copy exists, as before (measured with the MTP head
+  weighed too: 1 to 6 ms more per round). The model verifies every draft.
+- **Extended draft lists** (`PLI_EXTENDED_DRAFT_LIST=extended-list-2048.txt`, 29 Oct). The drafts never propose a token
+  outside their reduced lists: 3.89% of the written tokens were outside DFlash2's list and 5.6% outside the MTP
+  head's. With 2,048 learned ids, 0.69% and 1.20%. The file shipped with PLI holds 2,515 ids (the 2,048 most frequent
+  for each list, together); they are added once at load, with no extra product per round. Same text: the verify stays
+  exact.
+- **Draft attention in a PLI kernel** (`PLI_DRAFT_ATTN=1`, 31 Oct and 1 Nov). 127 µs per layer in a chain against
+  302 µs for MLX's attention; the cache and the block are read where they are, without the two concatenations of
+  2,057 rows per layer (same bits as the concatenated read). Bits other than MLX's, with an error against an f32
+  reference at most MLX's; the model verifies the drafts.
+- **Draft projections stacked** (`PLI_DRAFT_STACK=1`, 1 Nov). [q | k | v] of the block and [k | v] of the context in
+  one call of the 8-row product each, `fc` relaid out, the draft head in two calls instead of three. Same bits,
+  checked at install.
+- **Draft norms and RoPE in one kernel** (`PLI_DRAFT_QKR=1`, with `PLI_DRAFT_STACK`, 1 Nov). The q and k norms, the
+  RoPE and the reordering of the draft in one kernel per layer instead of about eight MLX operations. Same computation
+  as MLX 0.32.3: same bits.
+- **Draft top-16 split** (`PLI_DRAFT_TOPK=1`, 1 Nov). The top-16 of the draft's lattice over 16 slices per row:
+  152 µs instead of 241 in a chain. Same outputs.
+- **Draft block projections relaid out** (`PLI_RELAYOUT_DRAFT=1`, 30 Oct). The draft's projections that read only the
+  8 rows of the block use the relaid-out 8-row kernel (302 GB/s against 220). Each matrix is checked at the same bits.
+- **`attm` fragments loaded with `simdgroup_load`** (`PLI_ATTM_LOAD=1`, 30 Oct). Keys and values laid out without
+  permutation. Same products in the same order: same bits.
+- **8-row tables prepared over several threadgroups** (`PLI_V8_PREP2=1`, 31 Oct). The preparation of `PLI_V8`'s
+  tables cost 4.3 ms per round; it is now spread over several threadgroups per row. Same bits.
+- **Wider MLX command buffers** (`MLX_MAX_MB_PER_BUFFER=500`, `MLX_MAX_OPS_PER_BUFFER=100`, in the environment,
+  1 Nov). Same output.
+- **Reduced prompt reading at long context, S3b** (`PLI_S3B=1`, `PLI_S3B_THRESHOLD=65536`, 2 Nov). In the production
+  trace of 1 November, prompt chunks of 256 to 511 rows at 64K tokens and more were read at 130 tokens/s, the
+  attention taking 31 to 47% of it. Chunks of at most 2,047 rows past 65,536 positions now go through the anchored
+  reduced attention of decode (`PLI_REDUCED_ANCHOR`); anchors are bounded at the start of the request's prompt
+  reading, and the full layers are read whole. Text can change.
+- **Checkpoint at the fork point** (`PLI_FORK_MIN`, 4,096 tokens, on by default; 27 and 28 Oct, from TensorFold
+  [#1291](https://github.com/ashhart/TensorFold/pull/1291)). A long document sent again in the same message with another question was read in full each time. The state
+  where the prompt forks inside its last message is now kept; without a resume, the fork is looked for in the kept
+  prompts. Same text.
+- **KV layers shared by checkpoints counted once** (with `PLI_KV_SHARING`, no switch, 29 Oct). A prompt checkpoint and
+  the reply end of the same turn hold the same KV layers, and each one counted them in full (3.78 GiB each at 59,269
+  tokens). In one night, 35 next turns of 110 beyond 30,000 tokens read almost everything again; in 15 of them, the
+  reply end had evicted the prompt checkpoint under the 8 GiB budget. Each KV layer now counts once.
+- **Evicted prompt checkpoints go to disk** (`PLI_SPILL_PROMPT`, on by default; 29 Oct). A reply end no longer
+  counts as a continuation of the prompt checkpoint (an agent that rewrites its tool calls never resumes it), so an
+  evicted prompt checkpoint is spilled to disk. In one night, 15 turns of 30,000 to 80,000 tokens read everything
+  again for want of it. Cost: a write of about 1 s for 4 GiB (median 0.75 s), 0.4 s to read it back.
+  `PLI_SPILL_PROMPT=0` keeps the former behaviour.
+- **Disk looked at again at the first chunk** (`PLI_REREAD_DISK=1`, 30 Oct). Between a request's opening and its
+  first chunk, its checkpoint can be evicted by another request's (two agent sessions taking turns); it is then read
+  back from disk instead of reading the whole prompt again.
+- **Fix: a system message in mid-conversation is accepted on the Anthropic route** (no switch, 29 Oct). When the
+  model's template does not keep a system message in place, it is given the `late_system` role ("user"), as the
+  OpenAI route already did. Before: error 400.
+- **Diagnostics and trials, off by default.** `PLI_ROUND_PROFILE=1` (time of a decode round step by step, with
+  `PLI_ROUND_PROFILE_N` and `PLI_ROUND_PROFILE_BUCKET`), `PLI_LATTICE_LOG=<folder>` (DFlash2's lattices, to replay
+  chain and trees offline), `PLI_COPY_LOG=<file>` (copy rounds), `PLI_TREE_GAIN_MIN=x` (a KFlash tree only if it
+  brings x expected tokens more than the chain). The three logs do not change the text.
+- **Overall**, on 18 recorded real requests (agent sessions up to 50K tokens): 51.4 tokens/s on 30 October, 55.9 on
+  1 November.
+
+## 3.7.0 (2026-10-28)
+
+Pre-release. Everything below went into production between 21 and 28 October 2026, after 3.6.0, and is switched on by
+`--profile m1-ultra` unless the line says otherwise. Measured on the validated machine: Mac Studio M1 Ultra, 64 GB,
+macOS 27.0.1, Python 3.12, MLX 0.32.3, mlx-lm 0.32.0, serving the production 27B in MLX 4-bit ([sabicap/sabi-noema](https://huggingface.co/sabicap/sabi-noema), a
+Qwen3.8-27B fine-tune with the same architecture) with the DFlash2 draft of Qwen3.8-27B. Contexts are in tokens; a
+round is one verify pass of the model over its draft rows; prompt reading is the prefill. "Same text" means replies
+identical to the previous production; "text can change" means another arithmetic, judged on whole conversations.
+
+- **English names everywhere.** Every setting is now a `PLI_*` variable with an English name (for example
+  `PLI_HYBRIDE` is `PLI_HYBRID`, `PLI_MTP27` is `PLI_MTP_HEAD`, `TF_FLASH_MTP` is `PLI_FLASH_MTP`,
+  `TENSORFOLD_MEMORY_LIMIT_GB` is `PLI_MEMORY_LIMIT_GB`); the 142 old names and the old values of
+  `PLI_PREFILL_CPU_MODE` are still accepted, and the new name wins when both are set. Files, modules, code, comments
+  and messages are in English (`tensorfold/pli/profils/` is `profiles/`, `commun.env` is `common.env`, still read).
+  The step trace, the event journal and the `[tensorfold] done` line use English keys; their readers in PLI accept the
+  old keys, but a tool of your own that parses them needs updating. Prefix snapshots written by 3.6.0 are not reused
+  (they are rebuilt). Same text: checked on 18 real requests against 3.6.0.
+- **Install script** (`install.sh`): checks the Mac, installs PLI in its own virtual environment, downloads the
+  models, writes the MTP head in 4 bits and runs PLI as a per-user service; `start`, `stop`, `restart`, `status`,
+  `logs` and `uninstall` (which removes everything, and asks before deleting each model).
+- **Benchmark script** (`tools/pli_bench.py`): prompt reading and writing speed by context size, and memory, against
+  any OpenAI-compatible server, to compare engines on the same Mac.
+- **MTP head in 4 bits** (`tools/quantize_mtp_head.py`): writes the 27B's MTP head in 4 bits for `PLI_MTP_HEAD`
+  (810 MiB to 228 MiB); same file as the one served in production.
+- **`pli service install --env PLI_...`** is accepted (only `TENSORFOLD_*` and `TF_*` were).
+- **Step trace for debugging** (`PLI_TRACE_DIR`, off by default, 21 Oct). One JSON line per engine step of each
+  request, switched on without a restart by `python -m tensorfold.pli.trace on --dir <dir> [--duration 24h]`, read
+  with `python -m tensorfold.pli.trace_analysis`. Same text. Nothing is written while off; cost while on not measured.
+- **Short decode attention calls in 128-key slices, and a kept page choice** (`PLI_ATTM_SHORT=12288`,
+  `PLI_REDUCED_ROUNDS=4`, 21 Oct). Below 12,288 keys, `attm` works in 128-key slices instead of 512, about 2.4 ms less
+  over 16 layers at 6,000 tokens. Beyond 20,000 tokens, the reduced attention recomputes its page choice one round in
+  4; the choice cost 10 ms per round at 22,000 tokens and 20 ms at 60,000. Time per round lower by 6% (first
+  repetition) to 17% (mean) from 20,000 to 90,000 tokens. Text can change: judged on three whole conversations, no turn
+  became wrong where the previous production was right.
+- **Neural Engine weights requantized on the CPU** (`PLI_ANE_REQUANT_CPU=1`, `PLI_ANE_REQUANT_THREADS=8`, 22 Oct). The
+  4-bit weights of the next layer's Neural Engine share are requantized by the CPU (NEON, 8 threads) while the GPU and
+  the Neural Engine compute the current layer, instead of by a GPU kernel (5.45 ms per layer). No extra memory. Same
+  bits: 100% of codes and scales equal to the GPU kernel's, 3 replies of 3 identical with the arbiter off. Prompt
+  reading faster by 1.3% (206.2 to 208.9 tok/s, 5 requests of 22,000 to 90,000 tokens) and by 2.2% with the arbiter off
+  (244.5 to 249.8 tok/s); decode unchanged.
+- **Neural Engine kept awake, and its share sized by chunk** (`PLI_ANE_KEEPAWAKE=1`,
+  `PLI_ANE_STEPS=256:14,512:16,1536:18`, 23 Oct). The Neural Engine slows down after about 2 ms idle (a 256-row call
+  takes 10.1 ms without rest and 19.9 ms after 20 ms; 2,048 rows, 40.1 and 53.0 ms). Tiny calls now keep it busy
+  between two shared layers, its units follow the chunk size, and chunks from 256 rows get a share. On 26 real agent
+  turns: prompt reading 4.1% shorter (8.2% on chunks of 256 to 511 tokens, 6.2% on 512 to 1,023), decode unchanged
+  (1.4% difference); 15 replies of 26 identical, the others of equal quality (text can change). Replayed on the
+  production trace, the median time to first token goes from 3.99 to 3.78 s.
+- **Heartbeat between requests** (`PLI_HEARTBEAT_MS=500`, 23 Oct; idea from Kapitsa [#206](https://github.com/nace-ai/kapitsa/pull/206)). Metal releases the wired
+  weights about 2 s after the last GPU work, and the next pass waits for them: 256 ms instead of 29 ms on 14 GiB of
+  weights. A tiny GPU job every 500 ms, for 600 s after the last activity, keeps them wired. After 6 s idle, the extra
+  time over a warm start is 70 ms instead of 219 ms for a new 100-token request, and 137 ms instead of 451 ms for 355
+  tokens. Same text. Cost at idle: about 0.3 W (5.26 W against 4.98 W). A Neural Engine call at the same pace
+  (`PLI_HEARTBEAT_ANE`, idea from Kapitsa #243) gained 5 ms more and stays off.
+- **Last prompt tokens read with the chunk before** (`PLI_MERGE_TAIL=16`, 23 Oct). The tokens after the last checkpoint
+  (the reply prompt, 7 tokens in general) took a full pass of the model of their own; they are now read in the same
+  pass as the chunk before, and the checkpoint is taken from that pass. On 10 recorded agent turns: prompt reading 3.1%
+  shorter (131 ms less per turn), checkpoints always resumed at the next turn, replies of equal quality (text can
+  change).
+- **One 8-row tile per threadgroup in the exact row kernel** (`PLI_TILES_PER_GROUP=1`, 23 Oct). Same bits. Decode
+  faster by 12.6% with 3 requests writing together and by 5.5% with 4; a 16-row round takes 133.5 ms instead of 150.3;
+  same text alone, at 3 and at 4 requests.
+- **Reply kept for the next agent turn** (`PLI_KEEP_REPLY=1`, 23 Oct). With thinking off, the reply prompt writes an
+  empty think block that the history then drops, so the next turn read the reply again: 78,000 tokens and 735 s over
+  29.6 hours of the production trace. The chat template now keeps the empty block, and the engine keeps the state it
+  wrote. In an 8-turn agent loop, the previous reply was resumed 6 turns of 7, and reading of turns 2 to 8 was 11.6%
+  shorter; 0 errors, tool calls well formed. Text can change.
+- **Reduced attention anchored to positions** (`PLI_REDUCED_ANCHOR=32`, 23 Oct). The reduced attention chose its pages
+  on all rows of a round, drafts included, so the text depended on the drafts. A row now reads the pages chosen at its
+  anchor (every 32 positions, on the anchor row's query only), for rounds of any width. The text no longer depends on
+  the drafts: same text between repetitions and between two servers, 0 unstable. At 44,611 and 58,223 tokens, decode
+  ran 3.2% and 1.0% faster; remeasured at equal rows per round, rounds were 0.1% and 3.7% faster. Text can change
+  against the previous production.
+- **Fix: evicted conversations are written to disk again** (24 Oct, no switch). PLI's runtime attributes on the caches
+  (kept page choice, anchors) made every spill of an evicted conversation fail: 0 of 300 succeeded. Conversation
+  snapshots now skip them. After the fix: 47 conversations written, 0 failures.
+- **Hybrid draft: DFlash2 and the 27B's MTP head together** (`PLI_HYBRID=1` and `PLI_MTP_HEAD=<file>`, machine
+  settings; `PLI_MTP_DRAFTS=7`, `PLI_MTP_WINDOW=2048`, set by the profile; 24 Oct). Each conversation drafts
+  with the one that gives it more tokens per millisecond, measured on its own rounds, and the choice follows the
+  conversation from one request to the next. The model verifies every draft: same text. The MTP head keeps only its
+  last 2,048 rows, which bounds its memory; a checkpoint at the end of the prompt is now kept with the MTP head.
+  Measured on 18 real requests (sabicap/sabi-noema) replayed one after another: 51.4 tokens/s on average against 47.4 for DFlash2
+  alone, faster by 8.4%, same text 18 of 18; with the MTP head in 4 bits (`tools/quantize_mtp_head.py`), 51.3.
+- **FALCON capture, experimental** (`PLI_FALCON=<directory>`, `PLI_FALCON_MAX_GB`, machine settings, off by default;
+  25 Oct). For the rows kept at each verify round, it writes the hidden state, the token the model chose and its 20 top
+  logits, with the last 2,048 prompt rows, as training examples for the MTP head (idea from [EAGLE-3](https://arxiv.org/abs/2503.01840)). Nothing in the
+  computation changes: same text, 18 requests of 18. Rounds slower by 0.7%, prompt reading slower by 1.5%. Two days in
+  production: 0 errors, 0 lost rows. About 10 MB per request read, bounded by `PLI_FALCON_MAX_GB`. No learned head is
+  served.
+- **FALCON prompt rows in 8 bits** (`PLI_FALCON_CONTEXT8`, on by default with `PLI_FALCON`; 27 Oct). Prompt rows, 89%
+  of the captured rows, are stored in 8 bits per row (scale = max abs / 127) instead of 16: half the space. Measured on 18 requests:
+  same text 18 of 18; examples folder 149 MB instead of 277 MB; against capture off, rounds slower by 1.2% and prompt
+  reading slower by 1.6%. Tokens accepted per anchor when the head is judged on these rows: 3.53 against 3.51 in
+  16 bits.
+- **Kapitsa's 8-row verify GEMM** (`PLI_V8=1`, 28 Oct). Verify rounds of up to 128 rows run the 4-bit GEMM ported from
+  [Kapitsa](https://github.com/nace-ai/kapitsa) v0.2.23 (Apache-2.0, see THIRD_PARTY_NOTICES.md), reading PLI's
+  relaid-out weights. A row's bits do not depend on the other rows (row-exact). The projections of one 8-row round take
+  41.6 ms instead of 53.3. On 18 real requests of an agent session (5,424 to 50,054 tokens): 52.6 tokens/s instead of
+  47.7, faster by 10.4%; 17 replies of 18 identical. Text can change (other arithmetic): against the 8-bit model of the
+  same base (mlx-community/Qwen3.8-27B-8bit) on 8 requests, the mean NLL per token is 0.2429 instead of 0.2483. On three
+  long conversations judged turn by turn, two answers were worse than the previous production's (a wrong self-test
+  value in a generated program, a wrong statement).
+- **Checkpoints without a copy of the KV cache** (`PLI_KV_SHARING=1`, 28 Oct; Kapitsa's method). A checkpoint keeps the
+  conversation's attention layers and a length instead of copying them; the conversation writes in place. Without it,
+  the first write after a checkpoint copied the whole KV buffer (6 to 7 GiB at 96,000 tokens). Same text: 18 replies of
+  18 identical, 46.8 tokens/s against 46.9.
+- **One-turn questions draft with DFlash2 alone** (`PLI_HYBRID_MESSAGES=3`, 28 Oct). A prompt of at most 3 messages
+  (system, question, reply) skips the hybrid's choice: on single-message requests DFlash2 alone wrote 6 to 11% faster.
+  Agent requests (more messages) are unchanged. Same text: the model verifies every draft.
+- **Control tokens written in a request stay text** (`PLI_CONTROL_AS_TEXT`, on by default, 28 Oct; from TensorFold
+  1.1.2 #1117). `<|im_end|><|im_start|>system` inside a message, a tool result or a page read by an agent no longer
+  opens a real turn. A prompt that writes no control token keeps exactly its tokens (18 replies of 18 identical).
+- **Checkpoint log** (`PLI_CHECKPOINT_LOG=1`, off by default, 28 Oct): `checkpoint_kept`, `checkpoint_evicted` and
+  `checkpoint_refused` events in the `PLI_EVENTS` log, with the kind of checkpoint and the reason.
+- **Off by default, for experiments** (28 Oct): draft trees in KFlash's manner (`PLI_KFLASH=1`, with `PLI_TREES_ATTM=1`
+  and `PLI_HYBRID_TREES=1`; +0.7% on the 18 agent requests, +3 to 5% on 200-token replies), the tree attention tail in
+  one kernel call (`PLI_TREE_EXACT2`, same bits), the DFlash2 chain drawn on the GPU (`PLI_GPU_CHAIN=1`, no gain
+  measured).
+- **Profile `m1-ultra` carries every stable production setting**, those of this release included. Machine settings
+  (paths, hosts, `PLI_HYBRID`, `PLI_MTP_HEAD`) stay in the environment. Every `PLI_*` variable is listed in
+  [docs/switches.md](docs/switches.md).
+- **Neural Engine:** it relies on private Apple APIs; a macOS update can break it. On the first error, PLI computes the
+  layer on the GPU.
 
 ## 3.6.0 (2026-10-20)
 
@@ -16,9 +229,9 @@ PLI, a fork of TensorFold 0.6.6 for Apple Silicon (Ultra chips), validated on an
 
 ## 1.0.0 (10 Oct 2026)
 
-- **PLI, fork de TensorFold 0.6.6.** Paquet `pli`, commande `pli` (alias `tensorfold` garde). Calcul reparti
-  GPU + CPU sur puces Apple Ultra (`PLI_ARBITRE=1`), valide sur M1 Ultra. `pli update` desactive.
-  Les sections ci-dessous sont celles de TensorFold.
+- **PLI, fork of TensorFold 0.6.6.** Package `pli`, command `pli` (alias `tensorfold` kept). Split computation
+  GPU + CPU on Apple Ultra chips (`PLI_ARBITRE=1`, now `PLI_ARBITER=1`), validated on M1 Ultra. `pli update` disabled.
+  The sections below are TensorFold's.
 
 ## 0.6.6 (6 Oct 2026)
 

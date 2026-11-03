@@ -55,19 +55,36 @@ The MLX engine of `glm5_next` (`src/tensorfold/families/glm5_next/`: the forward
 
 ## Added by PLI
 
-- **Neural Engine client** (`src/tensorfold/pli/ane/natif/`): `ane/Program.mm`, `ane/Program.hpp`,
-  `ane/ProgramInstrumentation.hpp`, `AwakeClock.hpp` and `Checked.hpp` are taken unmodified from
+- **Neural Engine client** (`src/tensorfold/pli/ane/native/`): `ane/Program.mm`, `ane/Program.hpp`,
+  `ane/ProgramInstrumentation.hpp`, `AwakeClock.hpp` and `Checked.hpp` are taken from
   [Splash](https://github.com/incoai/splash) as ported to M1/M2 GPUs by
   [paperniuk/splash](https://github.com/paperniuk/splash) (version 1.3.2-m1, branch `apple7-m1-1.3.2`, commit 5c484b2),
-  Apache License 2.0; the license text is in `src/tensorfold/pli/ane/natif/LICENSE-splash`. `pli_ane.mm` and
+  Apache License 2.0; the license text is in `src/tensorfold/pli/ane/native/LICENSE-splash`. `ProgramInstrumentation.hpp`,
+  `AwakeClock.hpp` and `Checked.hpp` are unmodified. PLI modifies `ane/Program.mm` and `ane/Program.hpp` to pin a
+  program to one Neural Engine block (`setNextBlock`, load and evaluation hints, a block suffix in the program key);
+  every change is marked `PLI` in the code. `pli_ane.mm` and
   `metal/MetalBackend.hpp` (which replaces Splash's Metal backend) are written for PLI. The MIL program of the shared FFN
   in `src/tensorfold/pli/ane/client.py` and the split in `ffn.py` are rewritten in Python from Splash's
   `runtime/ops/AneFfn.cpp` (`AneFfn::function`), Apache License 2.0.
-- **Host and Origin guard** (`src/tensorfold/server/host_guard.py`) follows Rapid-MLX 0.16.1 change #4512
-  ([raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)), Apache License 2.0, Copyright 2025-2026 the
-  Rapid-MLX contributors.
-- **Recall drafts** (`src/tensorfold/pli/rappel.py`) implement the idea of TensorFold 1.0.12's "Recall" (Apache License
-  2.0); no code is copied (TensorFold 1.0 is written in Zig).
+- **8-row verify GEMM** (`src/tensorfold/kernels/qwen/dense/v1/qmm8.py`, `PLI_V8`): the X8 input table (`x8_prep`) and the
+  dense 4-bit GEMM `qmm8snb_b4_nf2` are ported from [Kapitsa](https://github.com/nace-ai/kapitsa) v0.2.23,
+  `src/kernels/verify8.metal`, with Kapitsa's M1 tiling (`src/model/qwen35_v8.cpp`, `v8_plan`). Copyright 2026 Nace AI,
+  Apache License 2.0; see [the license text](LICENSES/Apache-2.0.txt). PLI turns them into MLX `metal_kernel` bodies, adds a
+  variant that reads PLI's relaid-out weights, row tiles of 8 on grid y for up to 128 rows and bf16 outputs.
+- **Kapitsa's methods** reimplemented without copying code: draft trees with calibrated probabilities (KFlash,
+  `src/tensorfold/pli/kflash.py`, from Kapitsa's `docs/kflash.md`), checkpoints that keep a length instead of a copy of the
+  KV cache (`src/tensorfold/pli/kv_sharing.py`), the tree attention tail in one kernel call (`sdpa_tree_exact2` in
+  `src/tensorfold/pli/attention_attm.py`) and the draft chain drawn on the GPU (`DFlashHead._gpu_chain`).
+- **Recall drafts** (`src/tensorfold/pli/recall.py`) implement the idea of [TensorFold 1.0.12](https://github.com/ashhart/TensorFold/releases/tag/v1.0.12)'s "Recall"
+  (Apache License 2.0); no code is copied (TensorFold 1.0 is written in Zig).
+- **Checkpoint at the fork point** (`src/tensorfold/server/checkpoints.py`, `PLI_FORK_MIN`): the rule of TensorFold
+  pull request [#1291](https://github.com/ashhart/TensorFold/pull/1291) ("prompt cache: a miss keeps the state where the
+  next prompt forks", by paragontasx, for issue [#1262](https://github.com/ashhart/TensorFold/issues/1262); closed without
+  merging; TensorFold is under the Apache License 2.0). The pull request is written in Zig; PLI rewrites the rule in
+  Python and copies no code.
+- **Control tokens kept as text** (`src/tensorfold/server/text.py`, `PLI_CONTROL_AS_TEXT`): the behaviour of
+  [TensorFold 1.1.2](https://github.com/ashhart/TensorFold/releases/tag/v1.1.2) for issue
+  [#1117](https://github.com/ashhart/TensorFold/issues/1117) (Apache License 2.0), rewritten in Python; no code is copied.
 - Everything else under `src/tensorfold/pli/` and the PLI changes in the kernels are written for PLI.
 
 ## Vendored code and weights
@@ -81,7 +98,8 @@ The MLX engine of `glm5_next` (`src/tensorfold/families/glm5_next/`: the forward
 The MTP layer PLI drafts with comes from that checkpoint's last shard (MIT), converted by
 `families/deepseek_v4/convert.py`.
 
-PLI ships no model weights. The `z-lab/Qwen3.8-27B-DFlash2` model card states Apache-2.0.
+PLI ships no model weights. The model cards of `z-lab/Qwen3.8-27B-DFlash2`, `EigenLabs/Qwen3.8-27B-MTP-bf16`,
+`mlx-community/Qwen3.8-27B-4bit` and `sabicap/sabi-noema` state Apache-2.0.
 The optional `incoai/GLM-5.3-Flash-DFlash2` model card states CC BY-NC-ND 4.0, for non-commercial use
 without derivatives. Each checkpoint keeps its own license.
 

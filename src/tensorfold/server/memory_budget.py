@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 
 GIB = 1024**3
 MEMORY_FRACTION = 0.70
-LIMIT_ENV = "TENSORFOLD_MEMORY_LIMIT_GB"
+LIMIT_ENV = "PLI_MEMORY_LIMIT_GB"
 # the process's memory outside MLX's buffers and Metal's late returns
 PROCESS_BYTES = 3 * GIB
 # probe peaks move run to run, so the worst of PROBE_REPEATS sizes the chunk and window
@@ -168,6 +168,10 @@ class CacheMemory:
             keys, values = getattr(item, "keys", None), getattr(item, "values", None)
             # an empty KV cache (keys and values both unset) has no size yet; an entry without values is not KV
             if keys is None and values is None and hasattr(item, "keys") and hasattr(item, "values"):
+                if type(item).__name__ == "MTPCache":
+                    # PLI (24/10/2026, PLI_MTP_WINDOW): the MTP head has read nothing yet (start of a prompt longer
+                    # than the window); its size, a layer bounded by the window, is counted when it fills
+                    continue
                 raise ValueError("size KV memory from a populated probe cache")
             if getattr(keys, "ndim", 0) != 4 or getattr(values, "ndim", 0) != 4:
                 fixed += held

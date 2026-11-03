@@ -2,7 +2,7 @@
  "source": {
   "model": "Qwen3.8-27B (MLX, 4-bit)",
   "drafter": "z-lab/Qwen3.8-27B-DFlash2 (4-bit), best-first trees of 15 nodes",
-  "collect": "TF_DRAFT_LOG=draft.jsonl tensorfold serve <model> --drafter <drafter> --parallel 8 --no-thinking; python tools/fit_draft_calibration.py collect http://127.0.0.1:8473 qwen27 --tokens 512 --streams 8 --seed 7",
+  "collect": "PLI_DRAFT_LOG=draft.jsonl tensorfold serve <model> --drafter <drafter> --parallel 8 --no-thinking; python tools/fit_draft_calibration.py collect http://127.0.0.1:8473 qwen27 --tokens 512 --streams 8 --seed 7",
   "fit": "python tools/fit_draft_calibration.py fit draft.jsonl --output src/tensorfold/families/qwen3_5/dflash2_calibration.json",
   "seed": 7,
   "tokens": 512,

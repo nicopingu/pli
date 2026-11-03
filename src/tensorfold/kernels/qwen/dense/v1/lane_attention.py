@@ -8,7 +8,7 @@ from typing import Any
 import mlx.core as mx
 
 MAX_QUERIES = 128
-TILES_PER_GROUP = int(os.environ.get("TF_ATTN_TILES", "16"))    # Each threadgroup shares key reads across 16-row tiles; 24 tiles overflow P staging.
+TILES_PER_GROUP = int(os.environ.get("PLI_ATTN_TILES", "16"))    # Each threadgroup shares key reads across 16-row tiles; 24 tiles overflow P staging.
 CHUNK = 512            # keys per chunk (fixed: part of the arithmetic)
 TILE = 64              # keys per tile (fixed: part of the arithmetic)
 
@@ -124,8 +124,8 @@ _PV_REGISTERS = """    opO.run(Pin, bVlo, Olo);
     opO.run(Pin, bVhi, Ohi);"""
 assert _P_STORE in _PARTIAL and _PV_THREADGROUP in _PARTIAL
 _PARTIAL_DIRECT = _PARTIAL.replace(_P_STORE, _P_REGISTERS).replace(_PV_THREADGROUP, _PV_REGISTERS)
-# TF_ATTN_DIRECT_P=0 uses threadgroup-memory P with the same bits.
-DIRECT_P = os.environ.get("TF_ATTN_DIRECT_P", "1") != "0"
+# PLI_ATTN_DIRECT_P=0 uses threadgroup-memory P with the same bits.
+DIRECT_P = os.environ.get("PLI_ATTN_DIRECT_P", "1") != "0"
 
 def _single_half(source: str) -> str:
     """Head dimension 128 (Nemotron-H): the output in one 128-column half; the 256 kernels run two."""

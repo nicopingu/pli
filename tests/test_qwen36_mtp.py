@@ -198,20 +198,20 @@ def test_the_family_package_finds_the_side_file(tmp_path, monkeypatch):
     from tensorfold import hub
     from tensorfold.families import qwen3_5_moe
 
-    monkeypatch.delenv("TF_QWEN36_MTP", raising=False)
+    monkeypatch.delenv("PLI_QWEN36_MTP", raising=False)
     monkeypatch.setattr(hub, "cached", lambda repo, **kw: None)
     assert qwen3_5_moe.mtp_file(tmp_path) is None
     (tmp_path / qmtp.MTP_FILE).write_bytes(b"")
     assert qwen3_5_moe.mtp_file(tmp_path) == tmp_path / qmtp.MTP_FILE
-    monkeypatch.setenv("TF_QWEN36_MTP", "0")
+    monkeypatch.setenv("PLI_QWEN36_MTP", "0")
     assert qwen3_5_moe.mtp_file(tmp_path) is None
     tested = tmp_path / "tested"
     tested.mkdir()
     (tested / qmtp.MTP_FILE).write_bytes(b"")
-    monkeypatch.delenv("TF_QWEN36_MTP")
+    monkeypatch.delenv("PLI_QWEN36_MTP")
     monkeypatch.setattr(hub, "cached", lambda repo, **kw: tested if repo == qwen3_5_moe.MODELS[0] else None)
     assert qwen3_5_moe.mtp_file(tmp_path / "elsewhere") == tested / qmtp.MTP_FILE
-    monkeypatch.setenv("TF_QWEN36_MTP", str(tmp_path / "missing.safetensors"))
+    monkeypatch.setenv("PLI_QWEN36_MTP", str(tmp_path / "missing.safetensors"))
     with pytest.raises(FileNotFoundError, match="does not exist"):
         qwen3_5_moe.mtp_file(tmp_path)
 

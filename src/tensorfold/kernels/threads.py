@@ -82,7 +82,7 @@ def fit(key: tuple, sizes: Iterable[int], launch: Callable[[int], Any], inputs: 
         _fitted[key] = size
         return out
     raise RuntimeError(f"[tensorfold] {chip()} allows {cap} threads a threadgroup for the {key[0]} kernel, which needs "
-                       f"{options[-1]}: run `tensorfold update`, and if it still fails report this line at "
+                       f"{options[-1]}: update PLI (git pull, then pip install), and if it still fails report this line at "
                        "https://github.com/ashhart/TensorFold/issues")
 
 

@@ -38,7 +38,7 @@ grouped matmul), every window checked at load against one-row steps. Drafts come
 - `mlx-community/Qwen3.6-35B-A3B-4bit` has the same weights without the MTP file. It drafts with the file from
   `TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP` once that file is in the Hugging Face cache
   (`hf download TensorFold/Qwen3.6-35B-A3B-MLX-4bit-MTP mtp-4bit.safetensors`, 0.5 GB) or named by
-  `TF_QWEN36_MTP=<file>`; without it, it decodes one token a round and says so at startup.
+  `PLI_QWEN36_MTP=<file>`; without it, it decodes one token a round and says so at startup.
   `--drafter z-lab/Qwen3.6-35B-A3B-DFlash` drafts with DFlash v1 instead.
 
 On an M3 Ultra (60-core GPU, MLX 0.32.3), greedy, median of three after a warm-up. mlx-vlm 0.7.4 serves the same

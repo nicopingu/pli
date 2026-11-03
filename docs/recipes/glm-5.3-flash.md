@@ -79,7 +79,7 @@ conversation takes the attention caches, a kept prompt's rows are saved. Kept st
 `TF_GLM_CACHE_GIB` (default 3), or less when the window leaves less memory on either Spark; the startup log says
 when it is less, and the memory estimate includes it. Earlier turns keep their reasoning in the prompt
 (`clear_thinking` false, zai-org's default), so an agent's next user message resumes from its previous tool loop
-instead of filling it again; `TF_GLM_CLEAR_THINKING=1` drops it, as the TR3 checkpoint's template does by default,
+instead of filling it again; `PLI_GLM_CLEAR_THINKING=1` drops it, as the TR3 checkpoint's template does by default,
 and a request's `chat_template_kwargs.clear_thinking` wins over either. It serves one request at a time. Both ranks
 finish a started reply after a client disconnects.
 
@@ -172,7 +172,7 @@ tensorfold serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --ssd-experts 64
 - The pool keeps the most recently used experts, and reads bypass the page cache.
 - The extension builds against the installed MLX with the Xcode command line tools.
 
-On an M3 Ultra held to a 128 GB Mac's budget (TENSORFOLD_MEMORY_LIMIT_GB=89.6) with `--ssd-experts 64`, the
+On an M3 Ultra held to a 128 GB Mac's budget (PLI_MEMORY_LIMIT_GB=89.6) with `--ssd-experts 64`, the
 streamed run was compared with the resident one on the same machine:
 - Replies were the same tokens: 36 of 36 serial and cell requests, plus the 2k prompt.
 - Two concurrent streams each matched their solo reply, and resumed prompts matched fresh ones.

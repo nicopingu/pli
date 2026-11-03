@@ -34,13 +34,13 @@ class Sampling:
 
 
 def _salt_from_env() -> int:
-    """``TENSORFOLD_SEED_SALT``: an integer mixed into every prompt-derived seed (0, the default, changes nothing)."""
+    """``PLI_SEED_SALT``: an integer mixed into every prompt-derived seed (0, the default, changes nothing)."""
 
-    value = os.environ.get("TENSORFOLD_SEED_SALT", "").strip()
+    value = os.environ.get("PLI_SEED_SALT", "").strip()
     try:
         return int(value) if value else 0
     except ValueError:
-        raise ValueError(f"TENSORFOLD_SEED_SALT={value}: an integer") from None
+        raise ValueError(f"PLI_SEED_SALT={value}: an integer") from None
 
 
 SEED_SALT = _salt_from_env()

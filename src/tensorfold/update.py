@@ -74,7 +74,7 @@ def notice(tag: str | None) -> str | None:
 
 
 def _checks_off() -> bool:
-    return os.environ.get("TENSORFOLD_NO_UPDATE_CHECK", "").strip().lower() in ("1", "true", "yes", "on")
+    return os.environ.get("PLI_NO_UPDATE_CHECK", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def whats_new(text: str, since: str, upto: str) -> str:
@@ -133,7 +133,7 @@ def show_whats_new(since: str, tag: str, clone: Path | None = None) -> None:
 def first_run_notice() -> str | None:
     """One line the first time a version runs, so installs updated some other way still hear what's new."""
 
-    return None    # PLI : fork, pas de nouveautes TensorFold a annoncer
+    return None    # PLI: fork, no TensorFold news to announce
     if _checks_off():
         return None
     try:
@@ -152,7 +152,7 @@ def first_run_notice() -> str | None:
 def check_in_background() -> threading.Thread | None:
     """Look for a newer release without delaying anything; print one line if there is one."""
 
-    return None    # PLI : fork, pas de recherche de version TensorFold
+    return None    # PLI: fork, no TensorFold version lookup
     if _checks_off():
         return None
 
@@ -193,9 +193,8 @@ def _run(command: list[str], **kwargs: Any) -> int:
 def update(*, check_only: bool = False, force: bool = False) -> int:
     """``tensorfold update``: install the newest release (or say this one is current)."""
 
-    # PLI : fork de TensorFold 0.6.6. Une mise a jour depuis l amont ecraserait les modifications de PLI.
-    print("[tensorfold] PLI est un fork de TensorFold 0.6.6 : pas de mise a jour automatique depuis l amont. "
-          "Reprendre l amont a la main dans ~/dev/pli (etiquette amont-0.6.6, branche pli).", file=sys.stderr)
+    # PLI: fork of TensorFold 0.6.6. An update from upstream would overwrite PLI's changes.
+    print("[tensorfold] pli update is disabled in this fork; update with git pull and pip install", file=sys.stderr)
     return 1
     tag = latest_release(timeout=10.0, use_cache=False)
     if tag is None:

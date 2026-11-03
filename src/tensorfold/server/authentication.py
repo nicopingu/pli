@@ -12,6 +12,8 @@ import stat
 import threading
 import time
 
+from tensorfold.pli import env_names
+
 
 _LABEL = re.compile(r"[A-Za-z0-9_.-]{1,64}\Z")
 
@@ -143,7 +145,7 @@ class KeyStore:
 
 def configure(args):
     store = KeyStore(getattr(args, "api_key", ()) or (), key_file=getattr(args, "api_key_file", None),
-                     environment=os.environ.pop("TENSORFOLD_API_KEY", ""),
+                     environment=env_names.pop("PLI_API_KEY"),
                      metrics_open=getattr(args, "metrics_open", False))
     if hasattr(args, "api_key"):
         args.api_key = []

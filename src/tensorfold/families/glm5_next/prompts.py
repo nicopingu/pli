@@ -8,11 +8,11 @@ from typing import Any
 
 EFFORT_LINE = "<|system|>Reasoning Effort: Max"
 OPENED = "<|assistant|><think>"
-CLEAR_THINKING = "TF_GLM_CLEAR_THINKING"
+CLEAR_THINKING = "PLI_GLM_CLEAR_THINKING"
 
 
 def clear_thinking() -> bool:
-    """The template's ``clear_thinking`` when a request leaves it unset: False unless ``TF_GLM_CLEAR_THINKING=1``.
+    """The template's ``clear_thinking`` when a request leaves it unset: False unless ``PLI_GLM_CLEAR_THINKING=1``.
 
     zai-org's GLM-5.3-Flash template defaults it to false, keeping every assistant turn's reasoning in the prompt
     (its model card: pass ``clear_thinking=true`` for chat). Checkpoints that carry the template's first revision

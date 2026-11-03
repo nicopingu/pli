@@ -14,7 +14,7 @@ for such a conversion; the default positive draft depth otherwise refuses the mi
 ## MLX execution
 
 N-gram tables stay in host file mappings when the checkpoint's model files exceed 75% of the GPU's
-recommended working set. `TF_NGRAM_HOST=1` forces this mode; `TF_NGRAM_HOST=0` keeps the tables in MLX.
+recommended working set. `PLI_NGRAM_HOST=1` forces this mode; `PLI_NGRAM_HOST=0` keeps the tables in MLX.
 Startup admission uses the same choice as the loader and subtracts the mapped weights, scales and biases
 from the checkpoint's size. For the named 4-bit checkpoint, about 29.8 GiB of its 105.4 GiB is mapped,
 leaving a conservative 75.6 GiB resident-weight estimate. The default command selects host mode on an
@@ -22,9 +22,9 @@ M4 Max with 128 GiB, whose process budget is 89.6 GiB, including the 3 GiB proce
 
 Mapped pages still use RAM while cached. The loader prefetches them after its initial forwards; macOS
 can reclaim them, and subsequent lookups may read from disk. The remaining weights must fit the MLX
-budget, and the server sizes context from runtime cache and workspace needs. `TENSORFOLD_MEMORY_LIMIT_GB`
+budget, and the server sizes context from runtime cache and workspace needs. `PLI_MEMORY_LIMIT_GB`
 can lower or raise the default budget, capped by physical RAM and the GPU's recommended working set.
-For example, `TENSORFOLD_MEMORY_LIMIT_GB=110` gives a 128 GiB M4 Max a 110 GiB process budget and
+For example, `PLI_MEMORY_LIMIT_GB=110` gives a 128 GiB M4 Max a 110 GiB process budget and
 107 GiB for MLX. An explicit context must still fit the startup estimate; a larger budget does not
 establish full-window inference or keep every mapped page resident.
 After measuring shared rounds, the runtime releases the probes' rollback buffers before sizing prompt
@@ -39,7 +39,7 @@ The load-time row check disables drafting when windows do not reproduce serial s
 The prefill path uses sparse selected-key attention, fused hyper-connections and n-gram lookups,
 stacked DeltaNet projections and sorted expert rows. It submits bounded groups of layers to limit live
 workspace. Compatible prefill matmul kernels check against MLX; unsupported paths use MLX's kernels.
-`TF_FLASH_PREFILL=0` selects the reference prefill path for comparison.
+`PLI_FLASH_PREFILL=0` selects the reference prefill path for comparison.
 
 Prefill and decode can round differently. The chunk planner uses detected assistant-message starts and
 the second message when at least 256 tokens follow the previous chunk start, otherwise cutting after

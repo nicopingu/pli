@@ -1,0 +1,358 @@
+{
+ "suite": "pli-bench-v1",
+ "corpus": "corpus-v1.txt",
+ "corpus_sha256": "760b92847dfa5b39283cc0fc4c3326b2bfcb817329bc430fd5e8368b3ce80d36",
+ "corpus_source": "PLI 3.7.0 source code (Apache-2.0): every .py file under src/tensorfold, server/ first, then by path, cut after 800,000 characters",
+ "tokenizer": "Qwen3.8 (mlx-community/Qwen3.8-27B-4bit tokenizer.json)",
+ "run_line": "Bench run {salt}, request {name}.\n",
+ "single": [
+  {
+   "name": "code",
+   "max_tokens": 400,
+   "text": "Write a Python module with an LRU cache (class LRUCache with get, put, a capacity and hit and miss statistics), then its unit tests with unittest. Give only the code.",
+   "sha256": "c3d1213e830aae5058763ce92f7484f3cc5979371d2576dcb4c7e6ad59557990",
+   "tokens_qwen38": 39
+  },
+  {
+   "name": "1k",
+   "max_tokens": 200,
+   "before": "Here is some Python code.\n\n",
+   "slice": [
+    0,
+    3870
+   ],
+   "after": "\n\nSummarize what this code does in five numbered points.",
+   "sha256": "276a2880d84eca68a6cec75d793297cdad97cdc554f2a47b8547a9712f667d66",
+   "tokens_qwen38": 976
+  },
+  {
+   "name": "8k",
+   "max_tokens": 200,
+   "before": "Here is some Python code.\n\n",
+   "slice": [
+    50000,
+    32330
+   ],
+   "after": "\n\nSummarize what this code does in five numbered points.",
+   "sha256": "a1a73a7b2ba02f4fb0022dc2791e1a00714ca79eb71100e933b54a0d18ee3ecf",
+   "tokens_qwen38": 7976
+  },
+  {
+   "name": "32k",
+   "max_tokens": 200,
+   "before": "Here is some Python code.\n\n",
+   "slice": [
+    100000,
+    134289
+   ],
+   "after": "\n\nSummarize what this code does in five numbered points.",
+   "sha256": "c0aab8909559da2429112812af41144520ee55a3c93da780778199a248518884",
+   "tokens_qwen38": 31976
+  },
+  {
+   "name": "64k",
+   "max_tokens": 200,
+   "before": "Here is some Python code.\n\n",
+   "slice": [
+    150000,
+    259742
+   ],
+   "after": "\n\nSummarize what this code does in five numbered points.",
+   "sha256": "c111afcecbc648deed5a5edadc95910aa1a302fb99184c2dce14aa4d6f9dfcb0",
+   "tokens_qwen38": 63976
+  },
+  {
+   "name": "96k",
+   "max_tokens": 200,
+   "before": "Here is some Python code.\n\n",
+   "slice": [
+    5000,
+    396036
+   ],
+   "after": "\n\nSummarize what this code does in five numbered points.",
+   "sha256": "a824b20ae637208687811063de558fb3bced5fdc841b6cc242bc24a5913d88af",
+   "tokens_qwen38": 95976
+  }
+ ],
+ "agent": {
+  "system": "You are a coding agent working in the repository of an inference engine for Apple Silicon. You read files when you need them, then answer precisely. Keep answers short and concrete.",
+  "task": "We want to understand how this engine serves a request end to end, from the HTTP server to the model and the draft model, then improve its documentation. Read the files you need.",
+  "turns": [
+   {
+    "assistant": "I will read `tensorfold/server/admission.py`.",
+    "user_before": "Contents of `tensorfold/server/admission.py`:\n\n```python\n",
+    "slice": [
+     200,
+     1875
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/anthropic.py`.",
+    "user_before": "Contents of `tensorfold/server/anthropic.py`:\n\n```python\n",
+    "slice": [
+     2121,
+     4923
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/anthropic_translate.py`.",
+    "user_before": "Contents of `tensorfold/server/anthropic_translate.py`:\n\n```python\n",
+    "slice": [
+     7100,
+     18976
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/auth_http.py`.",
+    "user_before": "Contents of `tensorfold/server/auth_http.py`:\n\n```python\n",
+    "slice": [
+     57984,
+     4166
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/authentication.py`.",
+    "user_before": "Contents of `tensorfold/server/authentication.py`:\n\n```python\n",
+    "slice": [
+     62201,
+     6467
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/cancellation.py`.",
+    "user_before": "Contents of `tensorfold/server/cancellation.py`:\n\n```python\n",
+    "slice": [
+     68717,
+     3734
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/checkpoints.py`.",
+    "user_before": "Contents of `tensorfold/server/checkpoints.py`:\n\n```python\n",
+    "slice": [
+     72499,
+     16352
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/decision_requests.py`.",
+    "user_before": "Contents of `tensorfold/server/decision_requests.py`:\n\n```python\n",
+    "slice": [
+     88905,
+     3941
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/decisions.py`.",
+    "user_before": "Contents of `tensorfold/server/decisions.py`:\n\n```python\n",
+    "slice": [
+     92892,
+     15096
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/host_guard.py`.",
+    "user_before": "Contents of `tensorfold/server/host_guard.py`:\n\n```python\n",
+    "slice": [
+     109564,
+     3530
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/live.py`.",
+    "user_before": "Contents of `tensorfold/server/live.py`:\n\n```python\n",
+    "slice": [
+     140980,
+     8981
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/memory_budget.py`.",
+    "user_before": "Contents of `tensorfold/server/memory_budget.py`:\n\n```python\n",
+    "slice": [
+     150011,
+     11473
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/messages.py`.",
+    "user_before": "Contents of `tensorfold/server/messages.py`:\n\n```python\n",
+    "slice": [
+     161529,
+     6036
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/metrics.py`.",
+    "user_before": "Contents of `tensorfold/server/metrics.py`:\n\n```python\n",
+    "slice": [
+     167609,
+     16259
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/probabilities.py`.",
+    "user_before": "Contents of `tensorfold/server/probabilities.py`:\n\n```python\n",
+    "slice": [
+     183918,
+     2957
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/prompt_blocks.py`.",
+    "user_before": "Contents of `tensorfold/server/prompt_blocks.py`:\n\n```python\n",
+    "slice": [
+     186925,
+     4973
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/prompt_fill.py`.",
+    "user_before": "Contents of `tensorfold/server/prompt_fill.py`:\n\n```python\n",
+    "slice": [
+     191946,
+     14605
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/prompts.py`.",
+    "user_before": "Contents of `tensorfold/server/prompts.py`:\n\n```python\n",
+    "slice": [
+     232897,
+     4432
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/request_body.py`.",
+    "user_before": "Contents of `tensorfold/server/request_body.py`:\n\n```python\n",
+    "slice": [
+     237378,
+     3229
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/request_options.py`.",
+    "user_before": "Contents of `tensorfold/server/request_options.py`:\n\n```python\n",
+    "slice": [
+     240659,
+     11606
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/residency.py`.",
+    "user_before": "Contents of `tensorfold/server/residency.py`:\n\n```python\n",
+    "slice": [
+     252311,
+     1597
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/responses.py`.",
+    "user_before": "Contents of `tensorfold/server/responses.py`:\n\n```python\n",
+    "slice": [
+     253954,
+     10171
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/responses_translate.py`.",
+    "user_before": "Contents of `tensorfold/server/responses_translate.py`:\n\n```python\n",
+    "slice": [
+     264181,
+     20301
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/stacks.py`.",
+    "user_before": "Contents of `tensorfold/server/stacks.py`:\n\n```python\n",
+    "slice": [
+     320669,
+     1639
+    ],
+    "user_after": "\n```"
+   },
+   {
+    "assistant": "I will read `tensorfold/server/stopping.py`.",
+    "user_before": "Contents of `tensorfold/server/stopping.py`:\n\n```python\n",
+    "slice": [
+     322353,
+     2843
+    ],
+    "user_after": "\n```"
+   }
+  ],
+  "measure": [
+   {
+    "after_turn": 3,
+    "ask": "Explain in five numbered points what the last file you read does.",
+    "max_tokens": 200,
+    "approx_tokens": 6403
+   },
+   {
+    "after_turn": 7,
+    "ask": "Write a docstring for the main class or function of the last file you read. Give only the docstring.",
+    "max_tokens": 200,
+    "approx_tokens": 14051
+   },
+   {
+    "after_turn": 8,
+    "ask": "List the environment variables or settings that the files read so far depend on, with one line each.",
+    "max_tokens": 200,
+    "approx_tokens": 15007
+   },
+   {
+    "after_turn": 11,
+    "ask": "Write a short unit test, with unittest, for one function of the last file you read. Give only the code.",
+    "max_tokens": 200,
+    "approx_tokens": 22271
+   },
+   {
+    "after_turn": 12,
+    "ask": "Propose one small refactor of the last file you read, as a unified diff.",
+    "max_tokens": 200,
+    "approx_tokens": 25264
+   },
+   {
+    "after_turn": 14,
+    "ask": "Summarize, in at most eight lines, how a request flows through the files read so far.",
+    "max_tokens": 200,
+    "approx_tokens": 31015
+   },
+   {
+    "after_turn": 20,
+    "ask": "Write a README section, in Markdown, that explains the last two files you read.",
+    "max_tokens": 200,
+    "approx_tokens": 41245
+   },
+   {
+    "after_turn": 25,
+    "ask": "Name the three riskiest parts of the files read so far for a change, and say why in one line each.",
+    "max_tokens": 200,
+    "approx_tokens": 50499
+   }
+  ]
+ }
+}

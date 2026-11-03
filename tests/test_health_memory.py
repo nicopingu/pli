@@ -152,7 +152,7 @@ def test_health_carries_the_live_lines_numbers_when_a_scheduler_serves(measured_
         answer = body(port)
     assert answer["live"] == {"connections": 4, "waiting": 2, "decode_tokens_per_second": 0.0,
                               "prefill_tokens_per_second": 4096.0}
-    assert answer["requests"] == []          # PLI : un ordonnanceur sans file ni flux lisible rend une liste vide
+    assert answer["requests"] == []          # PLI: a scheduler without a readable queue or stream gives an empty list
     with serving() as port:
         answer = body(port)
     assert "live" not in answer and "requests" not in answer

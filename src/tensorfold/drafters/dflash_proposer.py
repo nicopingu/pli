@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import pickle
 import time
+
+from tensorfold.pli import trace as _tr
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -14,10 +16,10 @@ from .dflash_attention import _dflash_attend, concat_updates
 from .dflash_capture import _capture_writer
 from .dflash_tree import best_first_tree, lattice_gain
 
-_DRAFT_PROFILE = os.environ.get("TF_DRAFT_PROFILE", "") == "1"
+_DRAFT_PROFILE = os.environ.get("PLI_DRAFT_PROFILE", "") == "1"
 _DRAFT_STAGES: dict[str, dict[str, float]] = {}
-# TF_DRAFT_LEAN selects lean attention with "1", vendor with "0", or alternating lattices with "alt".
-_DRAFT_LEAN = os.environ.get("TF_DRAFT_LEAN", "1")
+# PLI_DRAFT_LEAN selects lean attention with "1", vendor with "0", or alternating lattices with "alt".
+_DRAFT_LEAN = os.environ.get("PLI_DRAFT_LEAN", "1")
 
 
 class DFlashProposer:
@@ -132,6 +134,8 @@ class DFlashProposer:
             self.drafter._trim(self.cache, extra)
         out = [int(t) for t in tokens[0].tolist()]
         self.context = None
+        if _tr.active():
+            _tr.pt("draft", t=started, chain_ms=(time.perf_counter() - started) * 1e3, nodes=len(out))
         self.draft_ms += (time.perf_counter() - started) * 1e3
         self.proposals += 1
         self.proposed_tokens += len(out)
@@ -213,29 +217,34 @@ class DFlashProposer:
     # -- draft trees ----------------------------------------------------------------------
     tree_block = 16          # positions drafted per tree (the head's own block is 8; more is allowed)
     tree_children = 4        # candidates expanded under each node
-    # PLI (lot S1) : PLI_ARBRE_NOEUDS plafonne l'arbre (7 = 8 lignes vérifiées par tour, 15 = 16 lignes) ; 0 = origine.
-    tree_nodes = max(0, int(os.environ.get("PLI_ARBRE_NOEUDS", "0") or 0))
+    # PLI: PLI_TREE_NODES caps the tree (7 = 8 rows checked per round, 15 = 16 rows); 0 = original.
+    tree_nodes = max(0, int(os.environ.get("PLI_TREE_NODES", "0") or 0))
     # Node scores use log-softmax of (unary + tree_edge * pairwise [+ tree_noise * Gumbel]) / tree_tau.
     tree_tau = 1.5
     tree_edge = 0.6
     tree_noise = 0.7
+    # PLI (item D-b, 24/10/2026): tree settings as switches (absent: values above); the chain keeps its own (DraftSlot)
+    tree_children = int(os.environ.get("PLI_TREE_CHILDREN", "") or tree_children)
+    tree_tau = float(os.environ.get("PLI_TREE_TAU", "") or tree_tau)
+    tree_edge = float(os.environ.get("PLI_TREE_EDGE", "") or tree_edge)
+    tree_noise = float(os.environ["PLI_TREE_NOISE"]) if os.environ.get("PLI_TREE_NOISE", "") != "" else tree_noise
     # A backed copy replaces the tree when long enough; shorter copies become branches.
-    copy_match = int(os.environ.get("TF_COPY_MATCH", "8"))
+    copy_match = int(os.environ.get("PLI_COPY_MATCH", "8"))
     # A copied token's log-probability as a tree score.
     copy_logp = -0.06
     # Path scores follow tree pop order, with copy_logp per copied token; None means no lattice.
     last_scores: list[float] | None = None
     # Add ngram_weight * log P(child | last three path tokens) from the stream's committed context.
-    ngram_weight = float(os.environ.get("TF_NGRAM_WEIGHT", "0.1"))
+    ngram_weight = float(os.environ.get("PLI_NGRAM_WEIGHT", "0.1"))
     # Use the prior only while its cumulative true-token log-probability gain exceeds this gate; None always enables it.
     ngram_gate: float | None = 1.0
     # layers after which the drafter's graph so far is sent to the GPU while Python builds the rest
     async_layers: tuple[int, ...] = (0, 2)
-    # TF_TREE_TRACE appends context growth and candidate lattices as pickles when set.
-    trace_path = os.environ.get("TF_TREE_TRACE", "")
-    # TF_DRAFT_CAPTURE stores context positions, tokens, bf16 projected taps, and sampling settings per stream.
-    capture_dir = os.environ.get("TF_DRAFT_CAPTURE", "")
-    # TF_DRAFT_PROFILE=1: where the drafter's graph build (host time) goes, printed every 200 lattices
+    # PLI_TREE_TRACE appends context growth and candidate lattices as pickles when set.
+    trace_path = os.environ.get("PLI_TREE_TRACE", "")
+    # PLI_DRAFT_CAPTURE stores context positions, tokens, bf16 projected taps, and sampling settings per stream.
+    capture_dir = os.environ.get("PLI_DRAFT_CAPTURE", "")
+    # PLI_DRAFT_PROFILE=1: where the drafter's graph build (host time) goes, printed every 200 lattices
 
     def _trace(self, record: dict[str, Any]) -> None:
         with open(self.trace_path, "ab") as handle:
@@ -352,10 +361,19 @@ class DFlashProposer:
                 self._ngram_last = (cands_np, unary_np, hproj_np, noise, temp, int(context[-1]), len(context),
                                     history, prior)
         scores: list[float] = []
-        tokens, parents = best_first_tree(cands_np, unary_np, hproj_np, noise, int(context[-1]), pred_code, succ_code,
-                                          temperature=temp, edge=self.tree_edge, noise_weight=self.tree_noise,
-                                          tau=self.tree_tau, children=self.tree_children, max_nodes=max_nodes,
-                                          prior=prior, history=context[-3:], node_scores=scores)
+        from tensorfold.pli import kflash as _kf
+
+        self.last_kf = None
+        if _kf.ACTIVE and noise is None and prior is None and self.tree_children > 1:
+            # PLI: KFlash's best-first tree over the draft's calibrated probabilities
+            tokens, parents, scores, kf_nodes = _kf.choose(cands_np, unary_np, hproj_np, int(context[-1]), pred_code, succ_code,
+                                                          max_nodes)
+            self.last_kf = kf_nodes
+        else:
+            tokens, parents = best_first_tree(cands_np, unary_np, hproj_np, noise, int(context[-1]), pred_code, succ_code,
+                                              temperature=temp, edge=self.tree_edge, noise_weight=self.tree_noise,
+                                              tau=self.tree_tau, children=self.tree_children, max_nodes=max_nodes,
+                                              prior=prior, history=context[-3:], node_scores=scores)
         if copy_branch:
             # the copy hangs off the root, sharing any first nodes the tree already has
             parent = -1
@@ -365,10 +383,18 @@ class DFlashProposer:
                     tokens.append(int(token))
                     parents.append(parent)
                     scores.append(self.copy_logp * (depth + 1))
+                    if self.last_kf is not None:
+                        self.last_kf.append((depth, None))
                     hit = len(tokens) - 1
                 parent = hit
         self.last_scores = scores
+        if self.trace_path:                       # PLI (30/10): the tree (or the chain) sent to verification, for the replay
+            self._trace({"n": len(context), "sent": [int(t) for t in tokens], "parents": [int(p) for p in parents]})
         finished = time.perf_counter()
+        if _tr.active():
+            _tr.pt("draft", t=started, build_ms=(built - started) * 1e3, gpu_wait_ms=(waited - built) * 1e3,
+                   search_ms=(finished - waited) * 1e3, nodes=len(tokens), copy=len(copy_branch or ()),
+                   block=int(cands.shape[0]) if hasattr(cands, "shape") else None)
         self.search_ms += (finished - waited) * 1e3
         self.draft_ms += (finished - started) * 1e3
         self.proposals += 1
@@ -414,7 +440,8 @@ class DFlashProposer:
         t2 = time.perf_counter() if prof else 0.0
         hidden = model.norm(h[:, 1:])
         logits, vocab_ids = self.drafter.candidate_logits(hidden)
-        cands, unary = topk_rows(logits[0], int(selector.top_k))  # radix select
+        from tensorfold.pli import topk_fast as _tk   # PLI (01/11/2026, PLI_DRAFT_TOPK=1): split over threadgroups, same outputs
+        cands, unary = (_tk.topk_rows if _tk.ENABLED else topk_rows)(logits[0], int(selector.top_k))  # radix select
         if vocab_ids is not None:
             cands = mx.take(vocab_ids, cands)             # columns of the draft vocabulary -> token ids
         hproj = selector.hidden_projection(hidden).astype(mx.float32)

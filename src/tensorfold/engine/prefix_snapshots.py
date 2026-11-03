@@ -77,6 +77,9 @@ def save_snapshot(directory: Path, model_id: str, tokens: Sequence[int], cache: 
     layers: list[dict[str, Any]] = []
     # an entry with ``stored = False`` (a stream's drafter state) is left out: the family adds a fresh one on resume
     for index, item in enumerate(item for item in cache if getattr(item, "stored", True)):
+        export = getattr(item, "export", None)              # PLI: a length layer is written from views
+        if callable(export):
+            item = export()
         materialize = getattr(item, "materialize", None)
         if materialize is not None:
             materialize()
@@ -85,7 +88,10 @@ def save_snapshot(directory: Path, model_id: str, tokens: Sequence[int], cache: 
                                  "arrays": [], "lists": {}, "numpy": []}
         transient = set(getattr(cls, "transient", ()))    # runtime-only state the class rebuilds itself
         for name, value in vars(item).items():
-            if name in transient:
+            # PLI (24/10/2026): the reduced-prefill state put on the caches (pli_choice, pli_anchors, pli_anchors_pending, pli_request_start)
+            # and the layer number (pli_layer) are rebuilt at the next request; writing them made every spill fail since v37
+            # ("cannot store attribute pli_choix of KVCache", then pli_ancres of each layer since the anchored prefill)
+            if name in transient or name.startswith("pli_"):
                 continue
             if isinstance(value, mx.array):
                 arrays[f"{index}.{name}"] = value

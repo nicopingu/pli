@@ -11,5 +11,6 @@ venv/
 .DS_Store
 *.swp
 *.log
-# PLI SP1 : bibliothèque du Neural Engine compilée sur la machine (construire.sh), pas suivie
-src/tensorfold/pli/ane/natif/libpli_ane.dylib
+# PLI SP1: Neural Engine libraries compiled on the machine (build.sh), not tracked
+src/tensorfold/pli/ane/native/libpli_ane.dylib
+src/tensorfold/pli/ane/native/libpli_rq.dylib

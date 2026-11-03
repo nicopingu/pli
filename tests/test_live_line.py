@@ -87,7 +87,7 @@ def test_it_stays_off_without_a_terminal_or_when_turned_off(monkeypatch):
     sched = SimpleNamespace()
     monkeypatch.setattr(sys, "stdout", io.StringIO())
     assert live.start(sched) is None
-    monkeypatch.setenv("TENSORFOLD_NO_LIVE", "1")
+    monkeypatch.setenv("PLI_NO_LIVE", "1")
     assert live.start(sched) is None
 
 

@@ -84,7 +84,7 @@ def test_serve_refuses_an_unreadable_checkpoint_before_downloading(tmp_path, cap
     # a GPTQ Qwen3.8 dense checkpoint: no engine of that family reads it
     (tmp_path / "config.json").write_text(json.dumps({"model_type": "qwen3_5",
                                                       "quantization_config": {"quant_method": "gptq", "bits": 4}}))
-    monkeypatch.setenv("TENSORFOLD_NO_UPDATE_CHECK", "1")
+    monkeypatch.setenv("PLI_NO_UPDATE_CHECK", "1")
     assert cli.main(["serve", str(tmp_path)]) == 1
     err = capsys.readouterr().err
     assert "gptq" in err and "recipe book" in err
@@ -108,7 +108,7 @@ def test_serve_refuses_what_the_mac_decoders_cannot_read_before_downloading(tmp_
 
     (tmp_path / "config.json").write_text(json.dumps(config))
     monkeypatch.setattr(cli.sys, "platform", "darwin")
-    monkeypatch.setenv("TENSORFOLD_NO_UPDATE_CHECK", "1")
+    monkeypatch.setenv("PLI_NO_UPDATE_CHECK", "1")
     monkeypatch.setattr(hub, "resolve", lambda *a, **kw: pytest.fail("downloaded before refusing"))
     assert cli.main(["serve", str(tmp_path)]) == 1
     assert named in capsys.readouterr().err

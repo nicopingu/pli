@@ -59,12 +59,12 @@ No field is evaluated as a shell command.
 ```bash
 tensorfold service install "/cached/model with spaces" --name code \
   --port 8081 --parallel auto --python "$HOME/.venvs/tensorfold-control/bin/python" \
-  --env TENSORFOLD_MEMORY_LIMIT_GB=48 \
+  --env PLI_MEMORY_LIMIT_GB=48 \
   --arg=--vision --arg=--spill-gib --arg=20
 ```
 
 `--port` and `--parallel` are written on the serve command. A non-secret `--env` value such as
-`TENSORFOLD_MEMORY_LIMIT_GB` is stored on the profile and passed to that process.
+`PLI_MEMORY_LIMIT_GB` is stored on the profile and passed to that process.
 Repeat `--arg` for extra literal `serve` arguments. Managed endpoint flags stay on their own options.
 The bind address defaults to `127.0.0.1`. A non-loopback address needs `--allow-network`.
 That acknowledgement leaves authentication to a proxy you configure separately.
@@ -110,7 +110,7 @@ The error from `tensorfold tui` prints that command with the venv's Python. `ric
 tensorfold tui
 tensorfold tui --profile code
 tensorfold tui --url http://127.0.0.1:8080/v1
-tensorfold tui --url https://spark.example.invalid --token-env TENSORFOLD_API_KEY
+tensorfold tui --url https://spark.example.invalid --token-env PLI_API_KEY
 tensorfold tui --demo
 tensorfold tui --demo --snapshot preview.svg
 ```

@@ -26,6 +26,26 @@ def extend_costs(costs: dict[int, float], rows: int) -> dict[int, float]:
     return out
 
 
+
+# PLI (item D, 21/10/2026): PLI_TREE_CORRECT=1 corrects the chances of tree nodes by the ratio accepted tokens / expected tokens
+# (decay 0.97 per tree round): arb2 showed more rows given to trees past 20K without more accepted tokens.
+_TREE_CORRECT = __import__("os").environ.get("PLI_TREE_CORRECT", "0") == "1"
+# PLI (item D, 24/10/2026, pg-arb: trees 6 % slower at 3 requests): PLI_TREE_ALONE=1 keeps trees for a request that decodes alone;
+# with several, each tree is brought back to its main branch (first child of each node, the most likely), passed as a chain.
+_TREE_ALONE = __import__("os").environ.get("PLI_TREE_ALONE", "0") == "1"
+
+
+def _branch(parents) -> list:
+    """Indices of the drafts of a tree's main branch (parents before children, -1 for the pending row)."""
+
+    path, cur = [], -1
+    while True:
+        nxt = next((i for i, q in enumerate(parents) if int(q) == cur), None)
+        if nxt is None:
+            return path
+        path.append(nxt)
+        cur = nxt
+
 class DraftDepth:
     """Draft depth and row allocation for ``FamilyRounds``."""
 
@@ -144,6 +164,16 @@ class DraftDepth:
         from tensorfold.engine.lane_engine import sanitize_tree
 
         fixed, probs = [], []
+        branches = {}
+        if _TREE_ALONE and len(plans) > 1:
+            for i, plan in enumerate(plans):
+                if plan[3] == "head" and plan[6] is not None:
+                    path = _branch(plan[6])
+                    branches[i] = path
+                    d = plan[4]
+                    plan[4] = (mx.take(d, mx.array(path, dtype=mx.int32), axis=0) if isinstance(d, mx.array)
+                               else [d[j] for j in path]) if path else d[:0]
+                    plan[6] = None
         for stream, cache, _, kind, drafts, forced, parents in plans:
             n = int(drafts.shape[0]) if isinstance(drafts, mx.array) else len(drafts)
             if kind == "forced" or not n:
@@ -154,15 +184,32 @@ class DraftDepth:
                 probs.append(chain_probabilities([self.copy_rate], n))
             else:
                 fixed.append(1)
-                probs.append(self._node_chances(stream, cache, n))
+                i_ = len(probs)
+                if i_ in branches:                          # chances of the branch's nodes (laid out like the tree)
+                    every = self._node_chances(stream, cache, max(branches[i_]) + 1 if branches[i_] else 0)
+                    probs.append([every[j] for j in branches[i_]] if len(every) > max(branches[i_], default=-1) else
+                                 self._node_chances(stream, cache, n))
+                else:
+                    probs.append(self._node_chances(stream, cache, n))
+        if _TREE_CORRECT:                   # PLI (item D): chances of tree nodes corrected by the observed acceptance
+            ratio = getattr(self, "_pli_ratio", 1.0)
+            for i, plan in enumerate(plans):
+                if plan[3] == "head" and plan[6] is not None and probs[i]:
+                    probs[i] = [min(1.0, p * ratio) for p in probs[i]]
         costs, overhead = self.shared_costs, self._overhead(len(plans))
-        arbitre = getattr(self, "_arbitre", None)
-        if arbitre is not None and len(plans) == 1:      # PLI : le coût d'une ligne au contexte de la demande
-            costs, overhead = arbitre.table(int(plans[0][2]), int(self.batch_rows)), arbitre.a
+        arbiter = getattr(self, "_arbiter", None)
+        if arbiter is not None and len(plans) == 1:      # PLI: the cost of a row at the request's context
+            costs, overhead = arbiter.table(int(plans[0][2]), int(self.batch_rows), plans[0][6] is not None), arbiter.a
         counts = allocate(fixed, probs, costs, overhead, max(len(plans), int(self.batch_rows)))
+        if arbiter is not None and len(plans) == 1:      # PLI_ARBITER_MIN_ROWS: no draft cut under the row step
+            from tensorfold.pli.arbiter import MIN_ROWS
+            if MIN_ROWS and plans[0][3] == "head" and probs[0]:
+                counts[0] = max(int(counts[0]), min(len(probs[0]), MIN_ROWS - 1))
         for plan, chances, count in zip(plans, probs, counts):
             if plan[3] == "head":
                 self._granted[plan[0].stream_id] = count
+                if _TREE_CORRECT and plan[6] is not None and chances:
+                    self.__dict__.setdefault("_pli_expected", {})[plan[0].stream_id] = sum(chances[:count])
             if not chances or count == len(chances):
                 continue
             if count == 0:

@@ -1,6 +1,6 @@
 """Fit a draft head's node calibration (``tensorfold.drafters.calibration``) on public prompts.
 
-    collect: send CORPUS to a server started with TF_DRAFT_LOG=<log> (sampled and greedy, fixed seeds)
+    collect: send CORPUS to a server started with PLI_DRAFT_LOG=<log> (sampled and greedy, fixed seeds)
     fit:     label every logged tree node by whether its path matches what the stream committed, fit a table a
              sampling regime, check it on held-out streams, and write the file with its source
 

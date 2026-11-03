@@ -2,13 +2,79 @@
 
 from __future__ import annotations
 
+from tensorfold.pli.falcon import capture as _falcon
 import time
+
+from tensorfold.pli import trace as _tr
+from tensorfold.pli import round_profile as _pt
 from typing import Any
 
 from tensorfold.engine.family_common import _PROFILE, _ROUND_LOG, drop_spares
 from tensorfold.engine.family_depth import DraftDepth, extend_costs
 from tensorfold.engine.family_prefill import FamilyPrefill
 from tensorfold.engine.family_shared import SharedRounds
+
+
+# PLI (30/10/2026): replay of the draft lattices logged on 29/10 (PLI_LATTICE_LOG): on the code request, the copy takes
+# the round from DFlash2's chain on 32 rounds of 564 where the chain would have kept everything (8 tokens), and gives only 1 to 6
+# (5.43 tokens per round replayed against 5.11 real). PLI_HEAD_BEFORE_COPY=1: never a copy when the head has a chain queued; =2: the
+# copy only if its first two tokens are those of the head's chain. Off by default (0).
+_HEAD_BEFORE_COPY = __import__("os").environ.get("PLI_HEAD_BEFORE_COPY", "0")
+# PLI (30/10/2026): PLI_COPY_LOG=file (jsonl, off by default): each round writes its kind and the tokens it gave; a copy round also
+# writes the copy, the head's queued chain (full: the head is no longer cut down to one draft) and the match length. Used to
+# choose offline when the copy should go before the head. The choice itself does not change.
+_COPY_LOG = __import__("os").environ.get("PLI_COPY_LOG", "")
+# PLI (30/10/2026): PLI_HEAD_BEFORE_COPY=3: choice learned per stream. At each round where the copy and the head's chain are both
+# queued, both are scored afterwards on the written text (tokens they would have kept); moving average (weight
+# PLI_HEAD_COPY_WEIGHT, 0.2) of copy minus head; the copy goes first while this average stays above -PLI_HEAD_COPY_THRESHOLD
+# (1 token). Offline (logs cj1 and cj18): long code +5.2 % tokens, 18 agent requests -0.25 %.
+_HC_WEIGHT = float(__import__("os").environ.get("PLI_HEAD_COPY_WEIGHT", "0.2") or 0.2)
+_HC_THRESHOLD = float(__import__("os").environ.get("PLI_HEAD_COPY_THRESHOLD", "1") or 1)
+
+
+def _kept(prop: list[int], actual: list[int], cap: int) -> int:
+    n = 0
+    for a, b in zip(prop[:cap], actual):
+        if a != b:
+            break
+        n += 1
+    return n + 1
+
+
+def _score_hc(stream: Any, state: dict) -> None:
+    """Score the pending choices whose next 8 tokens are written (or whose stream is finished)."""
+
+    ctx = stream.context
+    rest = []
+    for b, cp, hd in state["pending"]:
+        if len(ctx) >= b + 8 or getattr(stream, "finished", False):
+            actual = ctx[b:b + 8]
+            d = _kept(cp, actual, len(cp)) - _kept(hd, actual, 7)
+            state["avg"] = (1.0 - _HC_WEIGHT) * state["avg"] + _HC_WEIGHT * d
+            state["scored"] += 1
+        else:
+            rest.append((b, cp, hd))
+    state["pending"] = rest
+
+
+def _first_tokens(queued: Any, n: int) -> list[int]:
+    """The first n tokens of the head path of the queued drafts (chain, or best-first tree: first child at each step)."""
+
+    import mlx.core as mx
+
+    if isinstance(queued, tuple):
+        tokens, parents = queued
+        tokens = [int(t) for t in (tokens.tolist() if isinstance(tokens, mx.array) else tokens)]
+        parents = [int(q) for q in parents]
+        out, cur = [], -1
+        while len(out) < n:
+            nxt = next((i for i, q in enumerate(parents) if q == cur), None)
+            if nxt is None:
+                break
+            out.append(tokens[nxt]); cur = nxt
+        return out
+    tokens = queued.tolist() if isinstance(queued, mx.array) else queued
+    return [int(t) for t in list(tokens)[:n]]
 
 
 class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
@@ -67,11 +133,11 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
         # heads that give each drafted node's chance of landing draft a budget first; rows are allocated after
         self.node_probabilities = callable(getattr(model, "draft_probabilities", None))
         self._granted: dict[str, int] = {}           # stream id -> drafts its last shared round kept
-        # PLI : arbitre de coût (largeur des copies et des brouillons selon le coût réel d'une ligne au contexte courant)
-        from tensorfold.pli import arbitre
+        # PLI: cost arbiter (width of copies and drafts according to the real cost of a row at the current context)
+        from tensorfold.pli import arbiter
 
-        self._arbitre = (arbitre.Arbitre(extend_costs(self.family_costs, self.family_width))
-                         if arbitre.ACTIF and self.family_costs else None)
+        self._arbiter = (arbiter.Arbiter(extend_costs(self.family_costs, self.family_width))
+                         if arbiter.ACTIVE and self.family_costs else None)
         self._grammar_window: dict[str, Any] = {}    # stream id -> the window its grammar kept, masked at the draw
 
     def _draw(self, logits: Any, sampling: Any, positions: Any) -> Any:
@@ -93,6 +159,10 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
             if callable(queued):                  # a new stream's first drafts, settled before anything reads them
                 self._next[stream_id] = queued()
         live = [(s, c) for s, c in self._live if not s.finished and s.stream_id not in self.paused]
+        messages = getattr(self.model, "pli_messages", None)     # PLI: number of messages in the prompt (hybrid)
+        if callable(messages):
+            for s, c in live:
+                messages(c, s)
         if len(live) > 1 and self.family_streams:
             # a shared round is synchronous: a stream that ran a step ahead lands its queued token first
             for stream, _ in live:
@@ -123,14 +193,26 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
                     streams=1, width=rows, rows=rows, ragged=False, rollbacks=int(0 < keep < rows),
                     committed=len(got), forward_ms=ms, finalize_ms=0.0, rollback_ms=0.0, total_ms=ms,
                     started_at=started))
+                if _tr.active():
+                    prev_end = getattr(self, "_tr_end", 0.0)
+                    parts = self.__dict__.pop("_tr_parts", None) or {"kind": "pipeline"}
+                    _tr.pt("round", stream.stream_id, t=started, ms=ms, rows=rows, kept=keep, tokens=len(got),
+                           ctx=int(stream.cache_len), gap_ms=(started - prev_end) * 1e3 if prev_end else None,
+                           **parts)
+                    self._tr_end = time.perf_counter()
+        from tensorfold.pli import kv_sharing as _kvp
         for stream, cache in self._live:
             if stream.finished:
                 stream.finished_at = time.perf_counter()
                 self._release_stream_state(stream.stream_id)
                 if self._keeps_decoded(stream):
                     # one-token rounds leave the last token absorbed when they ran ahead; ``cache_len`` counts it
+                    # PLI: no copy, the request's KV layers become the checkpoint's
                     self.finished_caches[stream.stream_id] = (stream.context[: stream.cache_len],
-                                                              drop_spares(self.copy_single_cache(cache)))
+                                                              drop_spares(_kvp.retain(cache, self.copy_single_cache)
+                                                                          if _kvp.ACTIVE else self.copy_single_cache(cache)))
+                elif _kvp.ACTIVE:
+                    _kvp.release(cache)
         self._live = [(s, c) for s, c in self._live if not s.finished]
         return landed
 
@@ -156,8 +238,8 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
             return []
         try:
             width = self._copy_width.get(stream.stream_id, self.first_copy) if self._alone else self.first_copy
-            if self._arbitre is not None and self._alone:
-                width = min(width, self._arbitre.largeur_copie(stream.stream_id, stream.cache_len, width))
+            if self._arbiter is not None and self._alone:
+                width = min(width, self._arbiter.copy_width(stream.stream_id, stream.cache_len, width))
                 if width < 2:
                     return []
             copied = [int(t) for t in stream.proposer.propose(stream.context, min(width, stream.draft_room - 1))]
@@ -218,6 +300,21 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
             return "forced", forced, forced, None
         if copied is None:
             copied = [] if not stream.drafts else self._copy_proposal(stream)
+            if copied and _COPY_LOG and queued is not None:
+                stream._cj = {"copy": [int(t) for t in copied], "head": _first_tokens(queued, 8),
+                              "match": int(getattr(stream.proposer, "last_match", 0) or 0)}
+            if copied and _HEAD_BEFORE_COPY == "3" and queued is not None:
+                hc = stream.__dict__.setdefault("_hc", {"avg": 0.0, "pending": [], "scored": 0})
+                _score_hc(stream, hc)
+                head = _first_tokens(queued, 7)
+                if len(head) >= 4:                    # a head chain to score (not the MTP head cut down to one draft)
+                    hc["pending"].append((int(stream.context_len), [int(t) for t in copied], head))
+                    if hc["avg"] < -_HC_THRESHOLD:
+                        copied = []                   # PLI: the head did better than the copy on this stream
+            elif copied and _HEAD_BEFORE_COPY in ("1", "2") and queued is not None:
+                head = _first_tokens(queued, 2)
+                if len(head) >= 2 and (_HEAD_BEFORE_COPY == "1" or [int(t) for t in copied[:2]] != head):
+                    copied = []                       # PLI: the head's chain goes before the copy
         if copied:
             return "copy", copied, forced, None
         if stream.drafts and queued is not None:
@@ -298,19 +395,24 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
                     observe = getattr(stream.proposer, "observe", None)
                     if callable(observe):
                         observe(rows - 1, accepted)
-                    if self._arbitre is not None:
-                        self._arbitre.copie_vue(stream.stream_id, rows - 1, accepted)
+                    if self._arbiter is not None:
+                        self._arbiter.copy_seen(stream.stream_id, rows - 1, accepted)
                     if self._alone:
                         width = self._copy_width.get(stream.stream_id, self.first_copy)
                         self._copy_width[stream.stream_id] = (min(self.max_copy, 2 * width + 1)
                                                               if accepted == rows - 1 else self.first_copy)
                 elif kind == "head":
                     self._observe_depth(stream, max(tree_paths(rows_parents)[0]), accepted)
-                    # PLI (rappel v2, PLI_RAPPEL) : la recopie du registre se compare aux brouillons récents du flux
-                    tete = getattr(stream.proposer, "observe_tete", None) or getattr(
-                        getattr(stream.proposer, "fallback", None), "observe_tete", None)
-                    if callable(tete):
-                        tete(accepted)
+                    expected = getattr(self, "_pli_expected", {}).pop(stream.stream_id, None)
+                    if expected:                        # PLI (item D, PLI_TREE_CORRECT): observed acceptance against expected
+                        self._pli_num = getattr(self, "_pli_num", 0.0) * 0.97 + accepted
+                        self._pli_den = getattr(self, "_pli_den", 0.0) * 0.97 + float(expected)
+                        self._pli_ratio = min(1.5, max(0.3, self._pli_num / self._pli_den))
+                    # PLI (recall v2, PLI_RECALL): the register's copy is compared with the stream's recent drafts
+                    head = getattr(stream.proposer, "observe_head", None) or getattr(
+                        getattr(stream.proposer, "fallback", None), "observe_head", None)
+                    if callable(head):
+                        head(accepted)
         cut = stream.think_cut(committed)
         if cut is not None:
             path = path[:cut + 1]
@@ -334,6 +436,22 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
     def _is_prefix(path: list[int]) -> bool:
         return path == list(range(len(path)))
 
+    def _head_is_mtp(self, stream: Any) -> bool:
+        """PLI (30/10/2026): true if this stream's head drafts step by step (MTP): a full chain costs one step per draft there,
+        whereas a DFlash2 lattice gives it at once (tc18-3: +1 to +6 ms per round on the agent requests, served with MTP)."""
+
+        model = getattr(self, "model", None)
+        if model is None:
+            return True                        # no known model: the behaviour before (a single draft)
+        mode = getattr(model, "_mode", None)
+        if mode is None:
+            return getattr(model, "head_drafts", None) is None
+        cache = next((c for s, c in self._live if s is stream), None)
+        try:
+            return cache is not None and mode(cache) == "mtp"
+        except Exception:  # noqa: BLE001 - the copy choice must never break a stream
+            return True
+
     def _head_depth(self, stream: Any, budget: int | None = None) -> int:
         if stream.finished:
             depth = 0
@@ -345,7 +463,7 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
             depth = self._depth(stream)
         if stream.force:
             return 0                   # the next round verifies the thinking budget's forced tokens
-        if depth and self._copy_proposal(stream):
+        if depth and ((_HEAD_BEFORE_COPY == "0" and not _COPY_LOG) or self._head_is_mtp(stream)) and self._copy_proposal(stream):
             return 1                   # a copied continuation is ahead: one head draft, in case it is gone
         return depth
 
@@ -380,7 +498,8 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
         from tensorfold.kernels.qwen.dense.v1.lane_tree import tree_paths
 
         kind, drafts, forced, parents = self._plan_window(stream, copied)
-        if kind == "head" and self.node_probabilities:
+        # PLI: a chain drawn on the GPU (lazy) is verified whole, with no sharing decided on the CPU
+        if kind == "head" and self.node_probabilities and not getattr(cache[-1], "lazy", False):
             plan = [stream, cache, position, kind, drafts, forced, parents]
             self._allocate([plan])
             kind, drafts, parents = plan[3], plan[4], plan[6]
@@ -391,13 +510,22 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
         rows_parents = self._row_parents(rows, parents)
         depths = tree_paths(rows_parents)[0]
         tree = {} if parents is None else {"parents": rows_parents}
+        sk = _pt.kind_of(kind, parents, position) if _pt.ACTIVE else kind
+        if _pt.ACTIVE:
+            t_pt = _pt.mark(sk, "before", started)
         hidden = model.hidden(inputs.reshape(1, rows), cache, **tree)
+        if _pt.ACTIVE:
+            t_pt = _pt.mark(sk, "verify", t_pt, hidden)
         logits = model.head(hidden)
         logits = logits.reshape(logits.shape[1:])            # [R, V] as a view (MLX's [0] is a gather)
+        if _pt.ACTIVE:
+            t_pt = _pt.mark(sk, "head", t_pt, logits)
         window = self._grammar_window.pop(stream.stream_id, None)
         if window is not None:                               # each row masked along its own path
             logits = stream.constraint.mask(logits, window)
         tokens = self._draw(logits, stream.sampling, [position + 1 + d for d in depths])
+        if _pt.ACTIVE:
+            t_pt = _pt.mark(sk, "draw", t_pt, tokens)
         speculate = (self.family_mtp and stream.drafts and kind != "forced" and self.speculate_early
                      and parents is None)
         parts = [tokens]
@@ -418,7 +546,26 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
         proposed = values[-(rows - 1):] if isinstance(drafts, mx.array) and rows > 1 else [int(t) for t in drafts]
         window = [int(stream.pending[-1]), *proposed]          # the rows' tokens, the pending one first
         got, path, cut, follow = self._conclude(stream, kind, forced, sampled, window, rows_parents)
+        if _COPY_LOG:
+            import json as _json
+
+            cj = getattr(stream, "_cj", None)
+            stream._cj = None
+            rec = {"stream": str(stream.stream_id), "pos": int(position), "kind": kind, "given": [int(t) for t in got]}
+            if cj is not None and kind == "copy":
+                rec.update(cj)
+            with open(_COPY_LOG, "a") as handle:
+                handle.write(_json.dumps(rec) + "\n")
+        if kind == "head" and parents is not None and getattr(cache[-1], "kf_nodes", None):
+            from tensorfold.pli import kflash as _kf          # PLI: nodes tried and accepted this round
+
+            _kf.observe_round(cache[-1], rows_parents, path)
+        _falcon.seen("alone", kind, cut, self._is_prefix(path))
+        if _falcon.active() and kind != "forced" and cut is None and self._is_prefix(path):
+            _falcon.capture(stream.stream_id, position, hidden[0], logits, path, follow)   # PLI: FALCON R0
         keep = len(path)
+        if _pt.ACTIVE:
+            t_pt = _pt.mark(sk, "read_and_conclude", t_pt)
         if keep < rows or parents is not None:      # a tree commits in keep_rows, even one kept whole
             model.keep_rows(cache, rows, keep if self._is_prefix(path) else path)
         if self.family_mtp and stream.drafts:
@@ -433,16 +580,24 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
             if kind == "head" or (kind == "none" and self.plain_guard):
                 self._observe_cost(len(proposed), (time.perf_counter() - started) * 1e3,
                                    initializing=stream.rounds == 1, stream=stream)
+        if _pt.ACTIVE:
+            nxt = self._next.get(stream.stream_id)
+            t_pt = _pt.mark(sk, "next_draft", t_pt, *([nxt] if hasattr(nxt, "shape") else []))
+            _pt.end_of_round(sk, started, rows, keep)
         if _PROFILE:
             self._profile(rows, built - started, read - built, time.perf_counter() - read)
         ms = (time.perf_counter() - started) * 1e3
         if kind == "head":
             self._observe_overhead(1, rows, ms)
-        if self._arbitre is not None and stream.rounds > 1 and kind != "forced":
-            self._arbitre.observe(rows, position, ms)
+        if self._arbiter is not None and stream.rounds > 1 and kind != "forced":
+            self._arbiter.observe(rows, position, ms, parents is not None)
         if _ROUND_LOG:
             with open(_ROUND_LOG, "a") as handle:
                 handle.write(f"{position} {kind} {rows} {keep} {ms:.2f}\n")
+        if _tr.active():     # PLI trace: split of the round, queued by _family_step with the gap between rounds
+            self._tr_parts = {"pos": position, "kind": kind, "proposed": len(proposed),
+                              "build_ms": (built - started) * 1e3, "gpu_wait_ms": (read - built) * 1e3,
+                              "after_ms": (time.perf_counter() - read) * 1e3}
         return got, rows, keep
 
     def _profile(self, rows: int, build: float, wait: float, after: float) -> None:
@@ -462,8 +617,8 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
         for table in (self._inflight, self._next, self._mode, self._depth_state, self._served, self._granted,
                       self._grammar_window, self._copy_width):
             table.pop(stream_id, None)
-        if getattr(self, "_arbitre", None) is not None:
-            self._arbitre.oublie(stream_id)
+        if getattr(self, "_arbiter", None) is not None:
+            self._arbiter.forget(stream_id)
 
     def _family_reset(self) -> None:
         self._live = []

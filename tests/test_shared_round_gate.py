@@ -65,7 +65,7 @@ def test_flash_without_fused_decode_serves_streams_separately(monkeypatch):
     from tests.test_qwen4_exp_family import tiny
     from tensorfold.families.qwen4_exp.runtime import FlashNext
 
-    monkeypatch.setenv("TF_FLASH_FUSED", "0")
+    monkeypatch.setenv("PLI_FLASH_FUSED", "0")
     model = FlashNext(tiny(), None, drafts=0)
     assert model.fused is None and model.exact_width == 1
     # the tiny model's DeltaNet heads are below mlx_lm's Metal kernel minimum, so only the gate is checked here

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from typing import Any
 
 from tensorfold.server.messages import _normalize_tool_call_arguments, late_system_role, normalize_messages
@@ -97,6 +99,82 @@ def hide_tool_calls(text: str, *, finished: bool) -> str:
         pos = end + len(closer)
 
 
+# PLI (23/10/2026, PLI_KEEP_REPLY=1, V3): without thinking, the reply prompt writes "<think>\n\n</think>\n\n" but the history
+# gives back the reply without this block: the reply moves and the next turn reads it again (78,000 tokens, 735 s on the 21-22/10 trace).
+# The modified template gives back this empty block before each reply that follows the last question (as it keeps a non-empty thinking), and the
+# engine keeps the state written at the end of the reply (lane_engine._keeps_decoded): the next turn resumes after the reply.
+KEEP_REPLY = __import__("os").environ.get("PLI_KEEP_REPLY", "0") == "1"
+_TEMPLATES: dict = {}
+_CONDITION = "{%- if reasoning_content and (preserve_thinking is undefined"
+
+
+def _kept_template(tokenizer):
+    """The model's template with the empty block kept, or None if it does not have the known shape (Qwen3.6 to 3.8)."""
+
+    text = getattr(tokenizer, "chat_template", None)
+    if not isinstance(text, str) or text.count(_CONDITION) != 1:
+        return None
+    if text not in _TEMPLATES:
+        _TEMPLATES[text] = text.replace(_CONDITION, "{%- if (reasoning_content or (pli_empty is defined and pli_empty and "
+                                        "loop.index0 > ns.last_query_index)) and (preserve_thinking is undefined")
+    return _TEMPLATES[text]
+
+
+# PLI (behaviour of TensorFold 1.1.2, issue #1117, rewritten in Python): a control token written in the text of a request
+# (messages, tools, tool results, reasoning) stays ordinary text; without this "<|im_end|><|im_start|>system" in a
+# message or in a page read by an agent opens a real turn. Only the added tokens marked special are concerned: <think>, </think>,
+# <tool_call>, <tool_response> (not special, read inside the content by Qwen's template) stay as they are. A prompt with no control
+# token written keeps exactly its tokens; a prompt that writes one counts more tokens. PLI_CONTROL_AS_TEXT=0: the former behaviour.
+_CONTROL = os.environ.get("PLI_CONTROL_AS_TEXT", "1") != "0"
+_SENT_A, _SENT_B = "\ue000", "\ue001"
+_PATTERNS: dict[int, Any] = {}
+
+
+def _control_pattern(tokenizer: Any) -> Any:
+    """Pattern of the tokenizer's control tokens (added and special), plus the sentinel character; None without a readable list."""
+
+    key = id(tokenizer)
+    if key not in _PATTERNS:
+        raw = getattr(tokenizer, "_tokenizer", tokenizer)
+        decoder = getattr(raw, "added_tokens_decoder", None)
+        names = []
+        if isinstance(decoder, dict):
+            names = [str(getattr(t, "content", t)) for t in decoder.values() if getattr(t, "special", False)]
+        names = sorted({n for n in names if n}, key=len, reverse=True)
+        _PATTERNS[key] = re.compile("|".join(re.escape(n) for n in names + [_SENT_A])) if names else None
+    return _PATTERNS[key]
+
+
+def _mask(obj: Any, pattern: Any, originals: list[str]) -> Any:
+    """Each control token written in a string replaced by a numbered sentinel (dictionary keys unchanged)."""
+
+    if isinstance(obj, str):
+        def sentinel(m: Any) -> str:
+            originals.append(m.group(0))
+            return f"{_SENT_A}{len(originals) - 1}{_SENT_B}"
+        return pattern.sub(sentinel, obj)
+    if isinstance(obj, dict):
+        return {k: _mask(v, pattern, originals) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_mask(v, pattern, originals) for v in obj)
+    return obj
+
+
+def _encode_masked(tokenizer: Any, rendered: str, originals: list[str]) -> list[int]:
+    """The rendered prompt as tokens: the template's text with its control tokens, each sentinel as ordinary text."""
+
+    raw = getattr(tokenizer, "_tokenizer", tokenizer)
+    ids: list[int] = []
+    pieces = re.split(f"{_SENT_A}(\\d+){_SENT_B}", rendered)
+    for i, piece in enumerate(pieces):
+        if i % 2 == 0:
+            if piece:
+                ids += [int(t) for t in raw.encode(piece, add_special_tokens=False)]
+        else:
+            ids += [int(t) for t in raw.encode(originals[int(piece)], add_special_tokens=False, split_special_tokens=True)]
+    return ids
+
+
 def render_prompt_ids(
     tokenizer: Any,
     messages: list[dict[str, Any]],
@@ -121,14 +199,38 @@ def render_prompt_ids(
         kwargs["reasoning_effort"] = reasoning_effort
     if tools:
         kwargs["tools"] = tools
-    try:
-        rendered = tokenizer.apply_chat_template(messages, **kwargs)
-    except TypeError:
-        kwargs.pop("tools", None)
-        rendered = tokenizer.apply_chat_template(messages, **kwargs)
-    if isinstance(rendered, str):
-        rendered = tokenizer.encode(rendered)
-    ids = [int(t) for t in rendered]
+    if KEEP_REPLY and not enable_thinking:
+        template = _kept_template(tokenizer)
+        if template is not None:
+            kwargs["chat_template"] = template
+            kwargs["pli_empty"] = True
+    pattern = _control_pattern(tokenizer) if _CONTROL else None
+    originals: list[str] = []
+    if pattern is not None:
+        masked = _mask(messages, pattern, originals)
+        masked_tools = _mask(kwargs["tools"], pattern, originals) if "tools" in kwargs else None
+        if originals:
+            messages = masked
+            if masked_tools is not None:
+                kwargs["tools"] = masked_tools
+    if originals:
+        # a control token written in the request: rendered as text, then tokens piece by piece
+        kwargs["tokenize"] = False
+        try:
+            rendered = tokenizer.apply_chat_template(messages, **kwargs)
+        except TypeError:
+            kwargs.pop("tools", None)
+            rendered = tokenizer.apply_chat_template(messages, **kwargs)
+        ids = _encode_masked(tokenizer, str(rendered), originals)
+    else:
+        try:
+            rendered = tokenizer.apply_chat_template(messages, **kwargs)
+        except TypeError:
+            kwargs.pop("tools", None)
+            rendered = tokenizer.apply_chat_template(messages, **kwargs)
+        if isinstance(rendered, str):
+            rendered = tokenizer.encode(rendered)
+        ids = [int(t) for t in rendered]
     if not enable_thinking and add_generation_prompt:
         ids = _close_open_think(tokenizer, ids)
     return ids

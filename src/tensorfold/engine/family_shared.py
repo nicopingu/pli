@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from tensorfold.pli.falcon import capture as _falcon
 import time
+
+from tensorfold.pli import trace as _tr
 from typing import Any
 
 from tensorfold.engine.family_common import _PROFILE, _ROUND_LOG, cache_arrays
@@ -116,6 +119,9 @@ class SharedRounds:
                 proposed = [int(t) for t in drafts]
             window = [int(stream.pending[-1]), *proposed]
             got, path, cut, follow = self._conclude(stream, kind, forced, sampled, window, rp)
+            _falcon.seen("shared", kind, cut, self._is_prefix(path))
+            if _falcon.active() and kind != "forced" and cut is None and self._is_prefix(path):
+                _falcon.capture(stream.stream_id, plan[2], hidden[0], logits, [at + r for r in path], follow)
             paths.append(path)
             follows.append(follow)
             out[stream.stream_id] = (got, n, len(path))
@@ -166,6 +172,13 @@ class SharedRounds:
             streams=len(plans), width=max(lengths), rows=sum(lengths), ragged=len(set(lengths)) > 1,
             rollbacks=sum(1 for n, k in zip(lengths, keeps) if k < n), committed=sum(len(v[0]) for v in out.values()),
             forward_ms=ms, finalize_ms=0.0, rollback_ms=0.0, total_ms=ms, started_at=started))
+        if _tr.active():
+            prev_end = getattr(self, "_tr_end", 0.0)
+            _tr.pt("round_p", t=started, ms=ms, streams=len(plans), rows=sum(lengths), width=max(lengths),
+                   reqs=[p[0].stream_id for p in plans], rows_per=list(lengths), kept_per=list(keeps),
+                   tokens=sum(len(v[0]) for v in out.values()),
+                   gap_ms=(started - prev_end) * 1e3 if prev_end else None)
+            self._tr_end = time.perf_counter()
         if _ROUND_LOG:
             with open(_ROUND_LOG, "a") as handle:
                 for plan, n, keep in zip(plans, lengths, keeps):

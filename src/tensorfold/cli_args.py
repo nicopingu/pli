@@ -103,10 +103,10 @@ def build_parser(handlers: dict[str, Callable[[argparse.Namespace], int]]) -> ar
                             "40 GiB less at peak (the tables are 29.8 GiB); a 128 GB Mac needs it")
 
     speed.add_argument("--no-update-check", action="store_true",
-                       help="don't ask GitHub whether a newer release exists (also TENSORFOLD_NO_UPDATE_CHECK=1)")
+                       help="kept for compatibility: PLI never asks GitHub for a newer release (also PLI_NO_UPDATE_CHECK=1)")
 
-    serve.add_argument("--profile", default=None, metavar="NOM",
-                       help="machine profile of PLI_* settings (e.g. m1-ultra; also PLI_PROFIL); "
+    serve.add_argument("--profile", default=None, metavar="NAME",
+                       help="machine profile of PLI_* settings (e.g. m1-ultra; also PLI_PROFILE); "
                             "variables already in the environment win")
     serve.add_argument("--backend", choices=("auto", "mlx"), default="auto",
                        help="MLX on Apple Silicon (the only backend PLI has; kept for compatibility)")
@@ -119,9 +119,9 @@ def build_parser(handlers: dict[str, Callable[[argparse.Namespace], int]]) -> ar
     models = commands.add_parser("models", help="list the model families and the checkpoints they are tested with")
     models.set_defaults(func=handlers["models"])
 
-    update = commands.add_parser("update", help="install the newest TensorFold release from GitHub")
-    update.add_argument("--check", action="store_true", help="only say whether a newer release exists")
-    update.add_argument("--force", action="store_true", help="reinstall the newest release even when it is current")
+    update = commands.add_parser("update", help="disabled in PLI: update with git pull and pip install (see RUNBOOK.md)")
+    update.add_argument("--check", action="store_true", help="kept for compatibility (pli update is disabled)")
+    update.add_argument("--force", action="store_true", help="kept for compatibility (pli update is disabled)")
     update.set_defaults(func=handlers["update"])
 
     info = commands.add_parser("info", help="show which family serves a model (reads its config.json only)")
@@ -135,7 +135,7 @@ def build_parser(handlers: dict[str, Callable[[argparse.Namespace], int]]) -> ar
                                help="estimate local checkpoint weights against MLX budgets without loading a model")
     plan.add_argument("model", help="a local model directory or already cached Hugging Face repo id")
     plan.add_argument("--memory-gb", type=float, default=None, metavar="GIB",
-                      help="also check this explicit budget, as TENSORFOLD_MEMORY_LIMIT_GB would set it")
+                      help="also check this explicit budget, as PLI_MEMORY_LIMIT_GB would set it")
     plan.add_argument("--ram", type=int, action="append", default=[], metavar="GIB",
                       help="also estimate this RAM class under the current GPU ceiling (repeatable)")
     plan.set_defaults(func=handlers["plan"])

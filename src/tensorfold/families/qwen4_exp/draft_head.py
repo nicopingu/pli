@@ -18,6 +18,13 @@ def draft_ids(path: Path = VOCAB_FILE, multiple: int = 64) -> np.ndarray:
     listed = {int(line) for line in Path(path).read_text().split() if line.strip()}
     if not listed:
         raise ValueError(f"{path}: no token ids")
+    from tensorfold.pli import extended_list as _lp
+
+    if _lp.active() and path == VOCAB_FILE:      # PLI (PLI_EXTENDED_DRAFT_LIST): extended list
+        added = set(_lp.ids()) - listed
+        if added:
+            listed |= added
+            _lp.say("the MTP head", len(added))
     extra, candidate = [], 0
     while (len(listed) + len(extra)) % multiple:
         if candidate not in listed:

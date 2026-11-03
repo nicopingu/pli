@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from tensorfold.pli import evenements as _ev
+from tensorfold.pli import events as _ev
+from tensorfold.pli import trace as _tr
+from tensorfold.pli import trace_layers as _tc
 import time
 from typing import Any
 
 from tensorfold.engine.lane_engine import LaneStream
 from tensorfold.server.cancellation import PrefillGuard, RequestCancelled
 from tensorfold.server.checkpoints import choose_checkpoints
+_KEEP_REPLY = __import__("os").environ.get("PLI_KEEP_REPLY", "0") == "1"   # PLI (23/10/2026): see server/text.py
+# PLI (30/10/2026, event log of 29-30/10: 53 requests read again in full, 4,300 s in 24 h): PLI_REREAD_DISK=1 (off)
+# looks at the disk again at a request's first chunk. Between the open (the only lookup until now) and that chunk,
+# the request's checkpoint can be evicted by another request's (two agent sessions taking turns under the budget); it is
+# then on disk (spilled), and reads back in 1 to 2 s instead of 4 to 6 min of prefill. No effect when memory already has the longest.
+_REREAD_DISK = __import__("os").environ.get("PLI_REREAD_DISK", "0") == "1"
 from tensorfold.server.errors import RequestError
 
 
@@ -43,7 +51,7 @@ class PromptFill:
 
         job.started_at = time.perf_counter()
         self.starts += 1
-        _ev.ev("lecture_debut", job, prompt=len(job.prompt_ids))
+        _ev.ev("prefill_start", job, prompt=len(job.prompt_ids))
         self._starting = job
         filling = Filling(job, left=len(job.prompt_ids))
         try:
@@ -60,13 +68,16 @@ class PromptFill:
             filling.shared_at = {starts.floor(n) for n in job.shared_prefix_lens} - {0}
             if self.checkpoints is not None and job.vision is None:
                 self._read_disk_block(job.prompt_ids, lambda n: n in starts)
-                entry = self.checkpoints.peek(job.prompt_ids, usable=lambda n: n in starts)
+                entry = self.checkpoints.peek(job.prompt_ids, usable=lambda n: n in starts or _KEEP_REPLY)
                 if memory is not None:
                     memory.require(current_cache=None if entry is None else entry.cache, keep=entry)
                 filling.left -= 0 if entry is None else len(entry.tokens)
         except Exception as exc:  # noqa: BLE001 - reported to the waiting request, as a failed prefill is
             self._end_fill(filling, exc)
             return None
+        if _tr.active():
+            _tr.pt("open", job.job_id, t=job.started_at, ms=(time.perf_counter() - job.started_at) * 1e3,
+                   prompt=len(job.prompt_ids), left=filling.left, prefills=len(self._fills))
         self._fills.append(filling)
         return filling
 
@@ -74,12 +85,15 @@ class PromptFill:
         """Its first chunk: the longest stored prefix now (another prompt may have stored it), then its stream."""
 
         job, starts, shared_at = filling.job, filling.starts, filling.shared_at
+        _tr_t0 = time.perf_counter()
         cache = None
         cached = 0
         last_prompt: list[int] | None = None
         checkpoints_at: list[int] = []
         if self.checkpoints is not None and job.vision is None:
-            usable = lambda n: n in starts
+            if _REREAD_DISK:
+                self._read_disk_block(job.prompt_ids, lambda n: n in starts)
+            usable = lambda n: n in starts or _KEEP_REPLY   # PLI: a point at the end of a reply is not a chunk start
             entry = self.checkpoints.peek(job.prompt_ids, usable=usable)
             take = False
             memory = self.prompt_memory
@@ -96,6 +110,10 @@ class PromptFill:
                 if self.disk_blocks is not None and cached in shared_at:
                     self.disk_blocks.touch(job.prompt_ids[:cached])
             filling.left = len(job.prompt_ids) - cached
+            nearest = getattr(self.checkpoints, "nearest_prompt", None)
+            if last_prompt is None and callable(nearest):
+                # PLI (PLI_FORK_MIN): with no resume, the fork point is looked for in the kept prompts (same document, other question)
+                last_prompt = nearest(job.prompt_ids)
             chosen = choose_checkpoints(job.history_len, cached, last_prompt, job.prompt_ids)
             checkpoints_at = sorted(at for at in {*(starts.floor(n) for n in chosen), *shared_at}
                                     if cached < at < len(job.prompt_ids))
@@ -123,8 +141,14 @@ class PromptFill:
         if job.label_ids:
             stream.label_ids = tuple(job.label_ids)     # the prefill stops at these logits and draws nothing
         job.stream = stream
+        _tr_t1 = time.perf_counter()
         filling.steps = self.engine.begin_stream(stream, cache=cache, cached_tokens=cached,
                                                  checkpoints_at=checkpoints_at)
+        if _tr.active():
+            _tr.pt("prefix_resume", job.job_id, t=_tr_t0, ms=(_tr_t1 - _tr_t0) * 1e3,
+                   stream_ms=(time.perf_counter() - _tr_t1) * 1e3, reused=cached, left=filling.left,
+                   checkpoints=len(checkpoints_at), no_copy=bool(cache is not None and filling.held is not None
+                                                                 and filling.held.cache is cache) or None)
 
     def _rounds_had_turn(self) -> bool:
         """Whether rounds spent the credit chunks gave them (decode_share of each chunk's time) or fill_rounds ran."""
@@ -187,6 +211,14 @@ class PromptFill:
         fed = getattr(self.engine, "prefill_tokens", 0) - fed
         filling.left -= fed
         self.prefilled.add(fed, self.clock() - started)
+        if _tr.active():
+            _tr.pt("chunk", filling.job.job_id, t=started, tokens=fed, ms=(self.clock() - started) * 1e3,
+                   left=filling.left, wide=wide, prefills=len(self._fills),
+                   streams=int(getattr(self.engine, "active_count", 0)), abort=abort is not None or None)
+            if _tc.ACTIVE and fed:     # PLI_TRACE_LAYERS (evolution mode): the detail of the chunk, same request
+                d = _tc.take()
+                if d:
+                    _tr.pt("sub_chunk", filling.job.job_id, t=started, tokens=fed, **d)
         if abort is None:
             for other in self._fills:
                 other.passed = 0 if other is filling else other.passed + 1
@@ -204,15 +236,18 @@ class PromptFill:
             if error is not None:
                 raise error
             stream = job.stream
+            _tr_t0 = time.perf_counter()
             self._keep_checkpoints(job, shared_at)
+            if _tr.active():
+                _tr.pt("checkpoints", job.job_id, t=_tr_t0, ms=(time.perf_counter() - _tr_t0) * 1e3)
             scored = getattr(stream, "scored", None)
             if scored is not None:
                 job.scored = scored
             job.cancellation.check()
             job.prefilled_at = time.perf_counter()
             job.cached_tokens = int(stream.cached_tokens)      # 0 when a stored state was not at a chunk start
-            _ev.ev("lecture_fin", job, prompt=len(job.prompt_ids), cache=job.cached_tokens,
-                   duree=job.prefilled_at - job.started_at)
+            _ev.ev("prefill_end", job, prompt=len(job.prompt_ids), cache=job.cached_tokens,
+                   duration=job.prefilled_at - job.started_at)
             if stream.emitted:
                 job.chunks.put(list(stream.emitted))
             if stream.finished:

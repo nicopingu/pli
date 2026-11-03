@@ -159,6 +159,135 @@ _CHAIN = r"""
 """
 
 
+# PLI (21/10/2026, item D, PLI_TREE_DELTANET=1): DeltaNet recurrence of a TREE of W <= 8 nodes (16 KB of threadgroup memory). The "tree" kernel stores each node's state
+# in a register array indexed by the parent (index known only at run time: the array goes to thread memory) and
+# preloads nothing; in the round, layer after layer, it costs 4 ms more than the chain (tbench-arbre2). Here: the current state stays
+# in registers when the parent is the previous node (like the chain), the nodes' states are kept in threadgroup memory
+# (slots[node][ty][i][32], without bank conflict), and the next node's inputs are preloaded during the step. Same arithmetic,
+# in the same order, as lane_tree (no mlx_lm): same bits.
+_TREE2 = r"""
+        auto n = thread_position_in_grid.z;
+        auto hv_idx = n % Hv;
+        auto hk_idx = hv_idx / (Hv / Hk);
+        constexpr int n_per_t = Dk / 32;
+        auto dk_idx = thread_position_in_threadgroup.x;
+        auto ty = thread_position_in_threadgroup.y;
+        auto dv_idx = thread_position_in_grid.y;
+        threadgroup float slots[W][4][n_per_t][32];
+        auto i_state = state_in + (hv_idx * Dv + dv_idx) * Dk;
+        float s0[n_per_t], state[n_per_t], kc[n_per_t], qc[n_per_t], kn[n_per_t], qn[n_per_t];
+        for (int i = 0; i < n_per_t; ++i) {
+          s0[i] = static_cast<float>(i_state[n_per_t * dk_idx + i]);
+          kc[i] = static_cast<float>(k[hk_idx * Dk + n_per_t * dk_idx + i]);
+          qc[i] = static_cast<float>(q[hk_idx * Dk + n_per_t * dk_idx + i]);
+          state[i] = s0[i];
+        }
+        float vc = static_cast<float>(v[hv_idx * Dv + dv_idx]);
+        float gc = static_cast<float>(g[hv_idx]);
+        float bc = static_cast<float>(beta[hv_idx]);
+        float vn = 0.0f, gn = 0.0f, bn = 0.0f;
+        #pragma unroll
+        for (int node = 0; node < W; ++node) {
+          const int parent = parents[node];
+          if (parent < 0) {
+            for (int i = 0; i < n_per_t; ++i) state[i] = s0[i];
+          } else if (parent != node - 1) {
+            for (int i = 0; i < n_per_t; ++i) state[i] = slots[parent][ty][i][dk_idx];
+          }
+          if (node + 1 < W) {
+            for (int i = 0; i < n_per_t; ++i) {
+              kn[i] = static_cast<float>(k[((node + 1) * Hk + hk_idx) * Dk + n_per_t * dk_idx + i]);
+              qn[i] = static_cast<float>(q[((node + 1) * Hk + hk_idx) * Dk + n_per_t * dk_idx + i]);
+            }
+            vn = static_cast<float>(v[((node + 1) * Hv + hv_idx) * Dv + dv_idx]);
+            gn = static_cast<float>(g[(node + 1) * Hv + hv_idx]);
+            bn = static_cast<float>(beta[(node + 1) * Hv + hv_idx]);
+          }
+          float kv_mem = 0.0f;
+          for (int i = 0; i < n_per_t; ++i) {
+            state[i] = state[i] * gc;
+            kv_mem += state[i] * kc[i];
+          }
+          kv_mem = simd_sum(kv_mem);
+          auto delta = (vc - kv_mem) * bc;
+          float out = 0.0f;
+          for (int i = 0; i < n_per_t; ++i) {
+            state[i] = state[i] + kc[i] * delta;
+            out += state[i] * qc[i];
+          }
+          out = simd_sum(out);
+          if (thread_index_in_simdgroup == 0) {
+            y[(node * Hv + hv_idx) * Dv + dv_idx] = static_cast<InT>(out);
+          }
+          for (int i = 0; i < n_per_t; ++i) slots[node][ty][i][dk_idx] = state[i];
+          for (int i = 0; i < n_per_t; ++i) { kc[i] = kn[i]; qc[i] = qn[i]; }
+          vc = vn; gc = gn; bc = bn;
+        }
+"""
+TREE_DELTANET = __import__("os").environ.get("PLI_TREE_DELTANET", "0") in ("1", "3")
+# PLI (item D, PLI_TREE_DELTANET=3): like tree2, but only the nodes that have a child further than the next node keep their state, in S <= 4
+# slots assigned in Python (plan: where to load from, where to store): less threadgroup memory (S x 2 KB instead of W x 2 KB), plan in registers.
+TREE_DELTANET3 = __import__("os").environ.get("PLI_TREE_DELTANET", "0") == "3"
+_TREE3 = (_TREE2
+          .replace("        threadgroup float slots[W][4][n_per_t][32];\n",
+                   "        threadgroup float slots[S][4][n_per_t][32];\n        int ld[W], sv[W];\n"
+                   "        for (int t = 0; t < W; ++t) { ld[t] = plan[t]; sv[t] = plan[W + t]; }\n")
+          .replace("""          const int parent = parents[node];
+          if (parent < 0) {
+            for (int i = 0; i < n_per_t; ++i) state[i] = s0[i];
+          } else if (parent != node - 1) {
+            for (int i = 0; i < n_per_t; ++i) state[i] = slots[parent][ty][i][dk_idx];
+          }
+""", """          if (ld[node] == -1) {
+            for (int i = 0; i < n_per_t; ++i) state[i] = s0[i];
+          } else if (ld[node] >= 0) {
+            for (int i = 0; i < n_per_t; ++i) state[i] = slots[ld[node]][ty][i][dk_idx];
+          }
+""")
+          .replace("          for (int i = 0; i < n_per_t; ++i) slots[node][ty][i][dk_idx] = state[i];\n",
+                   "          if (sv[node] >= 0) { for (int i = 0; i < n_per_t; ++i) slots[sv[node]][ty][i][dk_idx] = state[i]; }\n"))
+assert _TREE3 != _TREE2 and "parents[" not in _TREE3 and "slots[node]" not in _TREE3
+_plans: dict[tuple[int, ...], tuple[int, list[int]]] = {}
+
+
+def tree_plan(parents: Sequence[int]) -> tuple[int, list[int]]:
+    """(S, plan): plan[t] = -2 keep the current state, -1 restart from the input state, k load slot k; plan[W + t] = slot where t is stored, or -1."""
+    key = tuple(int(p) for p in parents)
+    hit = _plans.get(key)
+    if hit is not None:
+        return hit
+    W = len(key)
+    last = {}
+    for c, p in enumerate(key):
+        if p >= 0 and p != c - 1:
+            last[p] = max(last.get(p, -1), c)
+    slot_of: dict[int, int] = {}
+    free: list[int] = []
+    n = 0
+    ld, sv = [], []
+    for t, p in enumerate(key):
+        if p < 0:
+            ld.append(-2 if t == 0 else -1)
+        elif p == t - 1:
+            ld.append(-2)
+        else:
+            k = slot_of[p]
+            ld.append(k)
+            if last[p] == t:
+                free.append(k)
+        if t in last:
+            if free:
+                k = free.pop()
+            else:
+                k, n = n, n + 1
+            slot_of[t] = k
+            sv.append(k)
+        else:
+            sv.append(-1)
+    hit = _plans[key] = (max(n, 1), ld + sv)
+    return hit
+
+
 _SPECS: dict[str, tuple[str, str, list[str], list[str]]] = {
     "norm": (_NORM.replace("RESIDUAL_ADD", "h = bfloat(float(h) + float(R[base + i]));\n    HO[base + i] = h;"), "",
              ["H", "R", "Wt", "eps"], ["HO", "XO"]),
@@ -169,6 +298,8 @@ _SPECS: dict[str, tuple[str, str, list[str], list[str]]] = {
                 ["Q", "Kout", "Vout", "G", "BETA", "CO"]),
     "tree": (_tree_source(), "", ["q", "k", "v", "g", "beta", "state_in", "parents", "nodes"], ["y", "state_out"]),
     "chain": (_CHAIN, "", ["q", "k", "v", "g", "beta", "state_in"], ["y", "state_out"]),
+    "tree2": (_TREE2, "", ["q", "k", "v", "g", "beta", "state_in", "parents"], ["y", "state_out"]),
+    "tree3": (_TREE3, "", ["q", "k", "v", "g", "beta", "state_in", "plan"], ["y", "state_out"]),
 }
 
 
@@ -288,6 +419,22 @@ def gated_delta(q: mx.array, k: mx.array, v: mx.array, g: mx.array, beta: mx.arr
     if chain and W <= WINDOW_ROWS:
         return tuple(_kernel("chain")(
             inputs=[q, k, v, g, beta, state],
+            template=[("InT", q.dtype), ("Dk", Dk), ("Dv", Dv), ("Hk", Hk), ("Hv", Hv), ("W", W)],
+            grid=(32, Dv, Hv), threadgroup=(32, 4, 1),
+            output_shapes=[(1, W, Hv, Dv), tuple(state.shape)], output_dtypes=[q.dtype, mx.float32]))
+    if not chain and TREE_DELTANET3 and W <= 8:
+        S, plan = tree_plan(parents)
+        if S <= 4:
+            plan_a = _const(("plan", tuple(plan)), lambda: ints(plan))
+            return tuple(_kernel("tree3")(
+                inputs=[q, k, v, g, beta, state, plan_a],
+                template=[("InT", q.dtype), ("Dk", Dk), ("Dv", Dv), ("Hk", Hk), ("Hv", Hv), ("W", W), ("S", S)],
+                grid=(32, Dv, Hv), threadgroup=(32, 4, 1),
+                output_shapes=[(1, W, Hv, Dv), tuple(state.shape)], output_dtypes=[q.dtype, mx.float32]))
+    if not chain and TREE_DELTANET and W <= 8:   # PLI (item D): tree, current state in registers, nodes in threadgroup memory
+        parents_a = _const(("parents", tuple(parents)), lambda: ints(parents))
+        return tuple(_kernel("tree2")(
+            inputs=[q, k, v, g, beta, state, parents_a],
             template=[("InT", q.dtype), ("Dk", Dk), ("Dv", Dv), ("Hk", Hk), ("Hv", Hv), ("W", W)],
             grid=(32, Dv, Hv), threadgroup=(32, 4, 1),
             output_shapes=[(1, W, Hv, Dv), tuple(state.shape)], output_dtypes=[q.dtype, mx.float32]))

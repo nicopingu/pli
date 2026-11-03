@@ -1,4 +1,4 @@
-"""TENSORFOLD_SEED_SALT moves every prompt-derived seed; unset or 0 keeps today's seeds."""
+"""PLI_SEED_SALT moves every prompt-derived seed; unset or 0 keeps today's seeds."""
 
 import pytest
 
@@ -19,11 +19,11 @@ def test_a_salt_moves_the_prompt_seed_and_stays_reproducible(monkeypatch):
 
 @pytest.mark.parametrize("value,salt", [("", 0), ("0", 0), ("7", 7), (" -3 ", -3)])
 def test_the_salt_reads_the_environment(monkeypatch, value, salt):
-    monkeypatch.setenv("TENSORFOLD_SEED_SALT", value)
+    monkeypatch.setenv("PLI_SEED_SALT", value)
     assert exact_sampling._salt_from_env() == salt
 
 
 def test_a_malformed_salt_is_refused(monkeypatch):
-    monkeypatch.setenv("TENSORFOLD_SEED_SALT", "two")
-    with pytest.raises(ValueError, match="TENSORFOLD_SEED_SALT"):
+    monkeypatch.setenv("PLI_SEED_SALT", "two")
+    with pytest.raises(ValueError, match="PLI_SEED_SALT"):
         exact_sampling._salt_from_env()

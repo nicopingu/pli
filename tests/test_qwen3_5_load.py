@@ -104,7 +104,7 @@ def test_native_lane_formats_keep_tensor_unit_routing(gate, top, widths):
 @pytest.mark.parametrize("top", [(bits, group) for bits in (2, 3, 4, 5, 6, 8) for group in (32, 64, 128)])
 @pytest.mark.parametrize("units,lane_kernels", [(False, "auto"), (True, "off")])
 def test_packed_row_decoder_accepts_every_affine_format(gate, top, units, lane_kernels, monkeypatch):
-    monkeypatch.delenv("TF_COPY_ROWS", raising=False)
+    monkeypatch.delenv("PLI_COPY_ROWS", raising=False)
     run, calls = gate
     family, _ = run(top, (top, top), units=units, lane_kernels=lane_kernels)
     assert family.rows and not family.inner._tensorfold_lanes
@@ -117,9 +117,9 @@ def test_packed_row_decoder_accepts_every_affine_format(gate, top, units, lane_k
 def test_copy_rows_sets_the_checked_window_above_the_first_copy_width(gate, monkeypatch, value, lanes, rows):
     run, _ = gate
     if value is None:
-        monkeypatch.delenv("TF_COPY_ROWS", raising=False)
+        monkeypatch.delenv("PLI_COPY_ROWS", raising=False)
     else:
-        monkeypatch.setenv("TF_COPY_ROWS", value)
+        monkeypatch.setenv("PLI_COPY_ROWS", value)
     family, _ = run((4, 64), (4, 4))
     assert (family.exact_width, family.first_copy_rows) == (lanes, 32)
     family, _ = run((4, 64), (4, 4), units=False)

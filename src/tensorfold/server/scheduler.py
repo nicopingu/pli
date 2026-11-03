@@ -20,7 +20,15 @@ from tensorfold.server.errors import RequestError, RoundError
 from tensorfold.server.live import ChunkRate, Meter
 from tensorfold.server.prompt_fill import Filling, PromptFill
 from tensorfold.server.stream_gate import StreamGate
-from tensorfold.pli import evenements as _ev
+from tensorfold.pli import events as _ev
+
+# PLI (idea from Kapitsa #206 and #243): heartbeat between two requests. Without GPU work, Metal releases the wired weights
+# about 2 s after the last computation and the next pass waits for them to come back (measured, 14 GiB: 256 ms instead
+# of 29; with a small computation every 500 ms: 52 to 58 ms). PLI_HEARTBEAT_MS = period (0 = off), PLI_HEARTBEAT_WINDOW_S = duration
+# after the last activity, PLI_HEARTBEAT_ANE=1 = a Neural Engine keep-awake call at the same rate. No reply computation touched.
+_HEARTBEAT_S = float(os.environ.get("PLI_HEARTBEAT_MS", "0") or 0) / 1e3
+_HEARTBEAT_WINDOW_S = float(os.environ.get("PLI_HEARTBEAT_WINDOW_S", "600") or 600)
+_HEARTBEAT_ANE = os.environ.get("PLI_HEARTBEAT_ANE", "0") == "1"
 
 @dataclass
 class ChatJob:
@@ -62,7 +70,7 @@ class ChatJob:
     # a decision: prefill ends at these labels' last-row logits and joins no round (empty: a chat)
     label_ids: tuple[int, ...] = ()
     scored: tuple[list[float], float] | None = None
-    pli_conv: str = ""                      # PLI 3.6.0 : empreinte de la conversation (pli/evenements.py)
+    pli_conv: str = ""                      # PLI 3.6.0: fingerprint of the conversation (pli/events.py)
 
 
 class _JobQueue(queue.PriorityQueue):
@@ -85,23 +93,23 @@ class _JobQueue(queue.PriorityQueue):
         with self.mutex:
             return self.queue[0][2] if self.queue and self.queue[0][0] == 0 else None
 
-    def petite(self, limite: int) -> ChatJob | None:
-        """PLI : la première demande d'avant-plan d'au plus ``limite`` jetons de la file, sans la retirer (None : aucune)."""
+    def small(self, limit: int) -> ChatJob | None:
+        """PLI: the first foreground request of at most ``limit`` tokens in the queue, without removing it (None: none)."""
 
         with self.mutex:
             for prio, _, job in sorted(self.queue, key=lambda e: e[:2]):
-                if prio == 0 and len(job.prompt_ids) <= limite and not job.cancellation.cancelled:
+                if prio == 0 and len(job.prompt_ids) <= limit and not job.cancellation.cancelled:
                     return job
         return None
 
-    def retirer(self, job: ChatJob) -> bool:
-        """PLI : retire ``job`` de la file (vrai s'il y était)."""
+    def remove_job(self, job: ChatJob) -> bool:
+        """PLI: remove ``job`` from the queue (true if it was there)."""
 
         with self.mutex:
-            avant = len(self.queue)
+            before = len(self.queue)
             self.queue[:] = [entry for entry in self.queue if entry[2] is not job]
             heapq.heapify(self.queue)
-            return len(self.queue) < avant
+            return len(self.queue) < before
 
     def remove(self, cancellation: Cancellation) -> list[ChatJob]:
         with self.mutex:
@@ -160,6 +168,9 @@ class Scheduler(PromptFill):
         self.prompt_memory = prompt_memory
         self.proposer_factory = proposer_factory
         self.idle_wait = float(idle_wait)
+        self._active_seen = time.monotonic()
+        self._beat_at = 0.0
+        self.heartbeats = 0
         self.slow_round_ms = 1000.0
         self._held: ChatJob | None = None
         self._queue = _JobQueue()
@@ -177,8 +188,8 @@ class Scheduler(PromptFill):
         self._fills: list[Filling] = []         # open prompts, oldest first, each filling a chunk a step
         # while prompts fill, rounds get decode_share of each chunk's time, at most fill_rounds between two chunks
         self.decode_share = float(decode_share)
-        # PLI : plafond réglable (PLI_TOURS_ENTRE_LECTURES). À 32, il annule tout decode_share au-delà de 0,25 (mesuré le 09/10).
-        self.fill_rounds = max(1, int(os.environ.get("PLI_TOURS_ENTRE_LECTURES", "32")))
+        # PLI: adjustable cap (PLI_ROUNDS_BETWEEN_PREFILLS). At 32, it cancels any decode_share beyond 0.25 (measured on 09/10).
+        self.fill_rounds = max(1, int(os.environ.get("PLI_ROUNDS_BETWEEN_PREFILLS", "32")))
         self.fill_guard = 8             # a prompt passed over this many chunks takes the next one (no starvation)
         self._credit, self._rounds_left = 0.0, 0
         self._released_at = 0            # ``starts`` when MLX's freed buffers were last handed back
@@ -188,17 +199,17 @@ class Scheduler(PromptFill):
         self.gate = (StreamGate(prompt_memory, admission.memory.per_token, admission.memory.round_bytes,
                                 admission.budget, lanes=self.lanes)
                      if admission is not None and prompt_memory is not None and self.lanes > 1 else None)
-        # PLI (lot 2 du plan 2.2, 11/10) : PLI_ADMISSION_TRAVAIL=1 fait compter à l'admission le travail de lecture de la garde
-        # PromptMemory (relevé sur un vrai morceau) au lieu de la droite prefill_bytes. Éteint par défaut : admission d'origine.
-        # PLI_ADMISSION_PETITES=N : seulement pour une demande d'au plus N jetons (« les petites passent d'abord », 11/10).
-        petites = int(os.environ.get("PLI_ADMISSION_PETITES", "0") or 0)
-        self._pli_petites = max(0, petites)      # > 0 : une petite demande passe aussi devant une demande retenue à l'admission
-        if ((os.environ.get("PLI_ADMISSION_TRAVAIL", "0") == "1" or petites > 0) and admission is not None
-                and prompt_memory is not None and hasattr(prompt_memory, "_work") and hasattr(admission, "travail")):
-            admission.travail, admission.petites = prompt_memory._work, max(0, petites)
-            print("[pli] admission : travail de lecture compté par PromptMemory"
-                  + (f" pour les demandes d'au plus {petites} jetons (PLI_ADMISSION_PETITES)" if petites > 0
-                     else " (PLI_ADMISSION_TRAVAIL=1)"), flush=True)
+        # PLI (item 2 of plan 2.2, 11/10): PLI_ADMIT_BY_WORK=1 makes admission count the prefill work of the PromptMemory
+        # guard (measured on a real chunk) instead of the prefill_bytes line. Off by default: original admission.
+        # PLI_ADMIT_SMALL=N: only for a request of at most N tokens ("the small ones go first", 11/10).
+        small_max = int(os.environ.get("PLI_ADMIT_SMALL", "0") or 0)
+        self._pli_small_max = max(0, small_max)  # > 0: a small request also goes ahead of a request held at admission
+        if ((os.environ.get("PLI_ADMIT_BY_WORK", "0") == "1" or small_max > 0) and admission is not None
+                and prompt_memory is not None and hasattr(prompt_memory, "_work") and hasattr(admission, "work_bytes")):
+            admission.work_bytes, admission.small_max = prompt_memory._work, max(0, small_max)
+            print("[pli] admission: prefill work counted by PromptMemory"
+                  + (f" for requests of at most {small_max} tokens (PLI_ADMIT_SMALL)" if small_max > 0
+                     else " (PLI_ADMIT_BY_WORK=1)"), flush=True)
         self.stall_s = 120.0            # no round, start or finish while requests wait: dump stacks
         self.stall_prefill_s = 900.0    # the same while one prefill runs
         self._watchdog = threading.Thread(target=self._watch, name="tensorfold-watchdog", daemon=True)
@@ -292,7 +303,7 @@ class Scheduler(PromptFill):
         job.error = RequestCancelled("request cancelled")
         job.proposer = None
         self.cancelled += 1
-        _ev.ev("annulee", job)
+        _ev.ev("cancelled", job)
         self._finish(job)
 
     def _discard_job(self, job: ChatJob) -> None:
@@ -371,8 +382,11 @@ class Scheduler(PromptFill):
                     try:
                         self._held = self._queue.get(timeout=self.idle_wait)
                     except queue.Empty:
+                        if _HEARTBEAT_S > 0:
+                            self._heartbeat()
                         continue
                 continue  # _admit starts it
+            self._active_seen = time.monotonic()
             if not self._fills:
                 self._credit, self._rounds_left = 0.0, 0     # no prompt waits: rounds owe nothing
             if self.gate is not None:
@@ -419,6 +433,29 @@ class Scheduler(PromptFill):
                     del self._jobs[stream_id]
                     self._retire(job)
             job = landed = tokens = None
+
+    def _heartbeat(self) -> None:
+        """Between two requests (engine idle, nothing queued): a small GPU computation every PLI_HEARTBEAT_MS, during
+        PLI_HEARTBEAT_WINDOW_S after the last activity; in the engine thread (the only one that holds MLX's GPU stream)."""
+
+        now = time.monotonic()
+        if now - self._beat_at < _HEARTBEAT_S or now - self._active_seen > _HEARTBEAT_WINDOW_S:
+            return
+        self._beat_at = now
+        try:
+            import mlx.core as mx
+
+            mx.eval(mx.ones((8, 8)) + 1)
+            if _HEARTBEAT_ANE:
+                from tensorfold.pli.ane import ffn as _ffn
+
+                _ffn.heartbeat()
+            self.heartbeats += 1
+            if self.heartbeats == 1:
+                print(f"[PLI] heartbeat: every {_HEARTBEAT_S * 1e3:.0f} ms for {_HEARTBEAT_WINDOW_S:.0f} s after the last activity"
+                      + (", Neural Engine included" if _HEARTBEAT_ANE else ""), flush=True)
+        except Exception:  # noqa: BLE001 - the heartbeat never makes the server fail
+            pass
 
     def _release_idle(self) -> None:
         """Once no stream is left and nothing waits, hand MLX's freed buffers back: no round can want them now."""
@@ -476,43 +513,43 @@ class Scheduler(PromptFill):
                 except queue.Empty:
                     return
             if not self._fits(job):
-                if not getattr(job, "_pli_ev_retenue", False):     # PLI 3.6.0 : journal d'événements
-                    job._pli_ev_retenue = True
-                    _ev.ev("attente", job, prompt=len(job.prompt_ids), lectures=len(self._fills),
-                           ecritures=self.engine.active_count)
-                if os.environ.get("PLI_HEURES", "") == "1" and not getattr(job, "_pli_retenue", False):
-                    # PLI (banc pli-attente27, 11/10) : trace d'une demande retenue à l'admission, une fois par demande
-                    job._pli_retenue = True
-                    memoire = self.prompt_memory
-                    tient = None if memoire is None else memoire.would_fit(len(job.prompt_ids), self._reserved(int(job.max_tokens)))
-                    print(f"[pli] {time.strftime('%H:%M:%S')} demande de {len(job.prompt_ids)} jetons retenue à l'admission : "
-                          f"{self.engine.active_count} écriture(s) en cours, {len(self._fills)} lecture(s) ouverte(s) "
-                          f"(restes {[f.left for f in self._fills]}), mémoire suffisante pour elle seule à côté : {tient}", flush=True)
+                if not getattr(job, "_pli_ev_held", False):        # PLI 3.6.0: event log
+                    job._pli_ev_held = True
+                    _ev.ev("waiting", job, prompt=len(job.prompt_ids), prefills=len(self._fills),
+                           decodes=self.engine.active_count)
+                if os.environ.get("PLI_LOG_TIMES", "") == "1" and not getattr(job, "_pli_held", False):
+                    # PLI (11/10): log of a request held at admission, once per request
+                    job._pli_held = True
+                    memory = self.prompt_memory
+                    fits = None if memory is None else memory.would_fit(len(job.prompt_ids), self._reserved(int(job.max_tokens)))
+                    print(f"[pli] {time.strftime('%H:%M:%S')} request of {len(job.prompt_ids)} tokens held at admission: "
+                          f"{self.engine.active_count} decode(s) running, {len(self._fills)} prefill(s) open "
+                          f"(left {[f.left for f in self._fills]}), memory enough for it alone beside: {fits}", flush=True)
                     adm = self.admission
                     if adm is not None:
-                        go = 2 ** 30
-                        vives = [(n, min(len(j.prompt_ids) + int(j.max_tokens), n + self._reserved(int(j.max_tokens))))
-                                 for j in self._jobs.values() if j.stream is not None and not j.stream.finished
-                                 for n in [j.stream.context_len]]
-                        vives += [(len(f.job.prompt_ids) - f.left, len(f.job.prompt_ids) + self._reserved(int(f.job.max_tokens)))
-                                  for f in self._fills]
-                        large = max([len(job.prompt_ids), *(len(f.job.prompt_ids) for f in self._fills)])
+                        gib = 2 ** 30
+                        live = [(n, min(len(j.prompt_ids) + int(j.max_tokens), n + self._reserved(int(j.max_tokens))))
+                                for j in self._jobs.values() if j.stream is not None and not j.stream.finished
+                                for n in [j.stream.context_len]]
+                        live += [(len(f.job.prompt_ids) - f.left, len(f.job.prompt_ids) + self._reserved(int(f.job.max_tokens)))
+                                 for f in self._fills]
+                        widest = max([len(job.prompt_ids), *(len(f.job.prompt_ids) for f in self._fills)])
                         long = len(job.prompt_ids) + self._reserved(int(job.max_tokens))
-                        croit = sum(max(0, m - n) for n, m in vives) * adm.memory.per_token
-                        print(f"[pli] projection (Gio) : occupé {adm.used() / go:.2f} + croissance des autres {croit / go:.2f} "
-                              f"+ la demande {adm.memory.stream_bytes(long) / go:.2f} + travail {max(adm.round_bytes(len(vives) + 1), adm.lecture_bytes(large, len(job.prompt_ids))) / go:.2f} "
-                              f"(lecture de {large} jetons {adm.lecture_bytes(large, len(job.prompt_ids)) / go:.2f}, d'origine {adm.memory.prefill_bytes(large) / go:.2f}, de la demande seule {adm.lecture_bytes(len(job.prompt_ids), len(job.prompt_ids)) / go:.2f}) "
-                              f"= {adm.projected(large, long, vives, len(job.prompt_ids)) / go:.2f} pour un budget de {adm.budget / go:.2f}", flush=True)
+                        grow = sum(max(0, m - n) for n, m in live) * adm.memory.per_token
+                        print(f"[pli] projection (GiB): used {adm.used() / gib:.2f} + growth of the others {grow / gib:.2f} "
+                              f"+ the request {adm.memory.stream_bytes(long) / gib:.2f} + work {max(adm.round_bytes(len(live) + 1), adm.prefill_work_bytes(widest, len(job.prompt_ids))) / gib:.2f} "
+                              f"(prefill of {widest} tokens {adm.prefill_work_bytes(widest, len(job.prompt_ids)) / gib:.2f}, original {adm.memory.prefill_bytes(widest) / gib:.2f}, of the request alone {adm.prefill_work_bytes(len(job.prompt_ids), len(job.prompt_ids)) / gib:.2f}) "
+                              f"= {adm.projected(widest, long, live, len(job.prompt_ids)) / gib:.2f} for a budget of {adm.budget / gib:.2f}", flush=True)
                 self._held = job              # waits until a live stream finishes and frees its memory
-                # PLI (lot 2 du plan 2.2) : la demande retenue ne retient plus les petites demandes arrivées derrière elle.
-                petite = self._queue.petite(self._pli_petites) if self._pli_petites > 0 else None
-                if petite is None or not self._fits(petite) or not self._queue.retirer(petite):
+                # PLI (item 2 of plan 2.2): the held request no longer holds the small requests that arrived behind it.
+                small = self._queue.small(self._pli_small_max) if self._pli_small_max > 0 else None
+                if small is None or not self._fits(small) or not self._queue.remove_job(small):
                     return
-                if os.environ.get("PLI_HEURES", "") == "1":
-                    print(f"[pli] {time.strftime('%H:%M:%S')} demande de {len(petite.prompt_ids)} jetons admise devant la demande "
-                          f"retenue de {len(job.prompt_ids)} jetons", flush=True)
-                _ev.ev("passe_devant", petite, devant=job.job_id, prompt=len(petite.prompt_ids))
-                job = petite
+                if os.environ.get("PLI_LOG_TIMES", "") == "1":
+                    print(f"[pli] {time.strftime('%H:%M:%S')} request of {len(small.prompt_ids)} tokens admitted ahead of the held "
+                          f"request of {len(job.prompt_ids)} tokens", flush=True)
+                _ev.ev("jumps_ahead", small, ahead_of=job.job_id, prompt=len(small.prompt_ids))
+                job = small
             if job.cancellation.cancelled:
                 self._finish_cancelled(job)
                 continue
@@ -541,9 +578,9 @@ class Scheduler(PromptFill):
         live += [(len(f.job.prompt_ids) - f.left, len(f.job.prompt_ids) + self._reserved(int(f.job.max_tokens)))
                  for f in self._fills]
         widest = max([len(job.prompt_ids), *(len(f.job.prompt_ids) for f in self._fills)])
-        if getattr(self.admission, "travail", None) is None:
-            return self.admission.admits(widest, len(job.prompt_ids) + reply, live)       # admission d'origine
-        return self.admission.admits(widest, len(job.prompt_ids) + reply, live, demande=len(job.prompt_ids))
+        if getattr(self.admission, "work_bytes", None) is None:
+            return self.admission.admits(widest, len(job.prompt_ids) + reply, live)       # original admission
+        return self.admission.admits(widest, len(job.prompt_ids) + reply, live, request=len(job.prompt_ids))
 
     def _reserved(self, reply: int) -> int:
         """The reply tokens a stream holds memory for ahead of its length: the gate's horizon when it guards rounds."""
@@ -595,7 +632,7 @@ class Scheduler(PromptFill):
             if self.prompt_memory is not None and not self.prompt_memory.allow_load(found[0].stat().st_size):
                 print(f"[tensorfold] left the stored prefix of {len(found[1])} tokens on disk: memory cannot "
                       "hold a copy beside what runs; this prompt re-prefills it", flush=True)
-                _ev.ev("reste_sur_disque", conv=_ev.conv_des_jetons(prompt), jetons=len(found[1]))
+                _ev.ev("stays_on_disk", conv=_ev.conv_of_tokens(prompt), tokens=len(found[1]))
                 return
             loaded = load_snapshot(found[0], self.model_id)
             if loaded is None:
@@ -603,8 +640,8 @@ class Scheduler(PromptFill):
             tokens, cache = loaded
             self.checkpoints.insert(tokens, cache, last_prompt=tokens, pinned=found[3])
             found[2].touch(tokens)
-            _ev.ev("relecture_disque", conv=_ev.conv_des_jetons(prompt), jetons=len(tokens),
-                   genre="bloc_systeme" if found[3] else "conversation", duree=time.perf_counter() - started)
+            _ev.ev("disk_read", conv=_ev.conv_of_tokens(prompt), tokens=len(tokens),
+                   kind="system_block" if found[3] else "conversation", duration=time.perf_counter() - started)
             print(f"[tensorfold] read {'system-block' if found[3] else 'conversation'} snapshot tokens={len(tokens)} "
                   f"from disk in {time.perf_counter() - started:.2f}s", flush=True)
         except Exception as exc:  # noqa: BLE001 - a bad file costs a prefill, never the request
@@ -632,8 +669,8 @@ class Scheduler(PromptFill):
             started = time.perf_counter()
             path = save_snapshot(self.snapshot_dir, self.model_id, tokens, cache)
             if path is not None:
-                _ev.ev("sauvegarde_bloc_systeme", conv=_ev.conv_des_jetons(tokens), jetons=len(tokens),
-                       duree=time.perf_counter() - started)
+                _ev.ev("system_block_saved", conv=_ev.conv_of_tokens(tokens), tokens=len(tokens),
+                       duration=time.perf_counter() - started)
                 print(f"[tensorfold] saved system-block snapshot tokens={len(tokens)} "
                       f"in {time.perf_counter() - started:.1f}s", flush=True)
         except Exception as exc:  # noqa: BLE001 - a full disk must not fail the request

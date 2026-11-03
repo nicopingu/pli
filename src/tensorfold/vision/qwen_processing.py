@@ -253,14 +253,14 @@ class QwenImageProcessor:
 
     def video_size(self, frames: int, height: int, width: int) -> tuple[int, int]:
         """A video's frame size for the tower: Qwen3-VL's ``smart_resize`` with its per-frame cap (at most 768 tokens a
-        frame group, at least ~134), the whole video within ``TENSORFOLD_VIDEO_TOKENS`` (16,384) tokens."""
+        frame group, at least ~134), the whole video within ``PLI_VIDEO_TOKENS`` (16,384) tokens."""
         import math
         import os
 
         vision = self.config["vision_config"]
         factor = int(vision["patch_size"]) * int(vision["spatial_merge_size"])
         temporal = int(vision["temporal_patch_size"])
-        budget = int(os.environ.get("TENSORFOLD_VIDEO_TOKENS") or 16384)
+        budget = int(os.environ.get("PLI_VIDEO_TOKENS") or 16384)
         shortest, longest = 128 * factor**2, budget * temporal * factor**2
         per_frame = max(min(768 * factor**2, longest // max(1, frames)), int(shortest * 1.05))
         max_pixels = per_frame * frames

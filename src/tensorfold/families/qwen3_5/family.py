@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import time
 from typing import Any, Sequence
 
@@ -32,6 +34,8 @@ class Qwen35Family:
 
     def __init__(self, model: Any, *, drafter: Any = None, nodes: int = 15, widest: int = 32,
                  rows: bool = False, first_copy_rows: int | None = None) -> None:
+        if os.environ.get("PLI_TREE_NODES"):      # PLI (D2): nodes at most of a draft tree (15 by default)
+            nodes = int(os.environ["PLI_TREE_NODES"])
         self.inner = model
         language_model = getattr(model, "language_model", model)
         self.core = language_model.model
@@ -43,7 +47,7 @@ class Qwen35Family:
         if self.rows:
             from tensorfold.kernels.qwen.dense.v1 import row_forward
 
-            trees = row_forward.ROW_ATTENTION
+            trees = row_forward.ROW_ATTENTION or row_forward.TREES_ATTM     # PLI (D2): trees through attm
             self.batch_rows, self.max_streams = 32, 32
         self.head_drafts = DFlashHead(drafter, nodes, _calibration(), chains=not trees) if drafter is not None else None
         if self.head_drafts is not None and self.head_drafts.v1:
@@ -75,13 +79,13 @@ class Qwen35Family:
         return cache[:-1] if cache and isinstance(cache[-1], DraftSlot) else cache
 
     @staticmethod
-    def _numeroter(layers: list[Any]) -> None:
-        """PLI : chaque cache de couche porte son numéro (lu par la lecture réduite de l'attention, exact_attention)."""
+    def _number_layers(layers: list[Any]) -> None:
+        """PLI: each layer cache carries its number (read by the attention's reduced prefill, exact_attention)."""
 
-        if layers and getattr(layers[-1], "pli_couche", None) is None:
+        if layers and getattr(layers[-1], "pli_layer", None) is None:
             for i, item in enumerate(layers):
                 try:
-                    item.pli_couche = i
+                    item.pli_layer = i
                 except Exception:
                     pass
 
@@ -93,7 +97,7 @@ class Qwen35Family:
         """Return hidden states [1, R, D]; chains advance all rows, while trees wait for keep_rows to commit the accepted path."""
 
         tokens, layers = _tokens(inputs), self._layers(cache)
-        self._numeroter(layers)
+        self._number_layers(layers)
         start, rows = self._position(layers), len(tokens)
         tree = list(parents) if parents is not None else _chain(rows)
         if self.rows:
@@ -115,58 +119,69 @@ class Qwen35Family:
 
         import mlx.core as mx
 
-        self._deplie()
+        self._unpack()
         tokens, layers = _tokens(inputs), self._layers(cache)
         self._last = {id(cache): (None, len(tokens), self._position(layers), 0)}
-        return self.core(mx.array([tokens], dtype=mx.uint32), cache=layers)
+        from tensorfold.pli import trace_layers as tc   # PLI (PLI_TRACE_LAYERS): trace under the chunk, evolution mode
 
-    _deplie_fait = False
+        if tc.ACTIVE:
+            tc.begin(len(tokens), self._position(layers))
+        with tc.prefill():
+            return self.core(mx.array([tokens], dtype=mx.uint32), cache=layers)
 
-    def _deplie(self) -> None:
-        """PLI (PLI_LECTURE_DEPLIE) : poids dépliés avant le produit sur les gros appels de la lecture ; posé une fois."""
+    _unpack_done = False
 
-        if self._deplie_fait:
+    def _unpack(self) -> None:
+        """PLI (PLI_PREFILL_UNPACK): weights unpacked before the product on the large prefill calls; set up once."""
+
+        if self._unpack_done:
             return
-        self._deplie_fait = True
-        from tensorfold.pli import deplie
+        self._unpack_done = True
+        from tensorfold.pli import unpack
 
-        if deplie.actif():
-            deplie.installer(getattr(self.core, "pipeline_layers", None) or getattr(self.core, "layers", None))
-            from tensorfold.pli.ane import ffn as ane_ffn   # PLI SP1 (PLI_ANE_FFN) : FFN partagé avec le Neural Engine en lecture
+        if unpack.active():
+            unpack.install(getattr(self.core, "pipeline_layers", None) or getattr(self.core, "layers", None))
+            from tensorfold.pli.ane import ffn as ane_ffn   # PLI SP1 (PLI_ANE_FFN): FFN shared with the Neural Engine in prefill
 
-            ane_ffn.installer(getattr(self.core, "pipeline_layers", None) or getattr(self.core, "layers", None))
-            tete = getattr(self, "head_drafts", None)
-            deplie.installer_brouillon(getattr(tete, "drafter", None) if tete is not None else None)   # PLI_LECTURE_DEPLIE_NN
+            ane_ffn.install(getattr(self.core, "pipeline_layers", None) or getattr(self.core, "layers", None))
+            head = getattr(self, "head_drafts", None)
+            unpack.install_draft(getattr(head, "drafter", None) if head is not None else None)   # PLI_PREFILL_UNPACK_NN
+        from tensorfold.pli import trace_layers as tc   # PLI (PLI_TRACE_LAYERS): set up after the Neural Engine split
 
-    # PLI : découpe croisée de la lecture sur le modèle dense (27B), éteinte tant que son banc n'est pas passé (pli-croise27)
-    croise_ok = __import__("os").environ.get("PLI_CROISE_DENSE", "0") == "1"
-    lecture_cpu_ok = True      # PLI : MLP dense, la lecture peut donner des lignes au CPU (PLI_LECTURE_CPU)
-    _lecture_cpu: Any = None
+        tc.install(self.core)
+        from tensorfold.pli import merge_tail   # PLI (PLI_MERGE_TAIL): final chunk read with the previous one
 
-    def lecture_cpu_part(self) -> float:
-        """PLI (lecture répartie) : part des lignes d'un morceau donnée au CPU ; 0 = éteint ou modèle non pris."""
+        merge_tail.install(getattr(self.core, "pipeline_layers", None) or getattr(self.core, "layers", None))
 
-        from tensorfold.families.qwen3_5 import lecture_cpu
+    # PLI: interleaved split of the prefill on the dense model (27B), off until it is measured on the 27B
+    interleave_ok = __import__("os").environ.get("PLI_INTERLEAVE_DENSE", "0") == "1"
+    prefill_cpu_ok = True      # PLI: dense MLP, the prefill may give rows to the CPU (PLI_PREFILL_CPU)
+    _prefill_cpu: Any = None
 
-        p = lecture_cpu.part() if self.lecture_cpu_ok else 0.0
+    def prefill_cpu_part(self) -> float:
+        """PLI (split prefill): share of a chunk's rows given to the CPU; 0 = off or model not handled."""
+
+        from tensorfold.families.qwen3_5 import prefill_cpu
+
+        p = prefill_cpu.part() if self.prefill_cpu_ok else 0.0
         if not p:
             return 0.0
-        if self._lecture_cpu is None:
-            self._lecture_cpu = lecture_cpu.LectureCPU()
-        couches = getattr(self.core, "pipeline_layers", None) or []
-        return p if couches and self._lecture_cpu.poids(couches[0]) is not None else 0.0
+        if self._prefill_cpu is None:
+            self._prefill_cpu = prefill_cpu.PrefillCPU()
+        layers = getattr(self.core, "pipeline_layers", None) or []
+        return p if layers and self._prefill_cpu.weights(layers[0]) is not None else 0.0
 
-    def _releves_du_brouillon(self) -> Any:
-        """La liste des états de couches relevés pour le brouillon (une case par couche relevée), ou None."""
+    def _draft_captures(self) -> Any:
+        """The list of layer states captured for the draft (one slot per captured layer), or None."""
 
-        brouillon = getattr(self.head_drafts, "drafter", None) if getattr(self, "head_drafts", None) is not None else None
-        return getattr(getattr(brouillon, "target", None), "_hidden_states", None)
+        draft = getattr(self.head_drafts, "drafter", None) if getattr(self, "head_drafts", None) is not None else None
+        return getattr(getattr(draft, "target", None), "_hidden_states", None)
 
-    def prefill_steps(self, inputs: Any, cache: list[Any], pas: int) -> Any:
-        """PLI (découpe croisée) : ``prefill`` en étapes de ``pas`` couches ; rend la main entre deux étapes.
+    def prefill_steps(self, inputs: Any, cache: list[Any], step: int) -> Any:
+        """PLI (interleaved split): ``prefill`` in steps of ``step`` layers; yields between two steps.
 
-        Mêmes opérations, même ordre que le passage de MLX : seul le moment de l'évaluation change. Valeur de fin : les
-        états cachés, comme ``prefill``. Si le modèle n'a pas la forme attendue, une seule étape par ``prefill``.
+        Same operations, same order as MLX's pass: only the moment of evaluation changes. Final value: the
+        hidden states, like ``prefill``. If the model does not have the expected shape, a single step per ``prefill``.
         """
 
         import sys
@@ -175,51 +190,58 @@ class Qwen35Family:
 
         from tensorfold.engine.family_common import cache_arrays
 
-        self._deplie()
+        self._unpack()
         core = self.core
         mod = sys.modules.get(type(core).__module__)
-        masque_fa = getattr(mod, "create_attention_mask", None)
-        masque_ssm = getattr(mod, "create_ssm_mask", None)
-        couches = getattr(core, "pipeline_layers", None)
-        part = self.lecture_cpu_part()
-        if ((pas < 1 and not part) or couches is None or masque_fa is None or masque_ssm is None
+        fa_mask = getattr(mod, "create_attention_mask", None)
+        ssm_mask = getattr(mod, "create_ssm_mask", None)
+        stack = getattr(core, "pipeline_layers", None)
+        part = self.prefill_cpu_part()
+        if ((step < 1 and not part) or stack is None or fa_mask is None or ssm_mask is None
                 or getattr(core, "pipeline_size", 1) != 1 or getattr(core, "pipeline_rank", 0) != 0
                 or not hasattr(core, "fa_idx") or not hasattr(core, "ssm_idx")):
             return self.prefill(inputs, cache)
         tokens, layers = _tokens(inputs), self._layers(cache)
-        if len(layers) != len(couches):
+        if len(layers) != len(stack):
             return self.prefill(inputs, cache)
         rows, start = len(tokens), self._position(layers)
-        h = core.embed_tokens(mx.array([tokens], dtype=mx.uint32))
-        fa = masque_fa(h, layers[core.fa_idx]) if core.fa_idx is not None else None
-        ssm = masque_ssm(h, layers[core.ssm_idx]) if core.ssm_idx is not None else None
-        total = len(couches)
-        if part:
-            from tensorfold.families.qwen3_5 import lecture_cpu
+        from tensorfold.pli import trace_layers as tc   # PLI (PLI_TRACE_LAYERS): trace under the chunk, evolution mode
 
-            lc = self._lecture_cpu.lignes_cpu(couches, h, part) if lecture_cpu.mode() == "decale" else 0
+        if tc.ACTIVE:
+            tc.begin(rows, start)
+        with tc.prefill():
+            h = core.embed_tokens(mx.array([tokens], dtype=mx.uint32))
+        fa = fa_mask(h, layers[core.fa_idx]) if core.fa_idx is not None else None
+        ssm = ssm_mask(h, layers[core.ssm_idx]) if core.ssm_idx is not None else None
+        total = len(stack)
+        if part:
+            from tensorfold.families.qwen3_5 import prefill_cpu
+
+            lc = self._prefill_cpu.cpu_rows(stack, h, part) if prefill_cpu.mode() == "shifted" else 0
             if lc:
-                h = yield from self._lecture_cpu.passage_decale(couches, layers, h, masque_fa, masque_ssm, lc, pas,
-                                                                 self._releves_du_brouillon())
+                h = yield from self._prefill_cpu.shifted_pass(stack, layers, h, fa_mask, ssm_mask, lc, step,
+                                                              self._draft_captures())
                 self._last = {id(cache): (None, rows, start, 0)}
                 return core.norm(h)
-        for k, (layer, c) in enumerate(zip(couches, layers)):
+        for k, (layer, c) in enumerate(zip(stack, layers)):
             if part:
-                h = self._lecture_cpu.couche(layer, h, ssm if layer.is_linear else fa, c, part)
+                h = self._prefill_cpu.layer(layer, h, ssm if layer.is_linear else fa, c, part)
             else:
-                h = layer(h, mask=ssm if layer.is_linear else fa, cache=c)
-            fait = k + 1
-            if pas > 0 and fait % pas == 0 and fait < total:
-                # Les relevés de couches que lit le brouillon (DFlash2) sont une seule liste pour tout le modèle : un tour
-                # d'écriture intercalé la récrit. On garde ceux de cette lecture et on les remet à la reprise (banc pli-croise27).
-                etats = self._releves_du_brouillon()
-                garde = list(etats) if etats else None
-                mx.eval(h, *cache_arrays(layers[fait - pas:fait]), *[a for a in (garde or []) if a is not None])
+                with tc.prefill():
+                    h = layer(h, mask=ssm if layer.is_linear else fa, cache=c)
+            done = k + 1
+            if step > 0 and done % step == 0 and done < total:
+                # The layer states the draft reads (DFlash2) are a single list for the whole model: an interleaved
+                # decode round rewrites it. Those of this prefill are kept and put back at the resume (measured on the 27B).
+                states = self._draft_captures()
+                kept = list(states) if states else None
+                mx.eval(h, *cache_arrays(layers[done - step:done]), *[a for a in (kept or []) if a is not None])
                 yield
-                if garde is not None:
-                    etats[:] = garde
-        self._last = {id(cache): (None, rows, start, 0)}       # posé à la fin : les écritures intercalées l'écrasent
-        return core.norm(h)
+                if kept is not None:
+                    states[:] = kept
+        self._last = {id(cache): (None, rows, start, 0)}       # set at the end: interleaved decodes overwrite it
+        with tc.prefill():
+            return core.norm(h)
 
     def encode_vision(self, prepared: Any, cache: list[Any]) -> Any:
         encoded = self.vision.encode(prepared)
@@ -237,6 +259,9 @@ class Qwen35Family:
             return self.core(inputs, cache=layers, input_embeddings=encoded.inputs_embeds[:, begin:end])
 
     def _commit(self, layers: list[Any], record: Any, path: list[int], rows: int, start: int) -> None:
+        from tensorfold.kernels.qwen.dense.v1 import exact_attention as _ea      # PLI (item D): anchored choices of the validated nodes
+        if _ea.ANCHOR:
+            _ea.commit_anchors(layers, path)
         if self.rows:
             from tensorfold.kernels.qwen.dense.v1 import row_forward
 

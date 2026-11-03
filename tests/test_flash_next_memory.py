@@ -60,8 +60,8 @@ def runtime(monkeypatch):
     mlx.core = core
     monkeypatch.setitem(sys.modules, "mlx", mlx)
     monkeypatch.setitem(sys.modules, "mlx.core", core)
-    monkeypatch.delenv("TF_NGRAM_HOST", raising=False)
-    monkeypatch.delenv("TENSORFOLD_MEMORY_LIMIT_GB", raising=False)
+    monkeypatch.delenv("PLI_NGRAM_HOST", raising=False)
+    monkeypatch.delenv("PLI_MEMORY_LIMIT_GB", raising=False)
     monkeypatch.setattr(memory_budget, "physical_memory_bytes", lambda: 128 * GIB)
     monkeypatch.setattr("faulthandler.register", lambda *a, **k: None)
     return core
@@ -71,7 +71,7 @@ def runtime(monkeypatch):
 def test_serve_fits_host_ngrams_within_the_original_budget(tmp_path, monkeypatch, runtime, flag, fits):
     _checkpoint(tmp_path, main=75 * GIB, mapped=30 * GIB)
     if flag is not None:
-        monkeypatch.setenv("TF_NGRAM_HOST", flag)
+        monkeypatch.setenv("PLI_NGRAM_HOST", flag)
     budgets = []
     monkeypatch.setattr(cli, "_serve_mlx", lambda args, family, path, context, required, budget, *rest:
                         budgets.append(budget) or 0)
@@ -81,7 +81,7 @@ def test_serve_fits_host_ngrams_within_the_original_budget(tmp_path, monkeypatch
         assert budgets == [int(0.70 * 128 * GIB)]
     else:
         with pytest.raises(ValueError, match=r"weights \(105\.0 GiB\) do not fit.*89\.6 GiB.*Raise the budget "
-                                             r"past 108\.0 GiB with TENSORFOLD_MEMORY_LIMIT_GB \(this Mac takes up to "
+                                             r"past 108\.0 GiB with PLI_MEMORY_LIMIT_GB \(this Mac takes up to "
                                              r"120\.0"):
             cli.cmd_serve(args)
         assert budgets == []
@@ -90,9 +90,9 @@ def test_serve_fits_host_ngrams_within_the_original_budget(tmp_path, monkeypatch
 @pytest.mark.parametrize("flag", [None, "1"])
 def test_host_mode_still_refuses_resident_weights_past_the_limit(tmp_path, monkeypatch, runtime, flag):
     _checkpoint(tmp_path, main=75 * GIB, mapped=30 * GIB)
-    monkeypatch.setenv("TENSORFOLD_MEMORY_LIMIT_GB", "78")    # exactly 75 GiB for buffers, no room for the head
+    monkeypatch.setenv("PLI_MEMORY_LIMIT_GB", "78")    # exactly 75 GiB for buffers, no room for the head
     if flag is not None:
-        monkeypatch.setenv("TF_NGRAM_HOST", flag)
+        monkeypatch.setenv("PLI_NGRAM_HOST", flag)
     monkeypatch.setattr(cli, "_serve_mlx", lambda *a: pytest.fail("weights loaded past the budget"))
     args = cli.build_parser().parse_args(["serve", str(tmp_path), "--backend", "mlx", "--no-update-check"])
     with pytest.raises(ValueError, match=r"weights \(75\.0 GiB\) do not fit.*78\.0 GiB"):
@@ -101,7 +101,7 @@ def test_host_mode_still_refuses_resident_weights_past_the_limit(tmp_path, monke
 
 def test_serve_passes_a_raised_budget_to_the_allocator_and_server(tmp_path, monkeypatch, runtime, capsys):
     _checkpoint(tmp_path, main=75 * GIB, mapped=30 * GIB)
-    monkeypatch.setenv("TENSORFOLD_MEMORY_LIMIT_GB", "110")
+    monkeypatch.setenv("PLI_MEMORY_LIMIT_GB", "110")
     allocations, budgets = [], []
     runtime.set_memory_limit = allocations.append
     monkeypatch.setattr(cli, "_serve_mlx", lambda args, family, path, context, required, budget, *rest:
@@ -113,7 +113,7 @@ def test_serve_passes_a_raised_budget_to_the_allocator_and_server(tmp_path, monk
     assert budgets == [(110 * GIB, 262144, 131072)]
     out = capsys.readouterr().out
     assert "memory budget 110.0 GiB: MLX's buffers up to 107.0 GiB" in out
-    assert "TENSORFOLD_MEMORY_LIMIT_GB can raise it to 120.0" in out     # the working set caps it
+    assert "PLI_MEMORY_LIMIT_GB can raise it to 120.0" in out     # the working set caps it
 
 
 def test_the_startup_line_names_how_far_the_budget_can_rise(tmp_path, monkeypatch, runtime, capsys):
@@ -122,7 +122,7 @@ def test_the_startup_line_names_how_far_the_budget_can_rise(tmp_path, monkeypatc
     args = cli.build_parser().parse_args(["serve", str(tmp_path), "--backend", "mlx", "--no-update-check"])
     assert cli.cmd_serve(args) == 0
     assert "memory budget 89.6 GiB" in (out := capsys.readouterr().out)
-    assert "TENSORFOLD_MEMORY_LIMIT_GB can raise it to 120.0" in out
+    assert "PLI_MEMORY_LIMIT_GB can raise it to 120.0" in out
 
 
 def test_only_mapped_table_tensors_are_subtracted(tmp_path, monkeypatch, runtime):
@@ -133,12 +133,12 @@ def test_only_mapped_table_tensors_are_subtracted(tmp_path, monkeypatch, runtime
         "language_model.model.layers.1.ple.ple_embedding.ngram_heads_offsets": 64,
     })
     total += _file(tmp_path / "unused.safetensors", {f"{NGRAM}.shard_9.weight": 512})
-    monkeypatch.setenv("TF_NGRAM_HOST", "1")
+    monkeypatch.setenv("PLI_NGRAM_HOST", "1")
     assert qwen4_exp.weight_bytes(tmp_path) == total - 1600
-    monkeypatch.delenv("TF_NGRAM_HOST")
+    monkeypatch.delenv("PLI_NGRAM_HOST")
     assert qwen4_exp.weight_bytes(tmp_path) == total                        # a small checkpoint: tables on the GPU
     assert qwen4_exp.weight_bytes(tmp_path, ple_on_ssd=True) == total - 1600 == total - qwen4_exp.ple_bytes(tmp_path)
-    monkeypatch.setenv("TF_NGRAM_HOST", "0")
+    monkeypatch.setenv("PLI_NGRAM_HOST", "0")
     monkeypatch.setattr(host_table, "read_header", lambda *a: pytest.fail("resident tables need no header scan"))
     assert qwen4_exp.weight_bytes(tmp_path) == total
 
@@ -153,7 +153,7 @@ def test_host_selection_uses_the_loaders_threshold_and_overrides(tmp_path, monke
         runtime.metal = SimpleNamespace(device_info=runtime.device_info)
         del runtime.device_info
     if flag is not None:
-        monkeypatch.setenv("TF_NGRAM_HOST", flag)
+        monkeypatch.setenv("PLI_NGRAM_HOST", flag)
     assert host_table.ngrams_on_host(tmp_path) is expected
     info = lambda: {"max_recommended_working_set_size": model_size * 2}
     if legacy:

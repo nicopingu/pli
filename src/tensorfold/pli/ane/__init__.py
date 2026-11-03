@@ -1,1 +1,1 @@
-"""Neural Engine pour PLI (SP1) : client natif repris de Splash 1.3.2-m1 (Apache-2.0) et FFN partagé par canaux."""
+"""Neural Engine for PLI (SP1): native client taken from Splash 1.3.2-m1 (Apache-2.0) and FFN split by channels."""

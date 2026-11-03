@@ -17,7 +17,7 @@ _RESERVED_NAMES = {"control-smoke"}
 _ENV = re.compile(r"[A-Z_][A-Z0-9_]{0,127}\Z")
 _RESERVED = {"--host", "--port", "--name", "--alias", "--backend", "--no-update-check"}
 _SENSITIVE = re.compile(r"(?i)(token|password|api[-_]key|secret)")
-_ENV_PREFIXES = ("TENSORFOLD_", "TF_", "MLX_", "HF_", "HUGGINGFACE_", "TORCH_", "CUDA_")
+_ENV_PREFIXES = ("TENSORFOLD_", "TF_", "PLI_", "MLX_", "HF_", "HUGGINGFACE_", "TORCH_", "CUDA_")
 _ENV_NAMES = {"TOKENIZERS_PARALLELISM", "OMP_NUM_THREADS"}
 
 
@@ -191,7 +191,7 @@ def read_environment(profile: Profile) -> dict[str, str]:
         except (ValueError, UnicodeError) as exc:
             raise ControlError("environment file must be a private JSON object") from exc
         values.update(validate_env(external, secrets=True))
-    values.update(PYTHONUNBUFFERED="1", TENSORFOLD_NO_LIVE="1", TENSORFOLD_NO_UPDATE_CHECK="1")
+    values.update(PYTHONUNBUFFERED="1", PLI_NO_LIVE="1", PLI_NO_UPDATE_CHECK="1")
     if not profile.allow_download:
         values.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     return values

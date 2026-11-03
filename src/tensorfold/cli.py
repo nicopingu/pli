@@ -39,27 +39,27 @@ def main(argv: list[str] | None = None) -> int:
             argv = ["serve", *argv]
     args = build_parser().parse_args(argv)
     try:
-        _profil(args)
+        _profile(args)
         return int(args.func(args) or 0)
     except (FileNotFoundError, ValueError) as exc:
         print(f"tensorfold: {exc}", file=sys.stderr)
         return 1
 
 
-def _profil(args: argparse.Namespace) -> None:
-    """``--profile`` (ou PLI_PROFIL) : réglages PLI_* posés avant tout import de noyau."""
+def _profile(args: argparse.Namespace) -> None:
+    """``--profile`` (or PLI_PROFILE): PLI_* settings set before any kernel import."""
 
-    nom = getattr(args, "profile", None) or os.environ.get("PLI_PROFIL", "")
-    if not nom or not getattr(args, "model", None):
+    name = getattr(args, "profile", None) or os.environ.get("PLI_PROFILE", "")
+    if not name or not getattr(args, "model", None):
         return
-    from tensorfold.pli import profils
+    from tensorfold.pli import profiles
 
     try:
-        dossier = _config_dir(args.model)
+        folder = _config_dir(args.model)
     except FileNotFoundError:
-        dossier = None
-    lus = profils.appliquer(nom, profils.type_de_modele(dossier))
-    print(f"[tensorfold] profil {nom} : {', '.join(lus) or 'aucun fichier'}", flush=True)
+        folder = None
+    read = profiles.apply(name, profiles.model_type_of(folder))
+    print(f"[tensorfold] profile {name}: {', '.join(read) or 'no file'}", flush=True)
 
 
 def _config_dir(model: str) -> Path:
@@ -315,7 +315,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     gib = 1024**3
     note = f" ({fraction:.0%} of RAM, this model's allowance)" if fraction > MEMORY_FRACTION else ""
     ceiling = budget_ceiling(mx)
-    more = f"; TENSORFOLD_MEMORY_LIMIT_GB can raise it to {ceiling / gib:.1f}" if ceiling > memory_limit + gib else ""
+    more = f"; PLI_MEMORY_LIMIT_GB can raise it to {ceiling / gib:.1f}" if ceiling > memory_limit + gib else ""
     print(f"[tensorfold] memory budget {memory_limit / gib:.1f} GiB{note}: MLX's buffers up to "
           f"{(memory_limit - PROCESS_BYTES) / gib:.1f} GiB, {PROCESS_BYTES / gib:.0f} GiB for the rest of the process"
           f"{more}", flush=True)
@@ -402,11 +402,12 @@ def _serve_mlx(args: argparse.Namespace, family: Any, model_dir: Path, context: 
     model_id = (f"{model_dir.resolve()}|mlx={mx.__version__}|mlx_lm={version('mlx-lm')}"
                 f"|kernels={families.kernel_version(family, model)}"
                 f"|prefill={plan.name}|tensorfold={__version__}")
-    # PLI (13/10/2026) : les réglages PLI_* changent les bits d'un instantané (attm, f16...) : leur empreinte entre dans la clé, pour qu'une
-    # conversation enregistrée sous d'autres réglages ne soit pas reprise avec un calcul mélangé. PLI_INSTANTANE_REGLAGES=0 = origine.
-    if os.environ.get("PLI_INSTANTANE_REGLAGES", "1") == "1":
+    # PLI (13/10/2026): the PLI_* settings change the bits of a snapshot (attm, f16...): their fingerprint enters the key, so that a
+    # conversation saved under other settings is not resumed with a mixed computation. PLI_SNAPSHOT_SETTINGS=0 = original.
+    if os.environ.get("PLI_SNAPSHOT_SETTINGS", "1") == "1":
         import hashlib as _hl
-        _pli = sorted((k, v) for k, v in os.environ.items() if k.startswith("PLI_") and k not in ("PLI_INSTANTANE_REGLAGES", "PLI_ATTENTION_REGLAGE"))
+        from tensorfold.pli import env_names as _env_names
+        _pli = _env_names.pli_settings(exclude=("PLI_SNAPSHOT_SETTINGS", "PLI_ATTENTION_TUNING_FILE"))
         model_id += "|pli=" + _hl.sha256(repr(_pli).encode()).hexdigest()[:12]
     gib = args.prompt_cache_gib
     if gib is None:

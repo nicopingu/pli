@@ -10,14 +10,14 @@ import mlx.core as mx
 from tensorfold.kernels import threads
 
 MAX_ROWS = 1 << 16   # rows a call routed here (prompt chunks included); every row's bits are its one-row bits
-# PLI (lot S6, sonde pli-rt du 10/10) : PLI_PAVES_PAR_GROUPE règle RT_MAX (2 = origine ; 1 mesuré plus rapide de 9 à 64 lignes, mêmes bits).
-RT_MAX = max(1, int(__import__("os").environ.get("PLI_PAVES_PAR_GROUPE", "2") or 2))   # 8-row tiles a threadgroup: more rows than 8 RT_MAX spread over the grid's y axis
+# PLI (10/10): PLI_TILES_PER_GROUP sets RT_MAX (2 = original; 1 measured faster from 9 to 64 rows, same bits).
+RT_MAX = max(1, int(__import__("os").environ.get("PLI_TILES_PER_GROUP", "2") or 2))   # 8-row tiles a threadgroup: more rows than 8 RT_MAX spread over the grid's y axis
 MMA_SGS = 16         # physical simdgroups at most (fewer where a pipeline takes fewer threads): same chunks
 GROUP = 64
-# PLI (lot P2, palier a, 15/10/2026) : PLI_XF_BF16=1 range les fragments d'entrée du noyau à 2..8 lignes (mmaf) en paires de bf16
-# (un mot de 32 bits) au lieu de paires de fp32. La valeur x * 2^-4s d'une entrée bf16 tient exactement en bf16 (même exposant
-# que fp32, mantisse de 8 bits inchangée) : mêmes valeurs, mêmes bits, deux fois moins d'octets relus. Seule exception : un
-# résultat sous 2^-126 (|x| < 2^-98), où fp32 et bf16 n'ont pas la même mantisse dénormale. Éteint par défaut.
+# PLI (item P2, step a, 15/10/2026): PLI_XF_BF16=1 packs the input fragments of the 2..8-row kernel (mmaf) as pairs of bf16
+# (one 32-bit word) instead of pairs of fp32. The value x * 2^-4s of a bf16 input fits exactly in bf16 (same exponent
+# as fp32, 8-bit mantissa unchanged): same values, same bits, half the bytes read again. Only exception: a
+# result under 2^-126 (|x| < 2^-98), where fp32 and bf16 do not have the same denormal mantissa. Off by default.
 XF_BF16 = __import__("os").environ.get("PLI_XF_BF16", "0") == "1"
 
 _HEADER = r"""
@@ -35,30 +35,30 @@ inline float sum8(uint4 v, float one) {
 }
 // 2^-4s
 inline float pre(int s) { return as_type<float>(uint(127 - 4 * s) << 23); }
-// PLI (P2 b+c, rangement « rg ») : poids par paquets de 32 sorties [paquet][groupe][fm * 4 + quart][tuile 0..3] (uint2),
-// échelle (bf16 bas) et décalage (bf16 haut) réunis en un mot [paquet][groupe][fm][tuile]. n = 32 paquet + 8 tuile + fm.
+// PLI (P2 b+c, "rg" layout): weights in packs of 32 outputs [pack][group][fm * 4 + quarter][tile 0..3] (uint2),
+// scale (bf16 low) and bias (bf16 high) joined in one word [pack][group][fm][tile]. n = 32 pack + 8 tile + fm.
 inline size_t rg_w(int n, int g, int q, int G) { return ((size_t(n / 32) * G + g) * 32 + (n % 8) * 4 + q) * 4 + (n / 8) % 4; }
 inline size_t rg_sb(int n, int g, int G) { return ((size_t(n / 32) * G + g) * 8 + (n % 8)) * 4 + (n / 8) % 4; }
 inline float rg_sc(uint w) { return as_type<float>(w << 16); }
 inline float rg_bi(uint w) { return as_type<float>(w & 0xFFFF0000u); }
-// un groupe de 64 poids d'une ligne n, moitié h (0 ou 1) : les mots 4h .. 4h + 3 du rangement d'origine
+// a group of 64 weights of a row n, half h (0 or 1): the words 4h .. 4h + 3 of the original layout
 inline uint4 rg_half(const device uint2* W2, int n, int g, int h, int G) {
   const uint2 a = W2[rg_w(n, g, 2 * h, G)], b = W2[rg_w(n, g, 2 * h + 1, G)];
   return uint4(a.x, a.y, b.x, b.y);
 }
-// PLI (P2 a) : deux valeurs exactes en bf16 (16 bits bas de leur fp32 nuls) rangées dans un mot, a en bas, b en haut
+// PLI (P2 a): two values exact in bf16 (low 16 bits of their fp32 zero) packed in one word, a low, b high
 inline uint pack_bf2(float a, float b) { return (as_type<uint>(a) >> 16) | (as_type<uint>(b) & 0xFFFF0000u); }
 """
 
-# PLI (lot E4, entiers d'abord) : mêmes noyaux, entrée en entiers de 16 bits signés (8 par mot de 128 bits, à la place des 8 bf16)
-# et sortie en 32 bits. Tant que |x| <= ENT_MAX, la somme d'un groupe de 64 produits x * q (q de 0 à 15) reste sous 2^24 : elle est
-# exacte en flottant 32 bits, quel que soit l'ordre des additions. Le reste (une FMA d'échelle et une de décalage par groupe, par
-# morceaux, puis arbre) est l'ordre écrit ci-dessous, que le noyau CPU pli_qmm_e15 reprend à l'identique.
-ENT_MAX = 16383
-_HEADER_ENT = _HEADER.replace("""  const uint w = v[e / 2];
+# PLI (item E4, integers first): same kernels, input in signed 16-bit integers (8 per 128-bit word, in place of the 8 bf16)
+# and output in 32 bits. As long as |x| <= INT_INPUT_MAX, the sum of a group of 64 products x * q (q from 0 to 15) stays under 2^24: it is
+# exact in 32-bit float, whatever the order of the additions. The rest (one scale FMA and one bias FMA per group, by
+# chunks, then tree) is the order written below, which the CPU kernel pli_qmm_e15 reproduces identically.
+INT_INPUT_MAX = 16383
+_HEADER_INT = _HEADER.replace("""  const uint w = v[e / 2];
   return as_type<float>((e % 2) ? (w & 0xFFFF0000u) : (w << 16));""", """  const uint w = v[e / 2];
   return float(int(short((e % 2) ? (w >> 16) : (w & 0xFFFFu))));""")
-assert _HEADER_ENT != _HEADER
+assert _HEADER_INT != _HEADER
 
 _SCALAR = r"""
   // RS rows (1 to 4). Lane (chunk c = lane % S, slot j = lane / S) runs chunk c of NR outputs n0 + j + (32 / S) u,
@@ -272,7 +272,7 @@ _MMA = r"""
 """
 
 def _scalar_rg(src: str) -> str:
-    """PLI (P2 b+c) : le noyau scalaire lit le rangement rg (mêmes mots, mêmes valeurs, autres adresses)."""
+    """PLI (P2 b+c): the scalar kernel reads the rg layout (same words, same values, other addresses)."""
 
     out = src
     for old, new in (
@@ -295,7 +295,7 @@ def _scalar_rg(src: str) -> str:
 
 
 def _mma_rg(src: str) -> str:
-    """PLI (P2 b+c) : le noyau MMA lit le rangement rg ; avec 4 tuiles (paquet entier), lectures de 128 bits."""
+    """PLI (P2 b+c): the MMA kernel reads the rg layout; with 4 tiles (whole pack), 128-bit reads."""
 
     out = src
     for old, new in (
@@ -372,7 +372,7 @@ assert _PREP_BF16 != _PREP
 
 
 def _fragment_source_bf16(mma: str) -> str:
-    """PLI (P2 a) : le noyau mmaf lit les fragments rangés en paires de bf16 (mêmes valeurs que les paires de fp32)."""
+    """PLI (P2 a): the mmaf kernel reads the fragments packed as pairs of bf16 (same values as the pairs of fp32)."""
 
     out = _fragment_source(mma)
     old = """          const float2 f = XF2[(size_t(min(rb / 8 + rt, T8 - 1)) * G + g) * 256 + 32 * s + lane];
@@ -436,16 +436,16 @@ def _compiled(kind: str, consts: tuple[tuple[str, int], ...], dep: bool = False,
 
     key = (kind, consts, dep, prologue.name, XF_BF16 and kind in ("prep", "mmaf", "mmaf_rg"))
     kernel = _kernels.get(key)
-    ent = kind.endswith("_ent")                      # PLI : entrée en entiers de 16 bits, sortie en 32 bits
-    if kernel is None and ent:
-        body = {"scalar_ent": _SCALAR, "mma_ent": _MMA}[kind].replace("bfloat(", "float(")
+    int_input = kind.endswith("_int")                # PLI: input in 16-bit integers, output in 32 bits
+    if kernel is None and int_input:
+        body = {"scalar_int": _SCALAR, "mma_int": _MMA}[kind].replace("bfloat(", "float(")
         source = ("".join(f"  constexpr int {k} = {v};\n" for k, v in consts)
                   + f"  #define LOAD8(r, j) ({prologue.load8})\n" + body + "  #undef LOAD8\n")
-        name = f"simd_qmm_{kind}_" + hashlib.sha256((_HEADER_ENT + source).encode()).hexdigest()[:16]
+        name = f"simd_qmm_{kind}_" + hashlib.sha256((_HEADER_INT + source).encode()).hexdigest()[:16]
         kernel = _kernels[key] = mx.fast.metal_kernel(name=name, input_names=["X", "W", "SC", "BI", "ONE"],
-                                                      output_names=["OUT"], source=source, header=_HEADER_ENT)
+                                                      output_names=["OUT"], source=source, header=_HEADER_INT)
     if kernel is None:
-        if kind in ("scalar_rg", "mma_rg", "mmaf_rg"):        # PLI (P2 b+c) : rangement rg
+        if kind in ("scalar_rg", "mma_rg", "mmaf_rg"):        # PLI (P2 b+c): rg layout
             mma_rg = _mma_rg(_MMA)
             body = {"scalar_rg": _scalar_rg(_SCALAR), "mma_rg": mma_rg,
                     "mmaf_rg": (_fragment_source_bf16 if XF_BF16 else _fragment_source)(mma_rg)}[kind]
@@ -502,8 +502,8 @@ def scalar_kind(rows: int, n: int, dims: int, group: int = GROUP) -> bool:
     return rows <= limit and bool(scalar_block(rows, splits(n, dims), group)) and (n, dims, group) not in mma_one_row
 
 
-def rangee(scales: mx.array) -> bool:
-    """PLI (P2 b+c) : une matrice au rangement rg porte, à la place des échelles, des mots de 32 bits (échelle + décalage)."""
+def relaid_out(scales: mx.array) -> bool:
+    """PLI (P2 b+c): a matrix in the rg layout carries, in place of the scales, 32-bit words (scale + bias)."""
 
     return scales.dtype == mx.uint32
 
@@ -584,7 +584,7 @@ def qmm(x: mx.array, weight: mx.array, scales: mx.array, biases: mx.array, group
     n = int(weight.shape[0])
     if kind is None:
         kind = "scalar" if scalar_kind(rows, n, dims, group_size) else "mma"
-    if rangee(scales):                                   # PLI (P2 b+c) : mêmes calculs, lecture du rangement rg
+    if relaid_out(scales):                               # PLI (P2 b+c): same computations, read of the rg layout
         assert group_size == GROUP and n % 32 == 0 and kind in ("scalar", "mma")
         kind += "_rg"
     pro = prologue or _DEFAULT
@@ -593,10 +593,10 @@ def qmm(x: mx.array, weight: mx.array, scales: mx.array, biases: mx.array, group
     return _run(kind, rows, n, dims, group_size, dep is not None, pro, inputs).reshape(*shape[:-1], n)
 
 
-def qmm_ent(xi: mx.array, weight: mx.array, scales: mx.array, biases: mx.array, *, kind: str | None = None) -> mx.array:
-    """PLI (lot E4) : xi [lignes, K] en entiers de 16 bits (|x| <= ENT_MAX) ; rend xi @ W.T en 32 bits, groupes de 64.
+def qmm_int(xi: mx.array, weight: mx.array, scales: mx.array, biases: mx.array, *, kind: str | None = None) -> mx.array:
+    """PLI (item E4): xi [rows, K] in 16-bit integers (|x| <= INT_INPUT_MAX); returns xi @ W.T in 32 bits, groups of 64.
 
-    Mêmes bits pour une ligne quel que soit le nombre de lignes de l'appel, et mêmes bits que le noyau CPU ``pli_qmm_e15``."""
+    Same bits for a row whatever the number of rows of the call, and same bits as the CPU kernel ``pli_qmm_e15``."""
 
     global _one
     if _one is None:
@@ -606,7 +606,7 @@ def qmm_ent(xi: mx.array, weight: mx.array, scales: mx.array, biases: mx.array, 
     n = int(weight.shape[0])
     if kind is None:
         kind = "scalar" if scalar_kind(rows, n, dims, GROUP) else "mma"
-    return _run(kind + "_ent", rows, n, dims, GROUP, False, _DEFAULT, [xi, weight, scales, biases, _one])
+    return _run(kind + "_int", rows, n, dims, GROUP, False, _DEFAULT, [xi, weight, scales, biases, _one])
 
 
 def fragments(x: mx.array, *, prologue: Prologue | None = None, extra: Sequence[mx.array] = ()
@@ -638,7 +638,7 @@ def qmm_fragments(frags: tuple[mx.array, mx.array], weight: mx.array, scales: mx
     rows, groups = int(xs.shape[0]), int(xs.shape[1])
     dims, n = groups * GROUP, int(weight.shape[0])
     inputs = [xf, xs, weight, scales, biases, _one] + ([dep] if dep is not None else [])
-    return _run("mmaf_rg" if rangee(scales) else "mmaf", rows, n, dims, GROUP, dep is not None, _DEFAULT, inputs)
+    return _run("mmaf_rg" if relaid_out(scales) else "mmaf", rows, n, dims, GROUP, dep is not None, _DEFAULT, inputs)
 
 
 def check(weight: mx.array, scales: mx.array, biases: mx.array, *, seed: int = 0, group_size: int = GROUP) -> bool:
@@ -653,4 +653,4 @@ def check(weight: mx.array, scales: mx.array, biases: mx.array, *, seed: int = 0
                                    full[r:r + m]).item()) for r, m in calls)
 
 
-__all__ = ["ENT_MAX", "MAX_ROWS", "Prologue", "check", "fits", "fragments", "qmm", "qmm_ent", "qmm_fragments", "splits"]
+__all__ = ["INT_INPUT_MAX", "MAX_ROWS", "Prologue", "check", "fits", "fragments", "qmm", "qmm_int", "qmm_fragments", "splits"]

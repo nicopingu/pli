@@ -57,9 +57,8 @@ def post(handler: Any, app: Any) -> None:
         raw = read_body(handler, limit=LIMIT)
         body = json.loads(raw or b"{}")
         chat = translate(body, count=count)
-        late_system = getattr(app, "late_system", getattr(getattr(app, "template", None), "late_system", "system"))
-        if late_system != "system" and any(m.get("role") == "system" for m in body["messages"]):
-            raise RequestError("the model's chat template does not support mid-conversation system messages")
+        # PLI (29/10/2026): a system message in mid-conversation (Claude Code sends some) is no longer refused when the chat
+        # template does not keep it in place: normalize_messages gives it the late_system role ("user"), as the OpenAI route does.
         if count:
             return _send(handler, 200, {"input_tokens": count_tokens(app, chat)})
     except (RequestError, ValueError, UnicodeDecodeError) as exc:
