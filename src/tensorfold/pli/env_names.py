@@ -179,6 +179,8 @@ RENAMED: tuple[tuple[str, str], ...] = (
     ("PLI_LISTE_PLUS", "PLI_EXTENDED_DRAFT_LIST"),
     ("PLI_DEVERSE_INVITE", "PLI_SPILL_PROMPT"),
     ("PLI_FOURCHE_MIN", "PLI_FORK_MIN"),
+    # PLI 4.0.1 (production of 03/11/2026)
+    ("PLI_DEBUT_DERNIER", "PLI_LAST_MESSAGE_CHECKPOINT"),
 )
 
 NEW_NAME = dict(RENAMED)

@@ -26,6 +26,14 @@ fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
   same code from a clone, with standard Python only. `tools/quantize_mtp_head.py` likewise runs
   `tensorfold.install.mtp_head`, which `pli setup` uses.
 - **`pli` alone** prints a short help with examples instead of an argument error.
+- **Checkpoint at the start of the last message** (`PLI_LAST_MESSAGE_CHECKPOINT`, 1,024 in the `m1-ultra` profile,
+  off in the code; in production since 3 Nov). Besides the history checkpoint, PLI keeps the state at the start of
+  the prompt's last message (the turn marker that opens the reply, looked for backwards in the history) when at least
+  N tokens are read there since the resume. The next request that keeps the history but not that message (a question
+  replaced, a reply thrown away, a sub-agent on the same history) starts from there instead of from the previous
+  request's checkpoint. Same text. On the agent session of the public suite pli-bench-v1: the same 8 replies, prompt
+  served from the cache 73.5% instead of 58.9%, sum of the times to the first token 238.0 s instead of 357.3 s
+  (-33%), writing speed unchanged. The production name `PLI_DEBUT_DERNIER` is still accepted.
 
 ## 4.0.0 (2026-11-02)
 

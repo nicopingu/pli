@@ -48,6 +48,27 @@ def extends(longer: list[int], shorter: list[int]) -> bool:
 # resume (4,096); 0: off. Same text (a resume gives what a full prefill gives).
 _FORK_MIN = int(os.environ.get("PLI_FORK_MIN", "4096") or 0)
 _SPILL_PROMPT = os.environ.get("PLI_SPILL_PROMPT", "1") != "0"
+# PLI (03/11/2026, public suite pli-bench-v1, agent session that does not keep the measured question):
+# PLI_LAST_MESSAGE_CHECKPOINT=N also keeps the state at the start of the prompt's last message (the token that opens the
+# reply, such as <|im_start|>, looked for backwards in the history) when at least N tokens are read there since the
+# resume. The next request that keeps the history but not this last message (a question replaced, a reply thrown away,
+# a sub-agent on the same history) starts from there instead of from the previous request's checkpoint. 0 (default):
+# off. Same text (a resume gives what a full prefill gives).
+_LAST_MESSAGE_MIN = int(os.environ.get("PLI_LAST_MESSAGE_CHECKPOINT", "0") or 0)
+
+
+def last_message_start(history_len: int, prompt: list[int]) -> int:
+    """Where the last message of the prompt starts: the last token before ``history_len`` equal to the one that opens the reply
+    (``prompt[history_len]``, the turn marker of templates such as ChatML); 0 when there is none."""
+
+    h = int(history_len)
+    if not 0 < h < len(prompt):
+        return 0
+    marker = prompt[h]
+    for i in range(h - 1, 0, -1):
+        if prompt[i] == marker:
+            return i
+    return 0
 
 
 def choose_checkpoints(
@@ -62,6 +83,10 @@ def choose_checkpoints(
             candidates.add(stable)
         elif _FORK_MIN > 0 and int(history_len) < stable < len(prompt) and stable - int(cached) >= _FORK_MIN:
             candidates.add(stable)
+    if _LAST_MESSAGE_MIN > 0:
+        start = last_message_start(history_len, prompt)
+        if start - int(cached) >= _LAST_MESSAGE_MIN:
+            candidates.add(start)
     return sorted(at for at in candidates if int(cached) < at < len(prompt))
 
 

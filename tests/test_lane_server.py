@@ -703,3 +703,21 @@ def test_concurrent_admission_never_plans_past_the_prompt_admissions_budget(caps
         assert "MLX's share" in capsys.readouterr().out
     finally:
         app.close()
+
+
+def test_choose_checkpoints_keeps_the_start_of_the_last_message(monkeypatch) -> None:
+    from tensorfold.server import checkpoints
+
+    # 7 opens every message and the reply: ... 7 history 7 last message, then 7 the reply
+    prompt = [1, 2] + [7] + list(range(10, 60)) + [7] + list(range(60, 80)) + [7, 3]
+    history = len(prompt) - 2
+    assert checkpoints.last_message_start(history, prompt) == 53
+    assert checkpoints.last_message_start(0, prompt) == 0
+    assert checkpoints.last_message_start(len(prompt), prompt) == 0
+    monkeypatch.setattr(checkpoints, "_LAST_MESSAGE_MIN", 0)
+    assert choose_checkpoints(history, 0, None, prompt) == [history]
+    monkeypatch.setattr(checkpoints, "_LAST_MESSAGE_MIN", 16)
+    assert choose_checkpoints(history, 0, None, prompt) == [53, history]
+    assert choose_checkpoints(history, 40, None, prompt) == [history]   # fewer than 16 tokens read since the resume
+    monkeypatch.setattr(checkpoints, "_LAST_MESSAGE_MIN", 1)
+    assert choose_checkpoints(history, 53, None, prompt) == [history]   # already the resumed prefix

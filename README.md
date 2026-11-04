@@ -150,6 +150,7 @@ arithmetic, judged on whole conversations before it went into production.
 | Reduced attention, anchored, for prompt chunks of up to 2 047 rows beyond 65 536 tokens of context | `PLI_S3B`, `PLI_S3B_THRESHOLD` | can change | 4.0.0 |
 | Snapshot on disk read again at the first slice of a resumed prompt | `PLI_REREAD_DISK` | see CHANGELOG | 4.0.0 |
 | Prompt checkpoint spilled to disk even when a reply extends it; checkpoint where a prompt forks in its last message (both on by default) | `PLI_SPILL_PROMPT`, `PLI_FORK_MIN` | same text | 4.0.0 |
+| Checkpoint at the start of the prompt's last message, past 1 024 tokens read there: a request that keeps the history but not the last message starts from there. On the agent session of the public suite: the same 8 replies, prompt served from the cache 73.5% instead of 58.9%, sum of the times to the first token 238.0 s instead of 357.3 s (-33%), same writing speed | `PLI_LAST_MESSAGE_CHECKPOINT` | same text | 4.0.1 |
 | MLX command buffers of at most 500 MB and 100 operations (env, set by `pli setup`) | `MLX_MAX_MB_PER_BUFFER`, `MLX_MAX_OPS_PER_BUFFER` | same text | 4.0.0 |
 
 ## Experimental features

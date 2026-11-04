@@ -2,7 +2,7 @@
 
 Every PLI addition to TensorFold 0.6.6 is switched by a `PLI_*` environment variable, off by default in the code except where the
 "Code default" column says otherwise.
-PLI 4.0.0 reads 154 of its own, listed here in four parts and "Other", plus the inherited TensorFold settings (renamed, see the end). `--profile NAME` (or `PLI_PROFILE=NAME`) loads a machine profile
+PLI 4.0.1 reads 155 of its own, listed here in four parts and "Other", plus the inherited TensorFold settings (renamed, see the end). `--profile NAME` (or `PLI_PROFILE=NAME`) loads a machine profile
 from `tensorfold/pli/profiles/NAME/` before any kernel is imported; a variable already set in the environment always wins.
 
 Terms used below:
@@ -80,6 +80,7 @@ family only (`qwen3_5.env`); `common.env` applies to every model. Three are on b
 | `PLI_S3B_THRESHOLD` | `65536` (qwen3_5.env) | `65536` | Positions past which S3b applies (at least 4,096). | `tensorfold/kernels/qwen/dense/v1/exact_attention.py` |
 | `PLI_SPILL_PROMPT` | unset | `1` | An evicted prompt checkpoint goes to disk even when a reply end extends it (a reply end no longer counts as a continuation; a longer prompt still does); `0`: the former behaviour. | `tensorfold/server/checkpoints.py` |
 | `PLI_FORK_MIN` | unset | `4096` | When a prompt forks from a kept one inside its last message (the same document sent again with another question), the state at the fork point is kept, past N tokens read since the resume; without a resume, the fork is looked for in the kept prompts. 0: off. Same text (a resume gives what a full prefill gives). | `tensorfold/server/checkpoints.py` |
+| `PLI_LAST_MESSAGE_CHECKPOINT` | `1024` (qwen3_5.env) | `0` | Also keeps the state at the start of the prompt's last message (the turn marker that opens the reply, as in ChatML, looked for backwards in the history) when at least N tokens are read there since the resume: the next request that keeps the history but not that message (a question replaced, a reply thrown away, a sub-agent on the same history) starts from there instead of from the previous request's checkpoint. 0: off. Same text (a resume gives what a full prefill gives). | `tensorfold/server/checkpoints.py` |
 | `PLI_CONTROL_AS_TEXT` | unset | `1` | Control tokens written in the text of a request (messages, tools, tool results) stay ordinary text; `0`: the former behaviour. | `tensorfold/server/text.py` |
 
 ## 2. Machine settings: paths and hosts, set in the environment
@@ -211,7 +212,7 @@ Change them only to measure.
 
 ## Names before 4.0.0
 
-The names before 3.7.0, and the 23 names that production used until 4.0.0. Every name below is still accepted; when both are set, the new name wins. Inherited TensorFold settings (`TF_*`,
+The names before 3.7.0, the 23 names that production used until 4.0.0, and `PLI_DEBUT_DERNIER`, used until 4.0.1. Every name below is still accepted; when both are set, the new name wins. Inherited TensorFold settings (`TF_*`,
 `TENSORFOLD_*`) were renamed to `PLI_*` too; they keep TensorFold's meaning and are described in TensorFold's
 documentation.
 
@@ -275,6 +276,7 @@ documentation.
 | `PLI_CONTROLE_TEXTE` | `PLI_CONTROL_AS_TEXT` |
 | `PLI_COPIE_JOURNAL` | `PLI_COPY_LOG` |
 | `PLI_CROISE_DENSE` | `PLI_INTERLEAVE_DENSE` |
+| `PLI_DEBUT_DERNIER` | `PLI_LAST_MESSAGE_CHECKPOINT` |
 | `PLI_DEVERSE_INVITE` | `PLI_SPILL_PROMPT` |
 | `PLI_EVENEMENTS_MAX_MO` | `PLI_EVENTS_MAX_MB` |
 | `PLI_EVENEMENTS` | `PLI_EVENTS` |
