@@ -1,4 +1,4 @@
-"""PLI: the folded-paper mark printed once when ``pli serve`` starts (PLI 4.0.0).
+"""PLI: the folded-paper mark printed once when ``pli serve`` starts (PLI 4.0.1).
 
 Text only, written to standard output before the model loads; touches nothing else.
 """

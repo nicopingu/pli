@@ -4,8 +4,10 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
-## Unreleased
+## 4.0.1 (2026-11-04)
 
+- **`pli serve` prints the PLI mark** (folded paper) with the version when it starts. The README gets the PLI logo,
+  a speed summary, a Hugging Face link for each model family, and says that PLI is tuned for the M1 Ultra.
 - **`pli setup` installs PLI; `install.sh` only makes the virtual environment.** `./install.sh install` finds Python
   3.11 to 3.14, creates `~/pli/venv` (or `--prefix`), installs PLI in it and runs `pli setup` with the same options.
   `pli setup` does what the rest of `install.sh` did, with the same checks, messages, defaults and service settings
