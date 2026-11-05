@@ -417,8 +417,12 @@ def _serve_mlx(args: argparse.Namespace, family: Any, model_dir: Path, context: 
     if os.environ.get("PLI_SNAPSHOT_SETTINGS", "1") == "1":
         import hashlib as _hl
         from tensorfold.pli import env_names as _env_names
-        _pli = _env_names.pli_settings(exclude=("PLI_SNAPSHOT_SETTINGS", "PLI_ATTENTION_TUNING_FILE"))
+        # PLI (KVD5): PLI_CHECKPOINT_BITS and PLI_CHECKPOINT_GROUP stay out of the fingerprint, carried by "|points=..." (nothing when off)
+        _pli = _env_names.pli_settings(exclude=("PLI_SNAPSHOT_SETTINGS", "PLI_ATTENTION_TUNING_FILE", "PLI_CHECKPOINT_BITS",
+                                                "PLI_CHECKPOINT_GROUP"))
         model_id += "|pli=" + _hl.sha256(repr(_pli).encode()).hexdigest()[:12]
+    from tensorfold.pli import checkpoint_bits as _cb
+    model_id += _cb.key_suffix()
     gib = args.prompt_cache_gib
     if gib is None:
         ram = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
@@ -461,6 +465,14 @@ def _serve_mlx(args: argparse.Namespace, family: Any, model_dir: Path, context: 
     hook = getattr(family.package, "setup", None)
     if hook is not None:
         hook(app, model, **options)
+    from tensorfold.server.checkpoint_info import describe as describe_checkpoint
+
+    # PLI (04/11/2026): what is served (weights, draft, MTP head, version), once at startup, for /health and /v1/models
+    try:
+        app.checkpoint = describe_checkpoint(model_dir, drafter=drafter, model=model)
+    except Exception as exc:  # noqa: BLE001 - a failed description must never stop the service from starting
+        print(f"[pli] checkpoint field of /health unavailable: {type(exc).__name__}: {exc}", flush=True)
+        app.checkpoint = None
     app.auth = getattr(args, "auth", None)
     app.host_guard = getattr(args, "host_guard", None)
     note = thinking_notes.startup(model_dir, bool(args.thinking))

@@ -15,7 +15,7 @@ SRC = str(Path(__file__).resolve().parents[1] / "src")
 def test_table_is_one_to_one():
     olds = [old for old, _ in env_names.RENAMED]
     news = [new for _, new in env_names.RENAMED]
-    assert len(set(olds)) == len(olds) == len(set(news)) == len(news) == 166
+    assert len(set(olds)) == len(olds) == len(set(news)) == len(news) == 173
     assert not set(olds) & set(news)
 
 

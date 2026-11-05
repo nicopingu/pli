@@ -267,6 +267,10 @@ class FamilyPrefill:
             for name in ("pli_choice", "pli_anchors", "pli_request_start", "pli_prefill_start"):
                 if getattr(layer, name, None) is not None:
                     setattr(layer, name, None)
+            if getattr(layer, "pli_kidx", None) is not None:    # PLI (A1): LSA index keys of the resumed positions only
+                from tensorfold.pli import a1_lsa as _a1
+
+                _a1.resume(layer, int(cached_tokens))
         return work, int(cached_tokens)
 
     def _family_prefill(self, stream: Any, *, cache: list[Any] | None, cached_tokens: int,
@@ -286,8 +290,10 @@ class FamilyPrefill:
         chunks = self.prompt_chunks(prompt) if prepared is None else PromptChunks(
             None, len(prompt), step=getattr(self.prefill_plan, "step", None) or self.prefill_step)
         work, start = self._family_start(cache, cached_tokens, chunks)
-        for layer in work:                      # PLI (23/10/2026, PLI_REDUCED_ANCHOR): reduced prefill applies only after the prompt
+        for i_layer, layer in enumerate(work):   # PLI (23/10/2026, PLI_REDUCED_ANCHOR): reduced prefill applies only after the prompt
             try:
+                if getattr(layer, "pli_layer", None) is None:        # PLI (05/11/2026): fresh cache (make_cache): layer number
+                    layer.pli_layer = i_layer                        # (read by the reduced prefill and A1; it was missing at the first prefill)
                 layer.pli_request_start = len(prompt)
                 layer.pli_prefill_start = int(start)          # PLI (S3b, 02/11/2026): bound of the anchors when reading the prompt
                 layer.pli_anchors = {}

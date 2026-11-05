@@ -153,11 +153,17 @@ def resume(cache: Sequence[Any], n: int, copier: Callable[[list[Any]], list[Any]
     ``take`` (memory does not allow a copy: the checkpoint is removed): everything is given as is, except a length layer
     whose conversation is still live, which is copied."""
 
-    if not any(isinstance(item, KVLen) or is_kv(item) for item in cache):
+    from tensorfold.pli import checkpoint_bits as _cb
+
+    if not any(isinstance(item, KVLen) or is_kv(item) or _cb.is_quantized(item) for item in cache):
         return list(cache) if take else copier(list(cache))         # no KV layer: as before
     out = []
     for item in cache:
-        if isinstance(item, KVLen) or is_kv(item):
+        if _cb.is_quantized(item):           # PLI (KVD5): reduced layer, restored to 16 bits for the request (its own)
+            r = item.restore()
+            r.pli_live = 1
+            out.append(r)
+        elif isinstance(item, KVLen) or is_kv(item):
             r = owner(item)
             if r.keys is not None and _free(r) and int(r.offset) >= n:
                 if int(r.offset) > n:
@@ -177,9 +183,13 @@ def resume(cache: Sequence[Any], n: int, copier: Callable[[list[Any]], list[Any]
 def as_lengths(cache: Sequence[Any], given: Sequence[Any], n: int) -> list[Any]:
     """The checkpoint after ``resume``: the layers given to the request become lengths in it."""
 
+    from tensorfold.pli import checkpoint_bits as _cb
+
     out = []
     for item, d in zip(cache, given):
         if (isinstance(item, KVLen) or is_kv(item)) and owner(item) is d:
+            out.append(KVLen(d, n))
+        elif _cb.is_quantized(item) and is_kv(d):   # PLI (KVD5): the restored layer holds the n positions, the reduced copy leaves
             out.append(KVLen(d, n))
         else:
             out.append(item)

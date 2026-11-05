@@ -106,6 +106,7 @@ def save_conversations(store: "CheckpointStore", directory: Path, model_id: str,
     """Save up to ``keep`` conversation snapshots within the byte limit; system blocks use their own directory."""
 
     from tensorfold.engine.prefix_snapshots import save_snapshot
+    from tensorfold.pli import checkpoint_bits as _cb
 
     with store._lock:
         entries = [entry for entry in store._entries if not entry.pinned]   # most recently used first
@@ -120,7 +121,7 @@ def save_conversations(store: "CheckpointStore", directory: Path, model_id: str,
             break
         started = time.perf_counter()
         try:
-            save_snapshot(directory, model_id, entry.tokens, entry.cache, keep=keep)
+            save_snapshot(directory, model_id, entry.tokens, _cb.for_disk(entry.cache), keep=keep)
         except Exception as exc:  # noqa: BLE001 - a full disk must not hang the shutdown
             print(f"[lanes] conversation save failed: {type(exc).__name__}: {exc}", flush=True)
             break
@@ -137,12 +138,14 @@ def spill_conversation(entry: CheckpointEntry, directory: Path, model_id: str, *
     """Write an evicted conversation where ``_read_disk_block`` finds it, this model's files kept under ``limit_bytes``."""
 
     from tensorfold.engine.prefix_snapshots import save_snapshot
+    from tensorfold.pli import checkpoint_bits as _cb
 
     if entry.nbytes > limit_bytes:
         return False
     started = time.perf_counter()
     try:
-        save_snapshot(directory, model_id, entry.tokens, entry.cache, keep=1 << 30)   # pruned by bytes below
+        # PLI (KVD5): with PLI_CHECKPOINT_BITS on, the file carries reduced K and V
+        save_snapshot(directory, model_id, entry.tokens, _cb.for_disk(entry.cache), keep=1 << 30)   # pruned by bytes below
     except Exception as exc:  # noqa: BLE001 - a full disk costs a later prefill, never the request
         print(f"[tensorfold] conversation spill failed: {type(exc).__name__}: {exc}", flush=True)
         return False
@@ -209,6 +212,7 @@ class CheckpointStore:
         self.on_evict = on_evict
         self.spilled = 0
         self.refused = 0                   # a prefix memory or the budget refused: counted, never silent (issue #155)
+        self.reduced = 0                   # PLI (KVD5): checkpoints reduced to 8 or 4 bits
 
     def _evicted(self, gone: list[CheckpointEntry]) -> None:
         if self.on_evict is None:
@@ -302,6 +306,13 @@ class CheckpointStore:
                 self._recount(self._entries)
                 best.last_prompt = list(prompt)
                 return n, live, previous
+            from tensorfold.pli import checkpoint_bits as _cb
+            if _cb.has_reduced(best.cache):          # PLI (KVD5): reduced layers restored to 16 bits for the request
+                if take:
+                    return len(best.tokens), _cb.restore_cache(best.cache), previous
+                self._entries.insert(0, best)
+                best.last_prompt = list(prompt)
+                return len(best.tokens), _cb.restore_cache(best.cache, self.copier), previous
             if take:
                 return len(best.tokens), best.cache, previous
             self._entries.insert(0, best)
@@ -384,6 +395,9 @@ class CheckpointStore:
                                and sum(e.nbytes for e in entries) > limit)
                 if not (over_slots or over_budget):
                     break
+                # PLI (KVD5): for the budget, reduce the oldest checkpoint that has a real copy before evicting
+                if over_budget and not over_slots and self._reduce_one(entries, keep=entry):
+                    continue
                 unpinned = [i for i in range(1, len(entries)) if not entries[i].pinned]
                 if unpinned:
                     gone.append(entries.pop(self._victim(entries, unpinned)))
@@ -420,10 +434,39 @@ class CheckpointStore:
                 return i
         return candidates[-1]
 
+    def _reduce_one(self, entries: list[CheckpointEntry], keep: CheckpointEntry | None = None) -> bool:
+        """PLI (KVD5, PLI_CHECKPOINT_BITS): reduces the KV layers of the oldest ordinary checkpoint that has a real copy of
+        them (a free layer that no other checkpoint holds by length); counts again; False if there is none. Off: False."""
+
+        from tensorfold.pli import checkpoint_bits as _cb
+        from tensorfold.pli import kv_sharing as _kvs
+
+        if _cb.BITS == 0:
+            return False
+        held = {id(item.owner) for e in entries for item in e.cache if isinstance(item, _kvs.KVLen)}
+        for e in reversed(entries):
+            if e is keep or e.pinned:
+                continue
+            if not any(_cb.reducible(item) for item in e.cache):
+                continue
+            if any(_cb.reducible(item) and (getattr(item, "pli_live", 0) or id(item) in held) for item in e.cache):
+                continue
+            before = e.nbytes
+            e.cache = _cb.reduce_cache(e.cache)
+            if self.sizer is not None:
+                e.nbytes = int(self.sizer(e.cache))
+            self._recount(entries)
+            self.reduced += 1
+            _point("checkpoint_reduced", e, before_gib=round(before / 1024**3, 3), bits=_cb.BITS)
+            return True
+        return False
+
     def evict_one(self, keep: CheckpointEntry | None = None) -> bool:
         """Free an ordinary prefix (``_victim``'s pick), then a pinned one when memory needs it; never ``keep``."""
 
         with self._lock:
+            if self._reduce_one(self._entries, keep=keep):      # PLI (KVD5): reducing frees memory before evicting
+                return True
             candidates = [i for i, entry in enumerate(self._entries) if entry is not keep]
             if not candidates:
                 return False

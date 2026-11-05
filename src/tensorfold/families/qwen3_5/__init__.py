@@ -177,6 +177,9 @@ def load(model_dir: Path, *, lane_kernels: str = "auto", drafter: str = "", draf
             drafter = ""
             print(f"[pli] native MTP head instead of DFlash2: {path}", flush=True)
     family = lane_family(model, lanes=lanes, drafter=drafter, drafter_bits=drafter_bits, title=TITLE, use=MODELS[0], make=make)
+    if mtp27:
+        # PLI (04/11/2026): the loaded MTP head and its mode (hybrid or instead of DFlash2), for the "checkpoint" field of /health
+        family.pli_mtp_head = {"path": str(Path(mtp27).expanduser()), "hybrid": bool(os.environ.get("PLI_HYBRID", "0") == "1" and drafter)}
     if vision:
         from tensorfold.vision.qwen_mlx import QwenVisionFrontend
         from tensorfold.vision.rotary import install_rotary

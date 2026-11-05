@@ -4,6 +4,35 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
+## 4.1.0 (2026-11-05)
+
+- **`checkpoint` field of `/health` and `/v1/models`.** The served weights (folder, or Hugging Face repo and revision),
+  their model type and quantization, the draft, the MTP head and the PLI version, so a client sees which model answers
+  without reading the server's settings. Same text.
+- **Checkpoints kept in 4 bits** (`PLI_CHECKPOINT_BITS=4` in the `m1-ultra` profile, off in the code; in production
+  since 4 Nov). A checkpoint evicted from memory or written to disk is
+  rotated (Hadamard transform, as in QuaRot) and quantized in groups of 64 (`PLI_CHECKPOINT_GROUP`); on resume it is restored to 16
+  bits. The checkpoint key carries the format, so a file written in 16 bits is not read as 4 bits, and back. Under
+  memory pressure (agent sessions that evict their checkpoints): disk of the checkpoints divided by 4, time to the
+  first token of resumed turns -54%; on other resumes -6 to -13%. Text can change on resumed turns: on conversations
+  judged turn by turn (code, admin, maths), no right answer became wrong; one maths answer wrong at turn 2 was corrected
+  at turn 3. `8` (8 bits, no rotation) is accepted; it was measured and not kept. The production name
+  `PLI_POINTS_BITS` is still accepted.
+- **A1 in the prefill** (`PLI_A1_LSA_MAP`, `PLI_A1_PREFILL_ONLY=1`; in production since 5 Nov). Past
+  `PLI_S3B_THRESHOLD` positions, each row of a prompt chunk reads the 10% of the tiles of 32 keys that the index of
+  [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) scores best, plus the last 1,024
+  positions; decode and trees keep the attention of 4.0.1. The distilled map is not shipped: download `qwen38_27b.pt`
+  from LSA's release `d-lsa-weights-v1` (Apache-2.0) and convert it with `tools/convert_lsa_map.py` (needs torch).
+  It goes with `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096` in the environment; without the map, the profile's
+  65,536 stays and nothing changes. On Qwen3.8-27B (Sabi-Noema 4-bit), M1 Ultra: time to the first token at 146k
+  tokens 712.5 s instead of 844.6 s (-15.6%), -6% at 61k; offline, the NLL of the reduced prefill equals the full
+  one (0.72229 against 0.72127 at 48k, 1.01024 against 1.0106 at 97k). Text can change: on conversations judged turn
+  by turn, two answers changed from right to wrong and three got better. Experimental, not in production:
+  `PLI_A1_MAX_TILES` (a cap on the tiles per row: -22 to -27% at 146k but the NLL rises, +0.0046 at 160 tiles) and
+  `PLI_A1_PREFILL_ONLY=0` (A1 for decode too: decode 5 to 21% slower on long conversations). The production names
+  `PLI_ANCRE1_LSA`, `PLI_ANCRE1_LECTURE_SEULE`, `PLI_A1_TRANCHE`, `PLI_A1_PETITE` and `PLI_A1_GARDES_MAX` are still
+  accepted.
+
 ## 4.0.1 (2026-11-04)
 
 - **`pli serve` prints the PLI mark** (folded paper) with the version when it starts. The README gets the PLI logo,

@@ -134,6 +134,8 @@ def make_handler(app: Any) -> type[BaseHTTPRequestHandler]:
                         "model": app.served_name,
                         "model_ids": app.model_ids,
                         "max_batch_size": app.max_batch_size,
+                        # PLI (04/11/2026): served weights, draft, MTP head and version (null outside "tensorfold serve")
+                        "checkpoint": getattr(app, "checkpoint", None),
                         "warming": bool(getattr(app, "warming", False)),
                         "memory": _memory("reset_peak=1" in self.path, admission=getattr(app, "prompt_memory", None)),
                         **({"live": live.snapshot(app.scheduler), "requests": live.requests(app.scheduler)}
@@ -151,6 +153,7 @@ def make_handler(app: Any) -> type[BaseHTTPRequestHandler]:
                                 "object": "model",
                                 "created": int(time.time()),
                                 "owned_by": "tensorfold",
+                                **({"checkpoint": app.checkpoint} if getattr(app, "checkpoint", None) else {}),
                             }
                             for model_id in app.model_ids
                         ],

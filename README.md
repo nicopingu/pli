@@ -23,7 +23,7 @@ how it is measured: [Measurements](#measurements)):
 PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, kernels measured for the dense
 Qwen3.8-27B, and a draft that picks, per conversation, between DFlash2 and the model's own MTP head.
 
-**4.0.1 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
+**4.1.0 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
 [CHANGELOG.md](CHANGELOG.md); every `PLI_*` setting is in [docs/switches.md](docs/switches.md).
 
 - **A dedicated Mac.** PLI is made for a Mac that runs nothing else: with the 27B it keeps about 36 GB of memory
@@ -152,6 +152,9 @@ arithmetic, judged on whole conversations before it went into production.
 | Prompt checkpoint spilled to disk even when a reply extends it; checkpoint where a prompt forks in its last message (both on by default) | `PLI_SPILL_PROMPT`, `PLI_FORK_MIN` | same text | 4.0.0 |
 | Checkpoint at the start of the prompt's last message, past 1 024 tokens read there: a request that keeps the history but not the last message starts from there. On the agent session of the public suite: the same 8 replies, prompt served from the cache 73.5% instead of 58.9%, sum of the times to the first token 238.0 s instead of 357.3 s (-33%), same writing speed | `PLI_LAST_MESSAGE_CHECKPOINT` | same text | 4.0.1 |
 | MLX command buffers of at most 500 MB and 100 operations (env, set by `pli setup`) | `MLX_MAX_MB_PER_BUFFER`, `MLX_MAX_OPS_PER_BUFFER` | same text | 4.0.0 |
+| Checkpoints kept in 4 bits (rotated) when evicted from memory or written to disk, restored to 16 bits on resume: disk of the checkpoints divided by 4, time to the first token of resumed turns -54% under memory pressure; on conversations judged turn by turn, no right answer became wrong | `PLI_CHECKPOINT_BITS` | can change (resumed turns) | 4.1.0 |
+| A1: prompt chunks past 16 384 positions read, row by row, 10% of the tiles of 32 keys scored by the LSA index, plus their last 1 024 positions; decode unchanged. time to the first token at 146k tokens 712.5 s instead of 844.6 s (-15.6%), offline NLL equal to the full prefill at 48k and 97k | `PLI_A1_LSA_MAP` (env), `PLI_A1_PREFILL_ONLY`, `PLI_S3B_THRESHOLD`, `PLI_S3B_ROWS` (env) | can change | 4.1.0 |
+| `checkpoint` field of `/health` and `/v1/models`: served weights (folder or Hugging Face repo and revision, model type, quantization), draft, MTP head and PLI version | none | same text | 4.1.0 |
 
 ## Experimental features
 
@@ -170,6 +173,8 @@ In the code, off by default, not in any profile. They are there to be measured; 
 | Arbiter cost table observed in service, draft floor | `PLI_ARBITER_TABLE`, `PLI_ARBITER_MIN_ROWS` | Experimental |
 | Row-invariant attention for windows | `PLI_ATTENTION=gemm` or `m1`, `PLI_ATTN_*` | Experimental |
 | Neural Engine call at the heartbeat's pace | `PLI_HEARTBEAT_ANE` | Experimental |
+| A1 with a cap on the tiles read per row (faster at long context: first token at 146k -22% to -27% against the full prefill instead of -15.6%, but the NLL rises at 97k) | `PLI_A1_MAX_TILES` | Experimental, not in production |
+| A1 for decode and trees too (`PLI_A1_PREFILL_ONLY=0`) | `PLI_A1_LSA_MAP` | Experimental: decode 5 to 21% slower on long conversations |
 
 The full list, with each variable's code default, is in [docs/switches.md](docs/switches.md). Every setting starts with
 `PLI_`; the names used before 3.7.0 and 4.0.0 (French `PLI_*` names, `TF_*`, `TENSORFOLD_*`) are still accepted.
@@ -234,6 +239,7 @@ stays out of it and goes in the environment:
 | `PLI_ALLOWED_HOSTS` | extra host names accepted by the Host/Origin guard (for example the machine's LAN name) |
 | `PLI_EVENTS` | path of the event journal (one JSON line per scheduler action, no message content) |
 | `PLI_FALCON`, `PLI_FALCON_MAX_GB` | experimental FALCON capture: directory and disk cap in GB |
+| `PLI_A1_LSA_MAP=<file.npz>`, with `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096` | A1: prompt chunks past 16 384 positions read 10% of the tiles of 32 keys, scored by the distilled map of [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) for Qwen3.8-27B (release `d-lsa-weights-v1`, `qwen38_27b.pt`, license: Apache-2.0), converted by `tools/convert_lsa_map.py` (needs torch). The two S3b values go with the map: without it, keep the profile's 65 536 |
 
 Production setup of the validated machine:
 
@@ -242,6 +248,7 @@ export PLI_HYBRID=1
 export PLI_MTP_HEAD=~/pli/models/mtp-head-4bit.safetensors
 export PLI_EVENTS=~/pli/logs/events.jsonl
 export MLX_MAX_MB_PER_BUFFER=500 MLX_MAX_OPS_PER_BUFFER=100
+export PLI_A1_LSA_MAP=~/pli/models/qwen38_27b.npz PLI_S3B_THRESHOLD=16384 PLI_S3B_ROWS=4096
 pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto --context 229376 --parallel 4 --spill-gib 40
 ```
 
@@ -393,6 +400,11 @@ Code taken from other projects, with its license, is listed file by file in
 else under `src/tensorfold/pli/` are written for PLI.
 
 Ideas used without their code:
+
+- **A1, reduced prompt reading scored by the LSA index** (`PLI_A1_LSA_MAP`): the index keys and queries of
+  [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) (Prefrontal-AI, D-LSA, commit
+  906be19, Apache-2.0) score PLI's tiles; the distilled map is downloaded from its release, not shipped with PLI. No code
+  is copied: the kernels are written for PLI on top of `attm`.
 
 - **Recall drafts** (`PLI_RECALL`): the "Recall" of
   [TensorFold 1.0.12](https://github.com/ashhart/TensorFold/releases/tag/v1.0.12) (written in Zig; no code copied).

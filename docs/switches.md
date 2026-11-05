@@ -2,7 +2,7 @@
 
 Every PLI addition to TensorFold 0.6.6 is switched by a `PLI_*` environment variable, off by default in the code except where the
 "Code default" column says otherwise.
-PLI 4.0.1 reads 155 of its own, listed here in four parts and "Other", plus the inherited TensorFold settings (renamed, see the end). `--profile NAME` (or `PLI_PROFILE=NAME`) loads a machine profile
+PLI 4.1.0 reads 162 of its own, listed here in four parts and "Other", plus the inherited TensorFold settings (renamed, see the end). `--profile NAME` (or `PLI_PROFILE=NAME`) loads a machine profile
 from `tensorfold/pli/profiles/NAME/` before any kernel is imported; a variable already set in the environment always wins.
 
 Terms used below:
@@ -81,6 +81,8 @@ family only (`qwen3_5.env`); `common.env` applies to every model. Three are on b
 | `PLI_SPILL_PROMPT` | unset | `1` | An evicted prompt checkpoint goes to disk even when a reply end extends it (a reply end no longer counts as a continuation; a longer prompt still does); `0`: the former behaviour. | `tensorfold/server/checkpoints.py` |
 | `PLI_FORK_MIN` | unset | `4096` | When a prompt forks from a kept one inside its last message (the same document sent again with another question), the state at the fork point is kept, past N tokens read since the resume; without a resume, the fork is looked for in the kept prompts. 0: off. Same text (a resume gives what a full prefill gives). | `tensorfold/server/checkpoints.py` |
 | `PLI_LAST_MESSAGE_CHECKPOINT` | `1024` (qwen3_5.env) | `0` | Also keeps the state at the start of the prompt's last message (the turn marker that opens the reply, as in ChatML, looked for backwards in the history) when at least N tokens are read there since the resume: the next request that keeps the history but not that message (a question replaced, a reply thrown away, a sub-agent on the same history) starts from there instead of from the previous request's checkpoint. 0: off. Same text (a resume gives what a full prefill gives). | `tensorfold/server/checkpoints.py` |
+| `PLI_CHECKPOINT_BITS` | `4` (qwen3_5.env) | `0` | Checkpoints evicted from memory or written to disk are kept in 4 bits (`4`: Hadamard rotation, groups of `PLI_CHECKPOINT_GROUP`) or 8 bits (`8`) and restored to 16 bits on resume; the checkpoint key carries the format, so a file written in another format is not reused (text can change, resumed turns only). | `tensorfold/pli/checkpoint_bits.py` |
+| `PLI_A1_PREFILL_ONLY` | `1` (qwen3_5.env) | `0` | With `PLI_A1_LSA_MAP`, A1 reads prompt chunks only; decode and trees keep the attention of production. Without the map, does nothing. | `tensorfold/pli/a1_lsa.py` |
 | `PLI_CONTROL_AS_TEXT` | unset | `1` | Control tokens written in the text of a request (messages, tools, tool results) stay ordinary text; `0`: the former behaviour. | `tensorfold/server/text.py` |
 
 ## 2. Machine settings: paths and hosts, set in the environment
@@ -88,12 +90,13 @@ family only (`qwen3_5.env`); `common.env` applies to every model. Three are on b
 They name files, directories or hosts of one machine, so no profile sets them. `PLI_HYBRID` is a stable feature, in
 production, but it needs the path in `PLI_MTP_HEAD`, so both go in the environment. The two MLX settings are read by MLX itself
 when it starts, before any profile, so they go in the environment too (they are not `PLI_*` settings and are not counted
-above). The FALCON pair is experimental.
+above). `PLI_A1_LSA_MAP` names a file too, and the two S3b values that go with it are set beside it. The FALCON pair is experimental.
 
 | Variable | Example | What it does | Code |
 | --- | --- | --- | --- |
 | `PLI_HYBRID` | `1` | DFlash2 and the MTP head loaded together; each conversation drafts with the one that gives it more tokens per millisecond. Needs `PLI_MTP_HEAD` and `--drafter`. Stable, in production. | `tensorfold/families/qwen3_5/__init__.py` |
 | `PLI_MTP_HEAD` | `~/models/qwen3.8-27b-mtp-4bit.safetensors` | Path of the 27B's native MTP head (`mtp.*` tensors, 4-bit safetensors). Alone, it replaces DFlash2; with `PLI_HYBRID=1`, both are loaded. | `tensorfold/families/qwen3_5/__init__.py` |
+| `PLI_A1_LSA_MAP` | `~/pli/models/qwen38_27b.npz` | A1: distilled map of [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) (`<layer>.W_Q_idx`, `<layer>.W_K_idx`, release `d-lsa-weights-v1`, `qwen38_27b.pt`, converted by `tools/convert_lsa_map.py`). Past `PLI_S3B_THRESHOLD`, each row of a chunk reads the 10% best scored tiles of 32 keys plus the last 1,024 positions, on the layers the map covers (text can change). Stable with `PLI_A1_PREFILL_ONLY=1`, `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096`, all three in the environment. | `tensorfold/pli/a1_lsa.py` |
 | `PLI_ALLOWED_HOSTS` | `mac.local,192.0.2.10` | Extra host names admitted by the Host/Origin guard (for example the machine's LAN name). | `tensorfold/server/host_guard.py` |
 | `PLI_EVENTS` | `~/pli/logs/events.jsonl` | Path of the event journal: one JSON line per scheduler action, with the conversation, no message content. | `tensorfold/pli/events.py` |
 | `PLI_TRACE_DIR` | `~/pli/logs/trace` | Directory of the step trace, off until switched on with `python -m tensorfold.pli.trace on [--duration 24h]` (no restart). | `tensorfold/pli/trace.py` |
@@ -146,6 +149,7 @@ Present in the code, not in production, not set by any profile. Some are kept fo
 | `PLI_HYBRID_FORCE` | `unset` | `dflash` or `mtp`: freezes the hybrid's choice (benches). | `tensorfold/families/qwen3_5_moe/hybrid.py` |
 | `PLI_HYBRID_LOG` | `unset` | File logging each switch of the hybrid draft. | `tensorfold/families/qwen3_5_moe/hybrid.py` |
 | `PLI_HYBRID_DEPTH` | `0` | In MTP mode, the hybrid picks its depth like the MTP head alone (acceptance by depth, cost of one step). | `tensorfold/families/qwen3_5_moe/hybrid.py` |
+| `PLI_A1_MAX_TILES` | `0` | With `PLI_A1_LSA_MAP`, most tiles of 32 keys a row reads (0 = no cap). Faster at long context (first token at 146k -22 to -27% instead of -15.6%), but the NLL rises (+0.0046 at 160 tiles, 97k). | `tensorfold/pli/a1_lsa.py` |
 | `PLI_PREFILL_CPU` | `0` | Share of prompt rows (0 to 0.9) computed on the CPU in 32 bits (text can change). | `tensorfold/pli/relayout.py` |
 | `PLI_PREFILL_CPU_MIN` | `256` | Chunk rows below which nothing goes to the CPU. | `tensorfold/families/qwen3_5/prefill_cpu.py` |
 | `PLI_PREFILL_CPU_MODE` | `decale` | `decale` or `couche`: how CPU and GPU rows are scheduled. | `tensorfold/families/qwen3_5/prefill_cpu.py` |
@@ -203,6 +207,9 @@ Change them only to measure.
 | `PLI_HEAD_COPY_THRESHOLD` | `1` | `PLI_HEAD_BEFORE_COPY=3`: the copy goes first while that average stays above minus N tokens. | `tensorfold/engine/lane_family.py` |
 | `PLI_HYBRID_IM_START` | `248045` | Message start token counted by `PLI_HYBRID_MESSAGES` (Qwen3.8: `<|im_start|>`, 248045). | `tensorfold/families/qwen3_5_moe/hybrid.py` |
 | `PLI_S3B_ROWS` | `2047` | Largest prompt chunk (rows) that S3b reads through the anchored reduced attention. | `tensorfold/kernels/qwen/dense/v1/exact_attention.py` |
+| `PLI_CHECKPOINT_GROUP` | `64` | `PLI_CHECKPOINT_BITS`: values per quantization group. | `tensorfold/pli/checkpoint_bits.py` |
+| `PLI_A1_SLICE` | `2048` | A1: keys scored per kernel call. | `tensorfold/pli/a1_lsa.py` |
+| `PLI_A1_SMALL_SLICE` | `128` | A1: rows below which a chunk is scored in one call. | `tensorfold/pli/a1_lsa.py` |
 
 ## Other
 
@@ -212,14 +219,19 @@ Change them only to measure.
 
 ## Names before 4.0.0
 
-The names before 3.7.0, the 23 names that production used until 4.0.0, and `PLI_DEBUT_DERNIER`, used until 4.0.1. Every name below is still accepted; when both are set, the new name wins. Inherited TensorFold settings (`TF_*`,
+The names before 3.7.0, the 23 names that production used until 4.0.0, `PLI_DEBUT_DERNIER`, used until 4.0.1, and the 7 production names of the settings added in 4.1.0. Every name below is still accepted; when both are set, the new name wins. Inherited TensorFold settings (`TF_*`,
 `TENSORFOLD_*`) were renamed to `PLI_*` too; they keep TensorFold's meaning and are described in TensorFold's
 documentation.
 
 | Old name | New name |
 | --- | --- |
+| `PLI_A1_GARDES_MAX` | `PLI_A1_MAX_TILES` |
+| `PLI_A1_PETITE` | `PLI_A1_SMALL_SLICE` |
+| `PLI_A1_TRANCHE` | `PLI_A1_SLICE` |
 | `PLI_ADMISSION_PETITES` | `PLI_ADMIT_SMALL` |
 | `PLI_ADMISSION_TRAVAIL` | `PLI_ADMIT_BY_WORK` |
+| `PLI_ANCRE1_LECTURE_SEULE` | `PLI_A1_PREFILL_ONLY` |
+| `PLI_ANCRE1_LSA` | `PLI_A1_LSA_MAP` |
 | `PLI_ANCRE_JOURNAL` | `PLI_ANCHOR_LOG` |
 | `PLI_ANE_BLOCS_IDS` | `PLI_ANE_BLOCK_IDS` |
 | `PLI_ANE_BLOCS` | `PLI_ANE_BLOCKS` |
@@ -323,6 +335,8 @@ documentation.
 | `PLI_MTP27_FENETRE` | `PLI_MTP_WINDOW` |
 | `PLI_MTP27` | `PLI_MTP_HEAD` |
 | `PLI_PAVES_PAR_GROUPE` | `PLI_TILES_PER_GROUP` |
+| `PLI_POINTS_BITS` | `PLI_CHECKPOINT_BITS` |
+| `PLI_POINTS_GROUPE` | `PLI_CHECKPOINT_GROUP` |
 | `PLI_POINTS_JOURNAL` | `PLI_CHECKPOINT_LOG` |
 | `PLI_PROFIL_TOUR_N` | `PLI_ROUND_PROFILE_N` |
 | `PLI_PROFIL_TOUR_TRANCHE` | `PLI_ROUND_PROFILE_BUCKET` |

@@ -8,6 +8,7 @@ from typing import Any
 import mlx.core as mx
 
 from tensorfold.kernels.qwen.dense.v1 import prompt_attention
+from tensorfold.pli import a1_lsa as _A1
 
 EXACT_MAX_QUERIES = 16
 # PLI_ATTENTION_ATTEC=1 (PLI-U 2.6.0): decode attention (2 to 16 rows, 1100 keys and more) in a single launch at equal bits, see
@@ -190,6 +191,17 @@ def _anchored(queries: mx.array, keys: mx.array, values: mx.array, cache: Any, s
         if max(ANCHOR * ((p0 + T - 1) // ANCHOR), bound) < REDUCED_THRESHOLD:
             _reason("prompt_short")
             return None
+    # PLI (03/11/2026, A1, PLI_A1_LSA_MAP): each row chooses its tiles on its own query, scored by the LSA index (pli/a1_lsa.py);
+    # S3b included; PLI_A1_PREFILL_ONLY=1: prompt chunks only. Full layers and layers missing from the map: original rule below.
+    layer_a1 = getattr(cache, "pli_layer", None)
+    if _A1.ACTIVE and (not _A1.PREFILL_ONLY or p0 < req_start) and layer_a1 not in REDUCED_FULL_LAYERS and _A1.has_layer(layer_a1):
+        out = _A1.chain(queries, keys, values, cache, scale, REDUCED, REDUCED_THRESHOLD)
+        if out is None:
+            _reason("a1_refused")
+            return None
+        COUNT["reduced"] += 1
+        _reason("a1_s3b" if p0 < req_start else "a1")
+        return out
     memo = getattr(cache, "pli_anchors", None)
     if memo is None:
         memo = {}
@@ -257,6 +269,16 @@ def _anchored_tree(queries: mx.array, keys: mx.array, values: mx.array, cache: A
     if req_start is None or p0 < req_start:
         _reason("tree_prompt")
         return None
+    layer_a1 = getattr(cache, "pli_layer", None)
+    if _A1.ACTIVE and not _A1.PREFILL_ONLY and layer_a1 not in REDUCED_FULL_LAYERS and _A1.has_layer(layer_a1):   # PLI (A1): each node chooses on its own query
+        complete = attention_attm.sdpa_tree_exact if os.environ.get("PLI_TREE_EXACT", "0") == "1" else attention_attm.sdpa_tree
+        out = _A1.tree(queries, keys, values, cache, scale, parents, REDUCED, REDUCED_THRESHOLD, complete)
+        if out is None:
+            _reason("a1_tree_refused")
+            return None
+        COUNT["reduced"] += 1
+        _reason("a1_tree")
+        return out
     memo = getattr(cache, "pli_anchors", None)
     if memo is None:
         return None
