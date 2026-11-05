@@ -4,6 +4,15 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
+## 4.1.1 (2026-11-05)
+
+- **Name of A1's map.** 4.1.0 named the file to download `qwen38_27b.pt`; the file of LSA's release
+  `d-lsa-weights-v1` is `qwen38_27b__long-16k-1M-heavy-key-and-query-d2048.pt` (SHA-256 `24cee934f969756db228a8df7f2bc7613979b63ac3b1d5ac3d9aa42e4339bb9b`). README,
+  `docs/switches.md` and `tools/convert_lsa_map.py` give that name and the download command.
+- **`tools/convert_lsa_map.py` checked**: run on that file (torch 2.13.0, NumPy 2.4.6), it writes the 32 arrays (16
+  layers, `W_Q_idx` and `W_K_idx`, [768, 64] float32) equal to the map served in production since 4.1.0's A1.
+  No code change.
+
 ## 4.1.0 (2026-11-05)
 
 - **`checkpoint` field of `/health` and `/v1/models`.** The served weights (folder, or Hugging Face repo and revision),

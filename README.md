@@ -23,7 +23,7 @@ how it is measured: [Measurements](#measurements)):
 PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, kernels measured for the dense
 Qwen3.8-27B, and a draft that picks, per conversation, between DFlash2 and the model's own MTP head.
 
-**4.1.0 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
+**4.1.1 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
 [CHANGELOG.md](CHANGELOG.md); every `PLI_*` setting is in [docs/switches.md](docs/switches.md).
 
 - **A dedicated Mac.** PLI is made for a Mac that runs nothing else: with the 27B it keeps about 36 GB of memory
@@ -239,7 +239,7 @@ stays out of it and goes in the environment:
 | `PLI_ALLOWED_HOSTS` | extra host names accepted by the Host/Origin guard (for example the machine's LAN name) |
 | `PLI_EVENTS` | path of the event journal (one JSON line per scheduler action, no message content) |
 | `PLI_FALCON`, `PLI_FALCON_MAX_GB` | experimental FALCON capture: directory and disk cap in GB |
-| `PLI_A1_LSA_MAP=<file.npz>`, with `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096` | A1: prompt chunks past 16 384 positions read 10% of the tiles of 32 keys, scored by the distilled map of [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) for Qwen3.8-27B (release `d-lsa-weights-v1`, `qwen38_27b.pt`, license: Apache-2.0), converted by `tools/convert_lsa_map.py` (needs torch). The two S3b values go with the map: without it, keep the profile's 65 536 |
+| `PLI_A1_LSA_MAP=<file.npz>`, with `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096` | A1: prompt chunks past 16 384 positions read 10% of the tiles of 32 keys, scored by the distilled map of [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) for Qwen3.8-27B (release [`d-lsa-weights-v1`](https://github.com/Prefrontal-AI/latent-sparse-attention/releases/tag/d-lsa-weights-v1), file `qwen38_27b__long-16k-1M-heavy-key-and-query-d2048.pt`, SHA-256 `24cee934f969756db228a8df7f2bc7613979b63ac3b1d5ac3d9aa42e4339bb9b`, license: Apache-2.0), converted once by `tools/convert_lsa_map.py` (needs torch). The two S3b values go with the map: without it, keep the profile's 65 536 |
 
 Production setup of the validated machine:
 
@@ -248,7 +248,7 @@ export PLI_HYBRID=1
 export PLI_MTP_HEAD=~/pli/models/mtp-head-4bit.safetensors
 export PLI_EVENTS=~/pli/logs/events.jsonl
 export MLX_MAX_MB_PER_BUFFER=500 MLX_MAX_OPS_PER_BUFFER=100
-export PLI_A1_LSA_MAP=~/pli/models/qwen38_27b.npz PLI_S3B_THRESHOLD=16384 PLI_S3B_ROWS=4096
+export PLI_A1_LSA_MAP=~/pli/models/qwen38_27b_d2048.npz PLI_S3B_THRESHOLD=16384 PLI_S3B_ROWS=4096
 pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto --context 229376 --parallel 4 --spill-gib 40
 ```
 

@@ -4,7 +4,9 @@
 The map is a PyTorch file of `<layer>.W_Q_idx` / `<layer>.W_K_idx` tensors, [768, 64] each; PLI reads a NumPy .npz of the same
 tensors in float32 (PLI_A1_LSA_MAP=<file.npz>). The .pt is read with weights_only=True: no code of the file is run. Needs torch.
 
-Usage: python tools/convert_lsa_map.py qwen38_27b.pt qwen38_27b.npz
+Usage (the release's file for Qwen3.8-27B, SHA-256 24cee934f969756db228a8df7f2bc7613979b63ac3b1d5ac3d9aa42e4339bb9b):
+  gh release download d-lsa-weights-v1 -R Prefrontal-AI/latent-sparse-attention -p qwen38_27b__long-16k-1M-heavy-key-and-query-d2048.pt
+  python tools/convert_lsa_map.py qwen38_27b__long-16k-1M-heavy-key-and-query-d2048.pt qwen38_27b_d2048.npz
 """
 
 import sys
