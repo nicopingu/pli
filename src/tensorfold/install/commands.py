@@ -19,7 +19,7 @@ import sys
 import time
 import urllib.request
 
-from tensorfold.install import downloads, machine
+from tensorfold.install import downloads, lsa_map, machine
 from tensorfold.install.machine import SetupError, say, warn
 
 NAME = "pli"                                    # `pli service` profile name
@@ -127,7 +127,7 @@ def wait_ready(port: int) -> bool:
 
 def service_args(*, model: str, python: str, prefix: Path, port: int, profile: str, ane: int, context: int | None,
                  free_gb: int, hybrid: bool, mtp_head: Path | None, start: bool, drafter: str,
-                 no_drafts: bool = False) -> list[str]:
+                 no_drafts: bool = False, a1_map: Path | None = None) -> list[str]:
     """The ``pli service install`` command of install.sh, option for option."""
 
     args = ["service", "install", model, "--name", NAME, "--python", python, "--port", str(port),
@@ -149,6 +149,10 @@ def service_args(*, model: str, python: str, prefix: Path, port: int, profile: s
         args.append("--arg=--spill-gib=40")
     if hybrid and mtp_head is not None:
         args += ["--env", "PLI_HYBRID=1", "--env", f"PLI_MTP_HEAD={mtp_head}"]
+    if a1_map is not None:
+        # A1 reads prompt chunks past 16 384 positions with the map; the profile keeps A1 to the prompt
+        args += ["--env", f"PLI_A1_LSA_MAP={a1_map}"]
+        args += [x for key, value in lsa_map.ENV.items() for x in ("--env", f"{key}={value}")]
     if start:
         args.append("--start")
     return args
@@ -171,7 +175,9 @@ def setup(a: argparse.Namespace) -> int:
     drafter = None if a.no_drafter else a.drafter
     # --no-models writes no MTP head: the hybrid draft needs one given with --mtp-head
     hybrid = not a.no_hybrid and drafter is not None and (models or bool(a.mtp_head))
-    items = downloads.plan(model, drafter, a.mtp_head, hybrid, prefix)
+    # A1's map is distilled for Qwen3.8-27B and its settings are tuned for the M1 Ultra: only with the m1-ultra profile
+    a1 = profile == "m1-ultra" and not a.no_a1
+    items = downloads.plan(model, drafter, a.mtp_head, hybrid, prefix, a1=a1)
     if models:
         downloads.measure(items)
         say(downloads.screen(items))
@@ -188,12 +194,13 @@ def setup(a: argparse.Namespace) -> int:
             say(f"Models not downloaded: run '{_pli_path()} pull {' '.join(missing)}', then {_pli_path()} start.")
         else:
             say("Models not downloaded: the service uses the files already on this Mac.")
+    a1_map = _a1_map(items, models)
 
     choice = "none" if drafter is None else "auto" if drafter == downloads.DRAFTER else _local(drafter)
     _pli("service", "stop", NAME, quiet=True)          # a service from an earlier install is replaced, not doubled
     args = service_args(model=model, python=_python(), prefix=prefix, port=port, profile=profile, ane=ane,
                         context=a.context, free_gb=mac.free_gb, hybrid=hybrid, mtp_head=head, start=start,
-                        drafter=choice, no_drafts=drafter is None)
+                        drafter=choice, no_drafts=drafter is None, a1_map=a1_map)
     (prefix / "logs").mkdir(parents=True, exist_ok=True)
     code = _pli(*args)
     if code:
@@ -206,6 +213,36 @@ def setup(a: argparse.Namespace) -> int:
         say("The service uses the DFlash2 draft alone. For the hybrid draft (DFlash2 + MTP head), run pli setup "
             "again without --no-models.")
     return 0
+
+
+def _a1_map(items: list[downloads.Item], models: bool) -> Path | None:
+    """A1's map for the service: downloaded and converted (or already here), for a model it fits; None otherwise."""
+
+    item = next((i for i in items if i.role == "lsa"), None)
+    if item is None or item.path is None:
+        return None
+    if item.missing and models:
+        say(f"Downloading A1's map ({lsa_map.FILE}), checking its SHA-256 and converting it...")
+        try:
+            lsa_map.download(item.path)
+        except Exception as exc:  # noqa: BLE001 - network, checksum: PLI runs without A1, setup goes on
+            warn(f"A1's map was not installed ({type(exc).__name__}: {exc}); PLI runs without A1. "
+                 f"Run pli setup again to retry.")
+            return None
+    if not item.path.is_file():
+        say("A1's map not downloaded: PLI runs without A1 (run pli setup again without --no-models for it).")
+        return None
+    model = next(i for i in items if i.role == "model")
+    if model.path is not None:
+        model_dir = model.path
+    elif models or downloads.cached_complete(model.repo):
+        model_dir = _snapshot(model.repo)
+    else:
+        model_dir = None
+    if not lsa_map.fits(model_dir):
+        warn("A1's map is distilled for Qwen3.8-27B; this model's config.json does not match it: PLI runs without A1")
+        return None
+    return item.path
 
 
 def _local(name: str) -> str:
@@ -333,6 +370,8 @@ def register(commands) -> None:
                               help="context window in tokens (default: 229376 with an Ultra chip and 64 GB, else "
                                    "chosen by PLI)")
     setup_parser.add_argument("--no-hybrid", action="store_true", help="DFlash2 draft only, without the MTP head")
+    setup_parser.add_argument("--no-a1", action="store_true",
+                              help="no A1 map (Latent Sparse Attention): long prompts are read without it")
     setup_parser.add_argument("--no-drafter", action="store_true",
                               help="no draft at all: neither DFlash2 nor the MTP head (slower, the same text)")
     setup_parser.add_argument("--no-start", action="store_true",

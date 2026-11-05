@@ -15,6 +15,7 @@ import shutil
 import sys
 from typing import Any, Callable
 
+from tensorfold.install import lsa_map
 from tensorfold.install.machine import SetupError, say
 
 MODEL = "mlx-community/Qwen3.8-27B-4bit"
@@ -27,15 +28,18 @@ APPROXIMATE = {MODEL: 16_081_490_933, DRAFTER: 3_849_113_002, MTP_SOURCE: 849_40
 MTP_4BIT_BYTES = 228 * 2**20                    # the head in 4 bits (810 MiB in bf16)
 _REPO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
 LEAVE_OUT = ("Leave items out: --no-hybrid (no MTP head), --no-drafter (no draft at all: slower, the same text), "
-             "--model DIR (a model already on this Mac), --no-models (nothing downloaded).")
+             "--no-a1 (no A1 map: long prompts are read without it), --model DIR (a model already on this Mac), "
+             "--no-models (nothing downloaded).")
 
 
 @dataclass
 class Item:
-    role: str                      # model, drafter, mtp (the bf16 head) or mtp4 (the head in 4 bits, written here)
+    role: str                      # model, drafter, mtp (the bf16 head), mtp4 (the head in 4 bits, written here),
+    #                                lsa (A1's map, downloaded from a release and converted here)
     title: str
     purpose: str
     repo: str = ""                 # Hugging Face repo id; "" for a file or directory on this Mac
+    url: str = ""                  # a file downloaded from elsewhere than the Hub (checked by its SHA-256)
     path: Path | None = None       # local item: what the user gave, or the file written here
     commit: str = ""
     license: str = ""
@@ -45,7 +49,7 @@ class Item:
 
     @property
     def downloads(self) -> bool:
-        return bool(self.repo) and self.missing != 0
+        return bool(self.repo or self.url) and self.missing != 0
 
 
 def is_repo_id(name: str) -> bool:
@@ -99,8 +103,10 @@ def cached_complete(repo: str) -> bool:
     return hub._cached_weights_complete(found)
 
 
-def plan(model: str, drafter: str | None, mtp_head: str | None, hybrid: bool, prefix: Path) -> list[Item]:
-    """The items of an install: the model, the DFlash2 draft (None: no draft), the MTP head for the hybrid draft."""
+def plan(model: str, drafter: str | None, mtp_head: str | None, hybrid: bool, prefix: Path,
+         a1: bool = False) -> list[Item]:
+    """The items of an install: the model, the DFlash2 draft (None: no draft), the MTP head for the hybrid draft,
+    A1's map (``a1``)."""
 
     items = [_item("model", "Model (required)", "the model that writes every reply", model)]
     if drafter is not None:
@@ -119,6 +125,12 @@ def plan(model: str, drafter: str | None, mtp_head: str | None, hybrid: bool, pr
         items.append(Item("mtp4", "MTP head in 4 bits",
                           "written on this Mac from the MTP head above; nothing more to download",
                           path=prefix / "models" / MTP_FILE, size=MTP_4BIT_BYTES, approximate=True))
+    if a1:
+        path = prefix / "models" / lsa_map.NPZ
+        items.append(Item("lsa", "A1 map (Latent Sparse Attention)",
+                          "long prompts are read faster (chunks past 16 384 positions read 10% of the old context, "
+                          "chosen by this map); the text can change", url=lsa_map.URL, path=path,
+                          license=lsa_map.LICENSE, size=lsa_map.BYTES, missing=0 if path.is_file() else lsa_map.BYTES))
     return items
 
 
@@ -195,6 +207,14 @@ def screen(items: list[Item]) -> str:
                              f"{human(item.size, item.approximate)}; the rest is already downloaded), into {where}")
             else:
                 lines.append(f"     {human(item.missing, item.approximate)} to download, into {where}")
+        elif item.url:
+            lines.append(f"  {n}. {item.title}: {item.url} - {item.purpose}")
+            lines.append(f"     release {lsa_map.RELEASE}, license: {item.license}, SHA-256 checked "
+                         f"({lsa_map.SHA256[:12]}...)")
+            if item.missing == 0:
+                lines.append(f"     already converted ({item.path})")
+            else:
+                lines.append(f"     {human(item.missing)} to download, converted on this Mac into {item.path}")
         elif item.role == "mtp4" and any(i.role == "mtp" for i in items):
             lines.append(f"  {n}. {item.title} - {item.purpose}")
             lines.append(f"     {human(item.size, True)}, into {item.path}")

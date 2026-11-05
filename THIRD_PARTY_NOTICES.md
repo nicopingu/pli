@@ -88,8 +88,8 @@ The MLX engine of `glm5_next` (`src/tensorfold/families/glm5_next/`: the forward
 - **A1 scored by the LSA index** (`src/tensorfold/pli/a1_lsa.py`, `PLI_A1_LSA_MAP`): the index queries and keys of
   [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) (Prefrontal-AI, commit 906be19,
   Apache License 2.0) score PLI's tiles of keys; the rule is rewritten in Python and Metal for PLI, no code is copied.
-  The distilled map (release `d-lsa-weights-v1`, Apache License 2.0) is not shipped; `tools/convert_lsa_map.py`
-  converts it to NumPy.
+  The distilled map (release `d-lsa-weights-v1`, Apache License 2.0) is not shipped: `pli setup` downloads it from
+  that release after asking, and `src/tensorfold/install/lsa_map.py` (written for PLI) converts it to NumPy.
 - Everything else under `src/tensorfold/pli/` and the PLI changes in the kernels are written for PLI.
 
 ## Vendored code and weights

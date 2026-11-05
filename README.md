@@ -23,7 +23,7 @@ how it is measured: [Measurements](#measurements)):
 PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, kernels measured for the dense
 Qwen3.8-27B, and a draft that picks, per conversation, between DFlash2 and the model's own MTP head.
 
-**4.1.1 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
+**4.1.2 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
 [CHANGELOG.md](CHANGELOG.md); every `PLI_*` setting is in [docs/switches.md](docs/switches.md).
 
 - **A dedicated Mac.** PLI is made for a Mac that runs nothing else: with the 27B it keeps about 36 GB of memory
@@ -47,7 +47,8 @@ cd pli
 
 `install.sh` finds Python 3.11 to 3.14, installs PLI in its own virtual environment under `~/pli`, then runs
 `pli setup`, which does the rest: it checks the Mac (Apple Silicon, macOS 14 or later, memory, free disk, Xcode Command
-Line Tools for the Neural Engine), downloads the models, writes the MTP head in 4 bits, and starts PLI as a per-user
+Line Tools for the Neural Engine), downloads the models, writes the MTP head in 4 bits, downloads and converts A1's map
+(on an Ultra chip), and starts PLI as a per-user
 service that starts again at login and after a crash.
 
 Before anything is downloaded, `pli setup` lists each item with its Hugging Face repo and page, its revision (`main`,
@@ -61,12 +62,13 @@ goes on disk, and what it brings:
 | [z-lab/Qwen3.8-27B-DFlash2](https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2) | DFlash2 draft: faster replies, the same text |
 | [EigenLabs/Qwen3.8-27B-MTP-bf16](https://huggingface.co/EigenLabs/Qwen3.8-27B-MTP-bf16) | the model's MTP head, the hybrid draft with DFlash2: faster, the same text |
 | MTP head in 4 bits | written on the Mac from the head above, nothing more to download |
+| [A1 map](https://github.com/Prefrontal-AI/latent-sparse-attention/releases/tag/d-lsa-weights-v1) of Latent Sparse Attention (6 MB, Apache-2.0; with the `m1-ultra` profile only) | long prompts read faster (A1, below; the text can change). Downloaded from the GitHub release, checked against its SHA-256, converted to NumPy on the Mac (no torch), set in the service with `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096`; left out when the model's `config.json` is not Qwen3.8-27B's |
 
 A file already in the Hugging Face cache is marked "already downloaded" and not counted. Then come the total to
 download and the free disk, and the question `Download them? [y/N]` (no by default). `--yes` answers yes; without a
 terminal and without `--yes`, `pli setup` stops before downloading and says what to add.
 
-Each item can be left out: `--no-hybrid` (no MTP head: DFlash2 alone), `--no-drafter` (no draft at all: slower, the
+Each item can be left out: `--no-hybrid` (no MTP head: DFlash2 alone), `--no-a1` (no A1 map), `--no-drafter` (no draft at all: slower, the
 same text), `--model DIR` (a model already on the Mac, not downloaded; also `--drafter DIR`, and `--mtp-head FILE` for
 a head already written), `--no-models` (nothing downloaded: the service starts only if the model and the draft are
 already on the Mac, and uses the hybrid draft only with `--mtp-head`). The other options: `--prefix DIR`, `--port N`
@@ -239,7 +241,7 @@ stays out of it and goes in the environment:
 | `PLI_ALLOWED_HOSTS` | extra host names accepted by the Host/Origin guard (for example the machine's LAN name) |
 | `PLI_EVENTS` | path of the event journal (one JSON line per scheduler action, no message content) |
 | `PLI_FALCON`, `PLI_FALCON_MAX_GB` | experimental FALCON capture: directory and disk cap in GB |
-| `PLI_A1_LSA_MAP=<file.npz>`, with `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096` | A1: prompt chunks past 16 384 positions read 10% of the tiles of 32 keys, scored by the distilled map of [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) for Qwen3.8-27B (release [`d-lsa-weights-v1`](https://github.com/Prefrontal-AI/latent-sparse-attention/releases/tag/d-lsa-weights-v1), file `qwen38_27b__long-16k-1M-heavy-key-and-query-d2048.pt`, SHA-256 `24cee934f969756db228a8df7f2bc7613979b63ac3b1d5ac3d9aa42e4339bb9b`, license: Apache-2.0), converted once by `tools/convert_lsa_map.py` (needs torch). The two S3b values go with the map: without it, keep the profile's 65 536 |
+| `PLI_A1_LSA_MAP=<file.npz>`, with `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096` | A1: prompt chunks past 16 384 positions read 10% of the tiles of 32 keys, scored by the distilled map of [Latent Sparse Attention](https://github.com/Prefrontal-AI/latent-sparse-attention) for Qwen3.8-27B (release [`d-lsa-weights-v1`](https://github.com/Prefrontal-AI/latent-sparse-attention/releases/tag/d-lsa-weights-v1), file `qwen38_27b__long-16k-1M-heavy-key-and-query-d2048.pt`, SHA-256 `24cee934f969756db228a8df7f2bc7613979b63ac3b1d5ac3d9aa42e4339bb9b`, license: Apache-2.0), converted once by `tools/convert_lsa_map.py` (NumPy only); `pli setup` does both and sets the three variables. The two S3b values go with the map: without it, keep the profile's 65 536 |
 
 Production setup of the validated machine:
 

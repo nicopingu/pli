@@ -17,7 +17,7 @@ import sys
 import pytest
 
 from tensorfold import cli
-from tensorfold.install import commands, downloads, machine
+from tensorfold.install import commands, downloads, lsa_map, machine
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL, DRAFTER, MTP = downloads.MODEL, downloads.DRAFTER, downloads.MTP_SOURCE
@@ -79,6 +79,15 @@ def fake(tmp_path, monkeypatch):
     monkeypatch.setattr(commands, "_health", lambda port: True)
     monkeypatch.setattr(commands, "_sleep", lambda s: None)
     monkeypatch.setattr(commands, "_python", lambda: "/venv/bin/python")
+
+    def lsa_download(output):
+        rec.lsa.append(output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"npz")
+
+    rec.lsa = []
+    monkeypatch.setattr(lsa_map, "download", lsa_download)
+    monkeypatch.setattr(lsa_map, "fits", lambda model_dir: True)
     rec.home, rec.hub, rec.tmp = home, hub, tmp_path
     return rec
 
@@ -103,7 +112,7 @@ def terminal(monkeypatch, answer: str | None):
     return asked
 
 
-def expected_service(prefix: Path, *, start: bool = True, hybrid: bool = True) -> list[str]:
+def expected_service(prefix: Path, *, start: bool = True, hybrid: bool = True, a1: bool = True) -> list[str]:
     """install.sh's `pli service install` on an M1 Ultra with 64 GB and 500 GB free, option for option."""
 
     args = ["service", "install", MODEL, "--name", "pli", "--python", "/venv/bin/python", "--port", "8080",
@@ -112,6 +121,9 @@ def expected_service(prefix: Path, *, start: bool = True, hybrid: bool = True) -
             "--arg=--profile=m1-ultra", "--context", "229376", "--parallel", "4", "--arg=--spill-gib=40"]
     if hybrid:
         args += ["--env", "PLI_HYBRID=1", "--env", f"PLI_MTP_HEAD={prefix}/models/mtp-head-4bit.safetensors"]
+    if a1:
+        args += ["--env", f"PLI_A1_LSA_MAP={prefix}/models/qwen38_27b_d2048.npz",
+                 "--env", "PLI_S3B_THRESHOLD=16384", "--env", "PLI_S3B_ROWS=4096"]
     if start:
         args.append("--start")
     return args
@@ -143,7 +155,11 @@ def test_service_command_is_install_sh_s_on_an_ultra(tmp_path):
     args = commands.service_args(model=MODEL, python="/venv/bin/python", prefix=prefix, port=8080,
                                  profile="m1-ultra", ane=1, context=None, free_gb=500, hybrid=True, mtp_head=head,
                                  start=True, drafter="auto")
-    assert args == expected_service(prefix)
+    assert args == expected_service(prefix, a1=False)
+    a1 = commands.service_args(model=MODEL, python="/venv/bin/python", prefix=prefix, port=8080,
+                               profile="m1-ultra", ane=1, context=None, free_gb=500, hybrid=True, mtp_head=head,
+                               start=True, drafter="auto", a1_map=prefix / "models" / "qwen38_27b_d2048.npz")
+    assert a1 == expected_service(prefix)
 
 
 def test_service_command_without_profile_tools_or_disk(tmp_path):
@@ -194,10 +210,13 @@ def test_setup_yes_lists_every_download_then_installs_as_install_sh(fake, capsys
     assert "To download: 20.8 GB. Free disk: 500.0 GB" in out
     assert "written on this Mac from the MTP head above; nothing more to download" in out
     assert f"about 239 MB, into {prefix}/models/mtp-head-4bit.safetensors" in out
-    assert "--no-hybrid" in out and "--no-drafter" in out and "--no-models" in out
+    assert "--no-hybrid" in out and "--no-drafter" in out and "--no-models" in out and "--no-a1" in out
+    assert f"A1 map (Latent Sparse Attention): {lsa_map.URL}" in out and "license: Apache-2.0" in out
+    assert f"6 MB to download, converted on this Mac into {prefix}/models/qwen38_27b_d2048.npz" in out
+    assert fake.lsa == [prefix / "models" / "qwen38_27b_d2048.npz"]
     assert "Download accepted (--yes)." in out
     assert fake.pulls() == [("pull", MODEL, DRAFTER)]
-    assert fake.snapshots == [MTP, MODEL]
+    assert fake.snapshots == [MTP, MODEL, MODEL]                         # the head, then the check of A1's map
     snap = fake.tmp / "snapshots"
     assert fake.run == [("-m", "tensorfold.install.mtp_head", "--model", str(snap / MODEL.replace("/", "--")),
                          str(snap / MTP.replace("/", "--") / "model.safetensors"),
@@ -258,6 +277,9 @@ def test_nothing_to_download_asks_nothing(fake, monkeypatch, capsys):
         blobs.mkdir(parents=True)
         for _, _, blob in info["files"]:
             (blobs / blob).write_bytes(b"")
+    a1 = fake.home / "pli" / "models" / "qwen38_27b_d2048.npz"
+    a1.parent.mkdir(parents=True)
+    a1.write_bytes(b"npz")
     assert cli.main(["setup"]) == 0
     assert "Nothing to download: every file is already on this Mac." in capsys.readouterr().out
     assert asked == [] and fake.service_install() == expected_service(fake.home / "pli")
@@ -318,7 +340,7 @@ def test_no_hybrid_downloads_no_mtp_head(fake, capsys):
     assert cli.main(["setup", "--yes", "--no-hybrid"]) == 0
     out = capsys.readouterr().out
     assert MTP not in out and "To download: 19.9 GB." in out
-    assert fake.pulls() == [("pull", MODEL, DRAFTER)] and fake.run == [] and fake.snapshots == []
+    assert fake.pulls() == [("pull", MODEL, DRAFTER)] and fake.run == [] and fake.snapshots == [MODEL]
     assert fake.service_install() == expected_service(fake.home / "pli", hybrid=False)
 
 
@@ -339,7 +361,8 @@ def test_no_models_downloads_nothing_and_does_not_start(fake, capsys):
     assert f"pull {MODEL} {DRAFTER}'" in out
     assert "For the hybrid draft (DFlash2 + MTP head), run pli setup again without --no-models." in out
     assert fake.pulls() == [] and fake.run == [] and fake.snapshots == []
-    assert fake.service_install() == expected_service(fake.home / "pli", start=False, hybrid=False)
+    assert fake.service_install() == expected_service(fake.home / "pli", start=False, hybrid=False, a1=False)
+    assert "A1's map not downloaded" in out and fake.lsa == []
 
 
 def test_no_models_with_files_already_here_starts_with_them(fake, capsys):
@@ -597,3 +620,54 @@ def test_install_sh_asks_before_reinstalling(tmp_path, answer, expected):
     assert done.returncode == 0, done.stderr
     lines = log.read_text().splitlines() if log.exists() else []
     assert lines[:len(expected)] == expected and (lines == [] if not expected else len(lines) == 5)
+
+
+# ---------------------------------------------------------------- A1's map
+
+def test_no_a1_downloads_no_map_and_sets_nothing(fake, capsys):
+    assert cli.main(["setup", "--yes", "--no-a1"]) == 0
+    assert "A1 map (Latent" not in capsys.readouterr().out and fake.lsa == []
+    assert fake.service_install() == expected_service(fake.home / "pli", a1=False)
+
+
+def test_a1_only_with_the_m1_ultra_profile(fake, monkeypatch, capsys):
+    monkeypatch.setattr(machine, "probe", lambda: machine.Mac("Darwin", "arm64", "27.0.1", 128, "Apple M4 Max", 500,
+                                                              True))
+    assert cli.main(["setup", "--yes"]) == 0
+    assert "A1 map (Latent" not in capsys.readouterr().out and fake.lsa == []
+    assert not any("PLI_A1_LSA_MAP" in x for x in fake.service_install())
+
+
+def test_a_map_already_converted_is_not_downloaded_again(fake, capsys):
+    path = fake.home / "pli" / "models" / "qwen38_27b_d2048.npz"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"npz")
+    assert cli.main(["setup", "--yes"]) == 0
+    assert f"already converted ({path})" in capsys.readouterr().out and fake.lsa == []
+    assert f"PLI_A1_LSA_MAP={path}" in fake.service_install()
+
+
+def test_a_failed_map_download_leaves_pli_without_a1(fake, monkeypatch, capsys):
+    def fail(output):
+        raise ValueError("SHA-256 differs")
+
+    monkeypatch.setattr(lsa_map, "download", fail)
+    assert cli.main(["setup", "--yes"]) == 0
+    assert "A1's map was not installed (ValueError: SHA-256 differs)" in capsys.readouterr().err
+    assert fake.service_install() == expected_service(fake.home / "pli", a1=False)
+
+
+def test_a_model_the_map_does_not_fit_runs_without_a1(fake, monkeypatch, capsys):
+    monkeypatch.setattr(lsa_map, "fits", lambda model_dir: False)
+    assert cli.main(["setup", "--yes"]) == 0
+    assert "distilled for Qwen3.8-27B" in capsys.readouterr().err
+    assert fake.service_install() == expected_service(fake.home / "pli", a1=False)
+
+
+def test_tools_convert_lsa_map_runs_from_a_clone(tmp_path):
+    out = tmp_path / "m.npz"
+    done = subprocess.run([sys.executable, str(ROOT / "tools" / "convert_lsa_map.py"),
+                           str(ROOT / "tests" / "fixtures" / "lsa-tiny.pt"), str(out)],
+                          capture_output=True, text=True, check=False)
+    assert done.returncode == 0, done.stderr
+    assert "layers [3, 7]" in done.stdout and out.is_file()

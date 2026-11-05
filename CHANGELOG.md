@@ -4,6 +4,19 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
+## 4.1.2 (2026-11-05)
+
+- **`pli setup` turns A1 on.** With the `m1-ultra` profile, the list shown before downloading has one more item: A1's
+  map (Latent Sparse Attention, release `d-lsa-weights-v1`, 6 MB, Apache-2.0). On yes, `pli setup` downloads it from
+  the GitHub release, checks its SHA-256 (nothing is kept if it differs), converts it to NumPy in `<prefix>/models`,
+  and writes `PLI_A1_LSA_MAP`, `PLI_S3B_THRESHOLD=16384` and `PLI_S3B_ROWS=4096` in the service. It is left out with
+  `--no-a1`, on other Macs, and when the model's `config.json` is not Qwen3.8-27B's; a failed download leaves PLI
+  without A1 and the install goes on. Before, A1 had to be set by hand.
+- **The map is converted without torch** (`src/tensorfold/install/lsa_map.py`, used by `tools/convert_lsa_map.py`
+  too): the PyTorch file is read as the zip of arrays it is, with a pickle reader that accepts only the names of a
+  tensor file and refuses any other, so no code from the file runs. On the release's file it writes the same .npz,
+  byte for byte, as the torch path of 4.1.1 and the map served in production.
+
 ## 4.1.1 (2026-11-05)
 
 - **Name of A1's map.** 4.1.0 named the file to download `qwen38_27b.pt`; the file of LSA's release
