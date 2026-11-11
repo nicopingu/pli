@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
@@ -12,10 +14,19 @@ from typing import Any, Sequence
 from tensorfold.server.errors import RequestError
 
 EXTRA = "tensorfold[grammar]"             # the optional dependency that brings xgrammar
-KINDS = ("json", "json_schema", "regex", "choice", "grammar")
+KINDS = ("json", "json_schema", "regex", "choice", "grammar", "tools")
 CACHE_BYTES = 256 << 20                   # compiled grammars kept for repeated schemas
 OBJECT = '{"type": "object"}'             # json_object: any JSON object (OpenAI's contract), not an array
 BLANKS = 32                               # the most blank characters between JSON tokens: pretty-printing, not endless
+# PLI (10/11/2026): a request that offers tools gets the grammar of its model's tool-call format (xgrammar's builtin
+# structural tag): free text, and inside each call the function name of an offered tool, then its parameters in the
+# schema's order, each value valid against its schema (required keys present, JSON values valid). Hermes Agent's
+# 27B wrote 176 tool_call arguments that were not JSON between 15/10 and 08/11, 165 of them with no tool name.
+# PLI_TOOL_GRAMMAR=1: on. 0 (default): off, as before. A tools grammar that does not compile leaves the request
+# unconstrained (logged), never an error. Text can change: only inside tool calls, which become valid.
+TOOL_GRAMMAR = os.environ.get("PLI_TOOL_GRAMMAR", "0") == "1"
+TOOL_FORMATS = {"qwen3_5": "qwen_3_5", "qwen3_5_moe": "qwen_3_5", "qwen3_5_text": "qwen_3_5",
+                "qwen3_5_moe_text": "qwen_3_5"}   # model_type -> xgrammar's tool-call format
 
 
 @dataclass(frozen=True)
@@ -116,6 +127,26 @@ class Grammars:
         self.vocab_size = int(info.vocab_size)
         self.compiler = xgr.GrammarCompiler(info, max_threads=8, cache_limit_bytes=CACHE_BYTES)
         self.lock = threading.Lock()              # requests compile on their own HTTP threads
+        self.tool_grammars: "OrderedDict[str, Any]" = OrderedDict()   # PLI: tools grammars by their text (Hermes repeats)
+        self.tool_failures: set[str] = set()      # tools that did not compile: not tried again
+
+    def _compile_tools(self, text: str):
+        """The tools grammar (lock held): xgrammar's structural tag for the format, cached by its text."""
+
+        found = self.tool_grammars.get(text)
+        if found is not None:
+            self.tool_grammars.move_to_end(text)
+            return found
+        payload = json.loads(text)
+        tag = self.xgr.get_model_structural_tag(payload["format"], tools=payload["tools"],
+                                                tool_choice=payload["tool_choice"], reasoning="disabled",
+                                                max_whitespace_cnt=BLANKS,
+                                                exclude_special_tokens=False)   # free text stays free: same text
+        compiled = self.compiler.compile_structural_tag(tag)
+        self.tool_grammars[text] = compiled
+        while len(self.tool_grammars) > 32:
+            self.tool_grammars.popitem(last=False)
+        return compiled
 
     @classmethod
     def for_model(cls, model_dir: str | Path, vocab_size: int, stop_ids: Sequence[int]) -> "Grammars":
@@ -143,6 +174,8 @@ class Grammars:
                 if spec.kind == "choice":
                     options = " | ".join(json.dumps(v, ensure_ascii=False) for v in json.loads(spec.text))
                     return c.compile_grammar("root ::= " + options)
+                if spec.kind == "tools":
+                    return self._compile_tools(spec.text)
                 return c.compile_grammar(spec.text)
         except (RuntimeError, ValueError, TypeError) as exc:
             raise RequestError(f"{spec.field}: the grammar cannot be enforced: {_message(exc)}") from None
@@ -212,12 +245,84 @@ def compiler(owner, model_dir: str | Path, stop_ids: Sequence[int]) -> Grammars:
     return found
 
 
-def request_constraint(owner, fields: dict[str, Any], think_end: int | None) -> "Constraint | None":
-    """A fresh constraint for a request's grammar fields (``owner`` has ``model_dir`` and ``stop_ids``), or None."""
+def tool_format(model_dir: str | Path | None) -> str | None:
+    """xgrammar's tool-call format for the checkpoint (``config.json`` model_type), or None when unknown."""
+
+    if model_dir is None:
+        return None
+    path = Path(model_dir) / "config.json"
+    if not path.is_file():
+        return None
+    config = json.loads(path.read_text())
+    for part in (config, config.get("text_config") or {}):
+        found = TOOL_FORMATS.get(str(part.get("model_type") or ""))
+        if found is not None:
+            return found
+    return None
+
+
+def _either_order(schema: Any) -> Any:
+    """An object whose properties are exactly ``name`` and ``arguments``, both required, in either order.
+
+    PLI (10/11/2026, bench og): the 27B writes a bridge call as {"arguments": ..., "name": ...} (12 accepted calls out of 12
+    in production) while Hermes' schema lists name first. Forcing the schema's order made the model choose its tool before
+    its arguments, and choose others (a note written instead of a search) at a lower draft acceptance (83 % of the writing
+    speed). Both orders stay allowed, each with both keys required: a call without a name remains impossible."""
+
+    if isinstance(schema, list):
+        return [_either_order(v) for v in schema]
+    if not isinstance(schema, dict):
+        return schema
+    out = {k: _either_order(v) for k, v in schema.items()}
+    props = out.get("properties")
+    if (out.get("type") == "object" and isinstance(props, dict) and set(props) == {"name", "arguments"}
+            and set(out.get("required") or ()) == {"name", "arguments"}):
+        rest = {k: v for k, v in out.items() if k not in ("properties", "required", "type")}
+        first = {"type": "object", "properties": {"name": props["name"], "arguments": props["arguments"]},
+                 "required": ["name", "arguments"], **rest}
+        second = {"type": "object", "properties": {"arguments": props["arguments"], "name": props["name"]},
+                  "required": ["arguments", "name"], **rest}
+        return {"anyOf": [first, second]}
+    return out
+
+
+def tools_spec(owner, tools: Sequence[dict[str, Any]] | None, *, required: bool = False) -> Spec | None:
+    """The tools grammar of a request offering ``tools`` (PLI_TOOL_GRAMMAR=1, a known format), or None."""
+
+    if not TOOL_GRAMMAR or not tools:
+        return None
+    fmt = getattr(owner, "_pli_tool_format", False)
+    if fmt is False:
+        fmt = owner._pli_tool_format = tool_format(getattr(owner, "model_dir", None))
+    if fmt is None:
+        return None
+    text = json.dumps({"format": fmt, "tools": _either_order(list(tools)), "tool_choice": "required" if required else "auto"},
+                      ensure_ascii=False)          # key order kept: it is the order the grammar imposes
+    return Spec("tools", text, "tools")
+
+
+def request_constraint(owner, fields: dict[str, Any], think_end: int | None,
+                       tools: Sequence[dict[str, Any]] | None = None) -> "Constraint | None":
+    """A fresh constraint for a request's grammar fields (``owner`` has ``model_dir`` and ``stop_ids``), or None.
+
+    Without grammar fields, a request that offers ``tools`` gets the tools grammar (PLI_TOOL_GRAMMAR=1); a tools
+    grammar that fails to compile leaves the request unconstrained."""
 
     spec = request_spec(fields)
     if spec is None:
-        return None
+        spec = tools_spec(owner, tools, required=bool(fields.get("tool_call_required")))
+        if spec is None:
+            return None
+        grammars = compiler(owner, owner.model_dir, owner.stop_ids)
+        if spec.text in grammars.tool_failures:
+            return None
+        try:
+            compiled = grammars.compile(spec)
+        except RequestError as exc:
+            grammars.tool_failures.add(spec.text)
+            print(f"[tensorfold] tools grammar left off for these tools: {exc}", flush=True)
+            return None
+        return grammars.constraint(compiled, think_end=think_end, spec=spec)
     grammars = compiler(owner, owner.model_dir, owner.stop_ids)
     return grammars.constraint(grammars.compile(spec), think_end=think_end, spec=spec)
 
@@ -295,8 +400,8 @@ class Constraint:
         m = self.m
 
         def visit(r: int, active: bool) -> None:      # the matcher has taken row r's path (when active)
-            if active:
-                m.fill_next_token_bitmask(bits, r)
+            # PLI (10/11/2026): a row whose mask allows every token (free text around tool calls) is not masked
+            if active and m.fill_next_token_bitmask(bits, r):
                 filled.append(r)
             for c in children[r]:
                 if not active:
@@ -397,5 +502,6 @@ def _mask_mlx(logits, window: Window, offset: int = 0):
     return rows.reshape(shape)
 
 
-__all__ = ["Constraint", "EXTRA", "FIELDS", "GrammarError", "Grammars", "KINDS", "Spec", "Window", "compiler",
-           "for_model", "pack", "refusal", "request_constraint", "request_spec", "vocab_size"]
+__all__ = ["Constraint", "EXTRA", "FIELDS", "GrammarError", "Grammars", "KINDS", "Spec", "TOOL_GRAMMAR", "Window",
+           "compiler", "for_model", "pack", "refusal", "request_constraint", "request_spec", "tool_format", "tools_spec",
+           "vocab_size"]

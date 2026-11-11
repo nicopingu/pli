@@ -4,6 +4,28 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
+## 4.2.0 (2026-11-11)
+
+- **Checkpoints written in the background** (`PLI_SPILL_BACKGROUND=1`): a conversation's checkpoint goes to disk from
+  its own thread instead of the engine's. Over 24 hours of service on an M1 Ultra the engine waited 143 s for the disk
+  instead of 424 s the day before (spills 328 -> 88 s). Same text.
+- **Tool calls follow their schema** (`PLI_TOOL_GRAMMAR=1`, needs `xgrammar`): when a request offers tools, the reply's
+  calls are constrained by a grammar built from the tools' JSON schemas (name, required keys, valid values). On 24 agent
+  turns of a real session, 24 valid calls against 20 without the grammar; same text elsewhere.
+- **End of a reply read back from disk** (`PLI_DISK_REPLY_END=1`): when the checkpoint of a finished reply was evicted
+  from memory but is on disk, the next turn resumes from it instead of reading the conversation again (first word of a
+  resumed turn 1 546 s -> 6.9 s on the bench, 9 texts of 9 identical).
+- **The code enters the checkpoint key** (`PLI_CODE_KEY=1`): the sources of PLI and of the prompt path are hashed into
+  the key, so a checkpoint computed by other code is never resumed. With it on, the release number leaves the key: a
+  new release that does not change the computation keeps its checkpoints.
+- **`python -m tensorfold.pli.rekey`** re-keys checkpoints on disk without recomputing them (header and file name
+  rewritten, tensors copied, modification time kept), for a key change that does not change their bits. Used to move
+  the checkpoints of 4.1.2 to the key of 4.2.0.
+- **Request tokens kept for training** (`PLI_FALCON_TOKENS=<dir>`, off by default): the prompt and reply tokens of each
+  request, one file per request (directory mode 700), deleted after `PLI_FALCON_TOKENS_DAYS` days (7), for a night job
+  that recomputes the target's states and adjusts the draft on real traffic. Nothing changes in the computation.
+- The tool-grammar tests read the tokenizer from `PLI_TEST_QWEN38_MODEL` (skipped when absent).
+
 ## 4.1.2 (2026-11-05)
 
 - **`pli setup` turns A1 on.** With the `m1-ultra` profile, the list shown before downloading has one more item: A1's

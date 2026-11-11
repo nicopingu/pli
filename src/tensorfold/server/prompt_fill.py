@@ -18,6 +18,19 @@ _KEEP_REPLY = __import__("os").environ.get("PLI_KEEP_REPLY", "0") == "1"   # PLI
 # the request's checkpoint can be evicted by another request's (two agent sessions taking turns under the budget); it is
 # then on disk (spilled), and reads back in 1 to 2 s instead of 4 to 6 min of prefill. No effect when memory already has the longest.
 _REREAD_DISK = __import__("os").environ.get("PLI_REREAD_DISK", "0") == "1"
+# PLI (04/11/2026, ported to 4.1.2 on 10/11): under PLI_KEEP_REPLY, memory resumes a reply-end checkpoint (not a chunk start)
+# but the disk was searched at chunk starts only: a spilled reply end was never read back (production journal 20/10 -> 04/11:
+# 249 requests read again over half their prompt while that checkpoint was on disk; 05/11 -> 10/11 on 4.1.2: 7 requests,
+# 700 s a day). PLI_DISK_REPLY_END=1 (off): the disk takes the lengths memory takes. Same state as if it had stayed in memory.
+_DISK_REPLY_END = __import__("os").environ.get("PLI_DISK_REPLY_END", "0") == "1"
+
+
+def _disk_accepts(starts: Any) -> Any:
+    """The checkpoint lengths the disk lookup takes for this prompt (memory's under the setting)."""
+
+    if _DISK_REPLY_END and _KEEP_REPLY:
+        return lambda n: n in starts or _KEEP_REPLY
+    return lambda n: n in starts
 from tensorfold.server.errors import RequestError
 
 
@@ -67,7 +80,7 @@ class PromptFill:
             starts = filling.starts = self.engine.prompt_chunks(job.prompt_ids)
             filling.shared_at = {starts.floor(n) for n in job.shared_prefix_lens} - {0}
             if self.checkpoints is not None and job.vision is None:
-                self._read_disk_block(job.prompt_ids, lambda n: n in starts)
+                self._read_disk_block(job.prompt_ids, _disk_accepts(starts))
                 entry = self.checkpoints.peek(job.prompt_ids, usable=lambda n: n in starts or _KEEP_REPLY)
                 if memory is not None:
                     memory.require(current_cache=None if entry is None else entry.cache, keep=entry)
@@ -92,7 +105,7 @@ class PromptFill:
         checkpoints_at: list[int] = []
         if self.checkpoints is not None and job.vision is None:
             if _REREAD_DISK:
-                self._read_disk_block(job.prompt_ids, lambda n: n in starts)
+                self._read_disk_block(job.prompt_ids, _disk_accepts(starts))
             usable = lambda n: n in starts or _KEEP_REPLY   # PLI: a point at the end of a reply is not a chunk start
             entry = self.checkpoints.peek(job.prompt_ids, usable=usable)
             take = False

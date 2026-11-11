@@ -13,6 +13,7 @@ from tensorfold.engine.lane_engine import LaneEngine, SuffixLookupProposer
 from tensorfold.pli import recall as _recall
 from tensorfold.pli import events as _ev
 from tensorfold.pli import trace as _tr
+from tensorfold.pli.falcon import tokens as _falcon_tokens
 
 
 def _pli_times(received_at) -> str:
@@ -200,10 +201,18 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
         )
         # evicted conversations go to disk (``spill_bytes`` of this model's files at most) and come back on demand
         self.spill_bytes = int(spill_bytes) if self.checkpoints is not None and self.scheduler.session_dir else 0
+        self.spill_writer: Any = None
         if self.spill_bytes > 0:
             session_dir, spill_limit = Path(self.scheduler.session_dir), self.spill_bytes
-            self.checkpoints.on_evict = lambda entry: spill_conversation(entry, session_dir, model_id,
-                                                                         limit_bytes=spill_limit)
+            from tensorfold.pli import spill_writer as _sw
+
+            if _sw.ENABLED:     # PLI (10/11/2026): the engine prepares, a thread of its own writes (PLI_SPILL_BACKGROUND=1)
+                self.spill_writer = _sw.SpillWriter(session_dir, model_id, limit_bytes=spill_limit)
+                self.checkpoints.on_evict = self.spill_writer.submit
+                self.scheduler.spill_writer = self.spill_writer
+            else:
+                self.checkpoints.on_evict = lambda entry: spill_conversation(entry, session_dir, model_id,
+                                                                             limit_bytes=spill_limit)
         loaded_count = 0
         if snapshot_dir is not None and self.checkpoints is not None:
             from tensorfold.engine.prefix_snapshots import load_snapshots
@@ -334,7 +343,8 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
         system_len = 0 if prompt is not None or rendered.vision is not None else self.system_prefix_len(messages, tools, prompt_ids, thinking=thinking)
         spec = self._resolve_sampling(fields, temperature, prompt_ids)
         drafts = self.use_proposer and fields.get("draft", True) is not False
-        shaped = thinking and any(fields.get(k) is not None for k in grammar.FIELDS)
+        shaped = thinking and (any(fields.get(k) is not None for k in grammar.FIELDS)
+                               or (grammar.TOOL_GRAMMAR and bool(tools)))   # PLI: the tools grammar starts after it too
         think_end = self._token_id(self.think_markers[1]) if shaped else -1     # a grammar starts after it
 
         conv_pli = _ev.conversation(messages) if (_ev.active() and prompt is None) else ""   # PLI 3.6.0
@@ -354,7 +364,8 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
                 drafts=drafts,
                 ignore_eos=stops.ignore_eos, stop_check=stops if stops.strings else None,
                 cancellation=cancellation, call_gate=self._call_gate(fields, prompt_ids, tools),
-                constraint=grammar.request_constraint(self, fields, think_end if think_end >= 0 else None),
+                constraint=grammar.request_constraint(self, fields, think_end if think_end >= 0 else None,
+                                                      tools=tools if prompt is None else None),
                 vision=rendered.vision,
             )
             budget = int(fields.get("thinking_budget") or self.thinking_budget) if thinking else 0
@@ -544,6 +555,10 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
                    decode_ms=_ms(job.prefilled_at, job.finished_at), after_engine_ms=_ms(job.finished_at, _tr_loop),
                    stream_ms=_tr_stream * 1e3, stream_chunks=_tr_n, output_ms=_ms(_tr_loop, time.perf_counter()),
                    total_ms=_ms(received_at, time.perf_counter()), reason=reply["finish_reason"])
+        if _falcon_tokens.FOLDER:          # PLI (11/11/2026): FALCON B, the tokens of the request for the night job
+            _falcon_tokens.record(prompt_ids, collected, model=_ev._model_name(), conv=getattr(job, "pli_conv", "") or "",
+                                  request=job.job_id, cached=job.cached_tokens, reason=reply["finish_reason"],
+                                  vision=rendered.vision is not None, background=bool(background))
         _ev.ev("done", job, prompt=len(prompt_ids), cache=job.cached_tokens, output=len(collected),
                tok_s=float(reply["runtime"]["tokens_per_second"]), reason=reply["finish_reason"],
                wait=(first_token_at - received_at) if first_token_at else None,
@@ -593,6 +608,9 @@ class ChatApp(RequestOptions, PromptBlocks, DecisionRequests):
         if self.scheduler.session_dir is None or self.checkpoints is None:
             return 0
         directory, model = Path(self.scheduler.session_dir), self.scheduler.model_id
+        if self.spill_writer is not None:      # PLI (10/11/2026): the writes in progress end first, no partial file left
+            if not self.spill_writer.close(timeout=120.0):
+                print("[tensorfold] spill writer: writes still in progress after 120 s at shutdown", flush=True)
         if self.spill_bytes > 0:        # with spilling, the directory holds every conversation that fits its budget
             saved = save_conversations(self.checkpoints, directory, model, keep=1 << 30, limit_bytes=self.spill_bytes)
             prune_conversations(directory, model, self.spill_bytes)

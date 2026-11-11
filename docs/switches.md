@@ -146,6 +146,8 @@ Present in the code, not in production, not set by any profile. Some are kept fo
 | `PLI_FALCON_BATCH` | `4096` | FALCON: rows per capture file. | `tensorfold/pli/falcon/capture.py` |
 | `PLI_FALCON_PROMPT` | `2048` | FALCON: last prompt rows kept per request. | `tensorfold/pli/falcon/capture.py` |
 | `PLI_FALCON_HEAD` | `unset` | FALCON: JSON file naming a published MTP head; checked every 30 s, the head is swapped between two rounds. | `tensorfold/families/qwen3_5_moe/hybrid.py` |
+| `PLI_FALCON_TOKENS` | `unset` | FALCON B: directory where the prompt and reply tokens of each request are kept (one file per request, mode 700), for the night job that recomputes the 27B states and adjusts the DFlash2 draft. Off when unset. | `tensorfold/pli/falcon/tokens.py` |
+| `PLI_FALCON_TOKENS_DAYS` | `7` | FALCON B: days a token file is kept; older files are deleted. | `tensorfold/pli/falcon/tokens.py` |
 | `PLI_HYBRID_FORCE` | `unset` | `dflash` or `mtp`: freezes the hybrid's choice (benches). | `tensorfold/families/qwen3_5_moe/hybrid.py` |
 | `PLI_HYBRID_LOG` | `unset` | File logging each switch of the hybrid draft. | `tensorfold/families/qwen3_5_moe/hybrid.py` |
 | `PLI_HYBRID_DEPTH` | `0` | In MTP mode, the hybrid picks its depth like the MTP head alone (acceptance by depth, cost of one step). | `tensorfold/families/qwen3_5_moe/hybrid.py` |
@@ -199,6 +201,11 @@ Change them only to measure.
 | `PLI_EVENTS_MAX_MB` | `50` | The event journal rotates to `<file>.1` beyond this size in MB. | `tensorfold/pli/events.py` |
 | `PLI_HYBRID_GLOBAL_ROUNDS` | `12` | Rounds of each draft the engine measures before new conversations start on the better one. | `tensorfold/families/qwen3_5_moe/hybrid.py` |
 | `PLI_SNAPSHOT_SETTINGS` | `1` | A fingerprint of the `PLI_*` settings enters the snapshot key, so a conversation saved under other settings is not resumed. | `tensorfold/cli.py` |
+| `PLI_CODE_KEY` | `1` | A fingerprint of PLI's own sources (`tensorfold/pli`, the prompt path of `tensorfold/engine`) enters the snapshot key, so a checkpoint computed by other code is not resumed; with it on, the release number leaves the key (a new release that does not change the code keeps its checkpoints; `python -m tensorfold.pli.rekey` moves older checkpoints to the new key); `0` gives the previous key, release number included. | `tensorfold/pli/code_key.py` |
+| `PLI_SPILL_BACKGROUND` | `0` | `1`: an evicted conversation is prepared on the engine thread (reduction, export, evaluated arrays) and written to disk by a thread of its own; the engine waits only for a write a prompt could resume, past `PLI_SPILL_BACKGROUND_MAX_GIB` of bytes waiting, or at shutdown. Same file, same text. | `tensorfold/pli/spill_writer.py` |
+| `PLI_SPILL_BACKGROUND_MAX_GIB` | `8` | `PLI_SPILL_BACKGROUND`: bytes of spills held in memory while they wait to be written. | `tensorfold/pli/spill_writer.py` |
+| `PLI_DISK_REPLY_END` | `0` | `1` with `PLI_KEEP_REPLY`: the disk lookup takes the checkpoint lengths memory takes, so a spilled reply-end checkpoint is read back instead of the prompt being read again. Same state, same text. | `tensorfold/server/prompt_fill.py` |
+| `PLI_TOOL_GRAMMAR` | `0` | `1`: a request that offers tools, without `response_format` or `guided_*`, gets its model's tool-call grammar (xgrammar builtin structural tag, Qwen XML for qwen3_5 and qwen3_5_moe): free text, and in each call an offered tool's name then its parameters in the schema's order, values valid against their schema. Needs `tensorfold[grammar]`. A tools grammar that does not compile leaves the request free (logged). | `tensorfold/engine/grammar.py` |
 | `PLI_PREFILL_UNPACK_ROWS` | `512` | Rows from which prompt-reading calls unpack the weights. | `tensorfold/pli/unpack.py` |
 | `PLI_RECALL_TOKENS` | `1000000` | Size bound of the Recall registry in tokens; the oldest go first. | `tensorfold/pli/recall.py` |
 | `PLI_TRACE_MAX_MB` | `500` | The step trace rotates to `<file>.1` beyond this size in MB. | `tensorfold/pli/trace.py` |
@@ -349,6 +356,7 @@ documentation.
 | `PLI_REDUITE_ANCRE` | `PLI_REDUCED_ANCHOR` |
 | `PLI_REDUITE_TOURS` | `PLI_REDUCED_ROUNDS` |
 | `PLI_RELIRE_DISQUE` | `PLI_REREAD_DISK` |
+| `PLI_DISQUE_FIN_REPONSE` | `PLI_DISK_REPLY_END` |
 | `PLI_RQ_NC_MAX` | `PLI_REQUANT_NC_MAX` |
 | `PLI_S3B_LIGNES` | `PLI_S3B_ROWS` |
 | `PLI_S3B_SEUIL` | `PLI_S3B_THRESHOLD` |

@@ -409,20 +409,21 @@ def _serve_mlx(args: argparse.Namespace, family: Any, model_dir: Path, context: 
     if resolve_prefill is not None:
         resolve_prefill()  # the prefill mode's self-check runs at startup, before any snapshot key
     # Both libraries, the active prompt kernels and how prompts are cut determine a snapshot's bits.
+    # PLI 4.2.0: with the code in the key (PLI_CODE_KEY=1) the release number leaves it (pli/code_key.py release_part).
+    from tensorfold.pli import code_key as _ck
     model_id = (f"{model_dir.resolve()}|mlx={mx.__version__}|mlx_lm={version('mlx-lm')}"
                 f"|kernels={families.kernel_version(family, model)}"
-                f"|prefill={plan.name}|tensorfold={__version__}")
+                f"|prefill={plan.name}" + _ck.release_part(__version__))
     # PLI (13/10/2026): the PLI_* settings change the bits of a snapshot (attm, f16...): their fingerprint enters the key, so that a
     # conversation saved under other settings is not resumed with a mixed computation. PLI_SNAPSHOT_SETTINGS=0 = original.
     if os.environ.get("PLI_SNAPSHOT_SETTINGS", "1") == "1":
-        import hashlib as _hl
-        from tensorfold.pli import env_names as _env_names
-        # PLI (KVD5): PLI_CHECKPOINT_BITS and PLI_CHECKPOINT_GROUP stay out of the fingerprint, carried by "|points=..." (nothing when off)
-        _pli = _env_names.pli_settings(exclude=("PLI_SNAPSHOT_SETTINGS", "PLI_ATTENTION_TUNING_FILE", "PLI_CHECKPOINT_BITS",
-                                                "PLI_CHECKPOINT_GROUP"))
-        model_id += "|pli=" + _hl.sha256(repr(_pli).encode()).hexdigest()[:12]
+        # PLI (KVD5): PLI_CHECKPOINT_BITS and PLI_CHECKPOINT_GROUP stay out of the fingerprint, carried by "|points=..." (nothing when off);
+        # settings that never change a checkpoint's bits stay out too (pli/code_key.py SETTINGS_EXCLUDED)
+        model_id += "|pli=" + _ck.settings_fingerprint()
     from tensorfold.pli import checkpoint_bits as _cb
     model_id += _cb.key_suffix()
+    # PLI (10/11/2026): the sources of PLI and of the prompt path enter the key (pli/code_key.py). PLI_CODE_KEY=0 = previous key.
+    model_id += _ck.suffix()
     gib = args.prompt_cache_gib
     if gib is None:
         ram = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")

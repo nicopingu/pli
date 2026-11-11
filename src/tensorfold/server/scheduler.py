@@ -149,6 +149,7 @@ class Scheduler(PromptFill):
         self.model_id = model_id
         self.disk_blocks: Any = None
         self.session_blocks: Any = None
+        self.spill_writer: Any = None          # PLI (10/11/2026): set by the server when spills are written in the background
         if model_id and (snapshot_dir is not None or session_dir is not None):
             from tensorfold.engine.prefix_snapshots import DiskBlocks, remove_stale_partials
 
@@ -617,6 +618,9 @@ class Scheduler(PromptFill):
 
         if self.checkpoints is None or (self.disk_blocks is None and self.session_blocks is None):
             return
+        writer = self.spill_writer
+        if writer is not None:
+            writer.settle(prompt)        # a conversation of this prompt still being written: its file first
         try:
             have = self.checkpoints.longest(prompt, usable)
             found: Any = None
@@ -634,7 +638,11 @@ class Scheduler(PromptFill):
                       "hold a copy beside what runs; this prompt re-prefills it", flush=True)
                 _ev.ev("stays_on_disk", conv=_ev.conv_of_tokens(prompt), tokens=len(found[1]))
                 return
-            loaded = load_snapshot(found[0], self.model_id)
+            if writer is not None:
+                with writer.disk_lock:            # the writer's pruning never removes the file being read
+                    loaded = load_snapshot(found[0], self.model_id) if found[0].exists() else None
+            else:
+                loaded = load_snapshot(found[0], self.model_id)
             if loaded is None:
                 return
             tokens, cache = loaded

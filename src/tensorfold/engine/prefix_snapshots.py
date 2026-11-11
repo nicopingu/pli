@@ -67,6 +67,32 @@ def save_snapshot(directory: Path, model_id: str, tokens: Sequence[int], cache: 
                   *, keep: int = 8) -> Path | None:
     """Write one snapshot unless it is already there; keep the ``keep`` newest."""
 
+    prepared = prepare_snapshot(directory, model_id, tokens, cache)
+    if prepared is None:
+        return None
+    target, arrays, meta = prepared
+    partial = partial_path(target)
+    try:
+        mx.save_safetensors(str(partial), arrays, metadata=meta)
+        partial.rename(target)
+    except BaseException:
+        partial.unlink(missing_ok=True)   # a full disk would otherwise keep these bytes, outside every byte budget
+        raise
+    _keep_newest(directory, model_id, keep)
+    return target
+
+
+def partial_path(target: Path) -> Path:
+    """This process's own partial write of ``target``: startup knows if its writer ended."""
+
+    key = target.name[:-len(".safetensors")]
+    return target.with_name(f"{key}.{os.getpid()}{PARTIAL}")
+
+
+def prepare_snapshot(directory: Path, model_id: str, tokens: Sequence[int],
+                     cache: list[Any]) -> tuple[Path, dict[str, mx.array], dict[str, str]] | None:
+    """The file a snapshot goes to, its arrays and its metadata; None when the file is already there (touched)."""
+
     directory.mkdir(parents=True, exist_ok=True)
     key = snapshot_key(model_id, tokens)
     target = directory / f"{key}.safetensors"
@@ -115,14 +141,14 @@ def save_snapshot(directory: Path, model_id: str, tokens: Sequence[int], cache: 
         layers.append(entry)
     meta = {"format": str(FORMAT), "model": model_id, "tokens": json.dumps([int(t) for t in tokens]),
             "layers": json.dumps(layers), "saved": str(time.time())}
-    partial = target.with_name(f"{key}.{os.getpid()}{PARTIAL}")      # this process's own: startup knows if it ended
-    try:
-        mx.save_safetensors(str(partial), arrays, metadata=meta)
-        partial.rename(target)
-    except BaseException:
-        partial.unlink(missing_ok=True)   # a full disk would otherwise keep these bytes, outside every byte budget
-        raise
-    # keep the newest ``keep`` of this model only: another model's blocks are not this one's to evict
+    return target, arrays, meta
+
+
+def _keep_newest(directory: Path, model_id: str, keep: int) -> None:
+    """Keep the newest ``keep`` of this model only: another model's blocks are not this one's to evict."""
+
+    if keep >= 1 << 30:
+        return                           # PLI (10/11/2026): spills keep everything here; prune_conversations prunes by bytes
     ours = []
     for path in sorted(directory.glob("*.safetensors"), key=lambda p: p.stat().st_mtime, reverse=True):
         if path.name.endswith(".partial.safetensors"):
@@ -135,7 +161,6 @@ def save_snapshot(directory: Path, model_id: str, tokens: Sequence[int], cache: 
             ours.append(path)
     for stale in ours[keep:]:
         stale.unlink(missing_ok=True)
-    return target
 
 
 def load_snapshots(directory: Path, model_id: str, *, limit: int | None = None, allow: Any = None):

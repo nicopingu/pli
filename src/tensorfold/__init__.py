@@ -5,7 +5,7 @@ from tensorfold.pli import env_names as _env_names
 
 _env_names.apply()
 
-__version__ = "4.1.2"
+__version__ = "4.2.0"
 
 # PLI is a fork of TensorFold: the Python module keeps the name tensorfold (simpler to take upstream changes),
 # the installed package is called pli.
