@@ -158,15 +158,34 @@ def plan(directories: list[Path], version: str, fingerprints: list[str], environ
     return {"new": new, "old": olds, "counts": {k: found[k] for k in olds}, "others": sum(v for k, v in found.items() if k not in olds)}
 
 
+def plan_code(directories: list[Path]) -> dict:
+    """The newest key with a code digest, and the same key with the digest of this tree's code (a change of code that does
+    not change a checkpoint's bits: the caller knows)."""
+
+    from tensorfold.pli import code_key
+
+    found = keys(directories)
+    olds = [k for k in found if "|code=" in k]
+    if not olds:
+        raise SystemExit("no checkpoint keyed with a code digest")
+    old = olds[0]
+    new = re.sub(r"\|code=[0-9a-f]+", "|code=" + code_key.digest(), old)
+    return {"new": new, "old": [old], "counts": {old: found[old]}, "others": sum(v for k, v in found.items() if k != old)}
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m tensorfold.pli.rekey")
     sub = p.add_subparsers(dest="action", required=True)
     a = sub.add_parser("plan"); a.add_argument("directories", type=Path, nargs="+")
     a.add_argument("--version", default="4.1.2"); a.add_argument("--pli", required=True, help="fingerprints, comma-separated")
     a.add_argument("--env", type=Path, required=True, help="the engine's settings, KEY=VALUE lines")
+    c = sub.add_parser("plan-code"); c.add_argument("directories", type=Path, nargs="+")
     b = sub.add_parser("move"); b.add_argument("--old", required=True, action="append"); b.add_argument("--new", required=True)
     b.add_argument("directories", type=Path, nargs="+")
     args = p.parse_args(argv)
+    if args.action == "plan-code":
+        print(json.dumps(plan_code(args.directories)))
+        return 0
     if args.action == "plan":
         print(json.dumps(plan(args.directories, args.version, args.pli.split(","), read_env(args.env))))
     else:

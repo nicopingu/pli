@@ -110,3 +110,15 @@ def test_move_with_a_longer_key_copies(tmp_path):
     [(tokens, cache)] = list(ps.load_snapshots(tmp_path, longer))
     assert tokens == [3, 4] and mx.array_equal(cache[0].state_a, mx.arange(12).reshape(3, 4).astype(mx.float16))
     assert not list(tmp_path.glob("*.partial.safetensors"))
+
+
+def test_plan_code_changes_only_the_digest(tmp_path):
+    ps.save_snapshot(tmp_path, "base|pli=abc|points=q4|code=000000000000", [1], [Layer()])
+    out = rekey.plan_code([tmp_path])
+    assert out["old"] == ["base|pli=abc|points=q4|code=000000000000"]
+    assert out["new"] == "base|pli=abc|points=q4|code=" + code_key.digest()
+
+
+def test_copy_log_is_out_of_the_fingerprint():
+    base = {"PLI_HYBRIDE": "1"}
+    assert code_key.settings_fingerprint(base) == code_key.settings_fingerprint(dict(base, PLI_COPY_LOG="/x.jsonl"))

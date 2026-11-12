@@ -4,6 +4,16 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
+## 4.2.1 (2026-11-12)
+
+- **Copy log for head rounds too** (`PLI_COPY_LOG=<file>`, off by default): a round where a copy was offered but the
+  learned choice (`PLI_HEAD_BEFORE_COPY=3`) took the head's tree now writes the copy, the whole tree (tokens, parents)
+  and the choice's moving average, so the choice can be checked offline against the text written. The choice itself
+  does not change. `PLI_COPY_LOG` stays out of the checkpoint key's settings fingerprint.
+- **`python -m tensorfold.pli.rekey plan-code`**: the newest checkpoint key with the digest of this tree's code, for a
+  code change that does not change a checkpoint's bits. First release whose number changes without touching the
+  checkpoint key (4.2.0 took the release number out of it).
+
 ## 4.2.0 (2026-11-11)
 
 - **Checkpoints written in the background** (`PLI_SPILL_BACKGROUND=1`): a conversation's checkpoint goes to disk from

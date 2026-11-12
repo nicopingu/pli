@@ -23,7 +23,7 @@ how it is measured: [Measurements](#measurements)):
 PLI adds work that spreads one model across the GPU, the CPU and the Neural Engine, kernels measured for the dense
 Qwen3.8-27B, and a draft that picks, per conversation, between DFlash2 and the model's own MTP head.
 
-**4.2.0 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
+**4.2.1 is a pre-release.** It is validated on one machine and one model family. Each change and its measurement is in
 [CHANGELOG.md](CHANGELOG.md); every `PLI_*` setting is in [docs/switches.md](docs/switches.md).
 
 - **A dedicated Mac.** PLI is made for a Mac that runs nothing else: with the 27B it keeps about 36 GB of memory

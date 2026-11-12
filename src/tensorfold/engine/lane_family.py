@@ -22,7 +22,9 @@ from tensorfold.engine.family_shared import SharedRounds
 _HEAD_BEFORE_COPY = __import__("os").environ.get("PLI_HEAD_BEFORE_COPY", "0")
 # PLI (30/10/2026): PLI_COPY_LOG=file (jsonl, off by default): each round writes its kind and the tokens it gave; a copy round also
 # writes the copy, the head's queued chain (full: the head is no longer cut down to one draft) and the match length. Used to
-# choose offline when the copy should go before the head. The choice itself does not change.
+# choose offline when the copy should go before the head. The choice itself does not change. PLI (12/11/2026): a head round
+# whose copy was offered and not taken writes them too, with the whole tree ("tree": tokens, parents) and the learned
+# choice's moving average ("avg"); PLI_COPY_LOG stays out of the checkpoint key (pli/code_key.py).
 _COPY_LOG = __import__("os").environ.get("PLI_COPY_LOG", "")
 # PLI (30/10/2026): PLI_HEAD_BEFORE_COPY=3: choice learned per stream. At each round where the copy and the head's chain are both
 # queued, both are scored afterwards on the written text (tokens they would have kept); moving average (weight
@@ -303,9 +305,18 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
             if copied and _COPY_LOG and queued is not None:
                 stream._cj = {"copy": [int(t) for t in copied], "head": _first_tokens(queued, 8),
                               "match": int(getattr(stream.proposer, "last_match", 0) or 0)}
+                if isinstance(queued, tuple):        # PLI (12/11/2026): the whole tree, to score it as verified
+                    try:
+                        qt, qp = queued
+                        stream._cj["tree"] = [[int(t) for t in (qt.tolist() if isinstance(qt, mx.array) else qt)],
+                                              [int(q) for q in qp]]
+                    except Exception:  # noqa: BLE001 - a log must never break a round
+                        pass
             if copied and _HEAD_BEFORE_COPY == "3" and queued is not None:
                 hc = stream.__dict__.setdefault("_hc", {"avg": 0.0, "pending": [], "scored": 0})
                 _score_hc(stream, hc)
+                if _COPY_LOG and getattr(stream, "_cj", None) is not None:
+                    stream._cj["avg"] = round(float(hc["avg"]), 3)      # the learned choice's state at this round
                 head = _first_tokens(queued, 7)
                 if len(head) >= 4:                    # a head chain to score (not the MTP head cut down to one draft)
                     hc["pending"].append((int(stream.context_len), [int(t) for t in copied], head))
@@ -552,7 +563,7 @@ class FamilyRounds(FamilyPrefill, SharedRounds, DraftDepth):
             cj = getattr(stream, "_cj", None)
             stream._cj = None
             rec = {"stream": str(stream.stream_id), "pos": int(position), "kind": kind, "given": [int(t) for t in got]}
-            if cj is not None and kind == "copy":
+            if cj is not None:          # PLI (12/11/2026): head rounds too, when the copy was offered and not taken
                 rec.update(cj)
             with open(_COPY_LOG, "a") as handle:
                 handle.write(_json.dumps(rec) + "\n")
