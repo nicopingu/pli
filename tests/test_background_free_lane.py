@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-from tensorfold.server.scheduler import ChatJob, Scheduler
+from pli.engine.lane_engine import LaneEngine, LaneStream
+from pli.server.scheduler import ChatJob, Scheduler
 
 
 from tests.test_lane_server import SlowFakeEngine, expected_reply, make_app

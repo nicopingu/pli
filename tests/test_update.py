@@ -1,4 +1,4 @@
-"""Version tracking and `tensorfold update`, with GitHub and pip replaced by fakes (no network, no installs)."""
+"""Version tracking and `pli update`, with GitHub and pip replaced by fakes (no network, no installs)."""
 
 import io
 import json
@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold import __version__, cli, update
+from pli import __version__, cli, update
 
 import pytest as _pytest
 
@@ -33,7 +33,7 @@ SAMPLE = """# What's new in TensorFold
 def _cache(tmp_path, monkeypatch):
     monkeypatch.setattr(update, "CACHE", tmp_path / "update-check.json")
     monkeypatch.setattr(update, "SEEN", tmp_path / "version-seen")
-    monkeypatch.setattr("urllib.request.urlopen", _offline)
+    monkeypatch.setattr("pli.net.urlopen", _offline)
 
 
 def _offline(*args, **kwargs):
@@ -57,9 +57,9 @@ def test_latest_release_reads_github_once_a_day(monkeypatch):
         calls.append(request.full_url)
         return io.BytesIO(json.dumps({"tag_name": "v9.9.9"}).encode())
 
-    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr("pli.net.urlopen", urlopen)
     assert update.latest_release() == "v9.9.9"
-    monkeypatch.setattr("urllib.request.urlopen", _no_network)
+    monkeypatch.setattr("pli.net.urlopen", _no_network)
     assert update.latest_release() == "v9.9.9"             # from the day's cache
     assert calls == [update.RELEASES_API]
 
@@ -68,13 +68,13 @@ def test_offline_is_silent(monkeypatch):
     def urlopen(request, timeout):
         raise OSError("offline")
 
-    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr("pli.net.urlopen", urlopen)
     assert update.latest_release() is None
     assert update.notice(None) is None
 
 
 def test_notice_only_for_a_newer_release():
-    assert "run `tensorfold update`" in update.notice("v99.0.0")
+    assert "run `pli update`" in update.notice("v99.0.0")
     assert update.notice(f"v{__version__}") is None
 
 
@@ -154,7 +154,7 @@ def test_update_shows_whats_new_from_the_new_tag(monkeypatch, capsys):
     monkeypatch.setattr(update, "_editable_clone", lambda: None)
     monkeypatch.setattr(update.subprocess, "call", lambda command, **kw: 0)
     monkeypatch.setattr(update.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="99.0.0\n", returncode=0))
-    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr("pli.net.urlopen", urlopen)
     assert update.update() == 0
     out = capsys.readouterr().out
     assert f"What's new since {__version__}" in out and "Faster everything" in out
@@ -169,7 +169,7 @@ def test_an_editable_clone_reads_its_own_changelog(monkeypatch, tmp_path, capsys
     monkeypatch.setattr(update, "_editable_clone", lambda: tmp_path)
     monkeypatch.setattr(update.subprocess, "call", lambda command, **kw: 0)
     monkeypatch.setattr(update.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="", returncode=0))
-    monkeypatch.setattr("urllib.request.urlopen", _no_network)
+    monkeypatch.setattr("pli.net.urlopen", _no_network)
     assert update.update() == 0
     assert "Faster everything" in capsys.readouterr().out
 
@@ -200,7 +200,7 @@ def test_the_changelog_has_this_version():
 
 
 def test_pli_refuses_the_update(capsys):
-    from tensorfold import update
+    from pli import update
     assert update.update() == 1
     assert update.update(check_only=True) == 1
     assert update.check_in_background() is None

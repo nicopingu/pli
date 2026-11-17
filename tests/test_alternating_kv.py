@@ -7,9 +7,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 KVCache = pytest.importorskip("mlx_lm.models.cache").KVCache
 
-from tensorfold.engine.alternating_kv import AlternatingKVCache, drop_spares
-from tensorfold.engine.family_common import cache_contents
-from tensorfold.engine.lane_engine import LaneEngine
+from pli.engine.alternating_kv import AlternatingKVCache, drop_spares
+from pli.engine.family_common import cache_contents
+from pli.engine.lane_engine import LaneEngine
 
 
 def _same(a, b):

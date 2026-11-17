@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import pytest
 
-from tensorfold.server import prompt_fill
-from tensorfold.server.checkpoints import CheckpointStore
-from tensorfold.server.scheduler import ChatJob, Scheduler
+from pli.server import prompt_fill
+from pli.server.checkpoints import CheckpointStore
+from pli.server.scheduler import ChatJob, Scheduler
 from tests.test_prompt_fill import GridEngine, _prompt, _run, _solo
 
 OFF_CHUNK, START = 10, 8          # prompt of 22 tokens, chunks of 4: 8 is a chunk start, 10 is not

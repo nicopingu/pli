@@ -11,9 +11,9 @@ mx = pytest.importorskip("mlx.core")
 
 from dsv4_fakes import (DSPARK, TEXT, write_checkpoint, write_dspark, write_mtp, write_official_dspark,  # noqa: E402
                         write_official_mtp)
-from tensorfold.families.deepseek_v4 import mtp as ds_mtp  # noqa: E402
-from tensorfold.families.deepseek_v4 import weights  # noqa: E402
-from tensorfold.families.deepseek_v4.runtime import DeepSeekFlash  # noqa: E402
+from pli.families.deepseek_v4 import mtp as ds_mtp  # noqa: E402
+from pli.families.deepseek_v4 import weights  # noqa: E402
+from pli.families.deepseek_v4.runtime import DeepSeekFlash  # noqa: E402
 
 CPU_ROWS = 7          # MLX's CPU fp32 rms_norm is row-invariant below 8 rows
 
@@ -55,17 +55,17 @@ def logits_of(model, ids, cache):
 
 
 def test_family_is_detected_and_checked(checkpoint):
-    from tensorfold import families
-    from tensorfold.families import deepseek_v4
+    from pli import families
+    from pli.families import deepseek_v4
 
-    assert families.detect(checkpoint).module == "tensorfold.families.deepseek_v4"
+    assert families.detect(checkpoint).module == "pli.families.deepseek_v4"
     deepseek_v4.check(checkpoint)
 
 
 def test_check_refuses_affine_experts(checkpoint, tmp_path):
     import shutil
 
-    from tensorfold.families import deepseek_v4
+    from pli.families import deepseek_v4
 
     shutil.copy(checkpoint / "config.json", tmp_path / "config.json")
     config = json.loads((tmp_path / "config.json").read_text())
@@ -113,7 +113,7 @@ def test_chunked_prefill_agrees_with_one_chunk(model):
 
 
 def serial_logits(model, base, window):
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     cache = LaneEngine.copy_single_cache(base)
     out = []
@@ -126,7 +126,7 @@ def serial_logits(model, base, window):
 def test_decode_windows_give_one_row_bits(model, prompt):
     """A window of up to 7 rows gives each row its one-row logits bit for bit, across pool emissions."""
 
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     base = model.make_cache()
     mx.eval(model.hidden(mx.array([tokens(prompt, seed=5)], dtype=mx.uint32), base))
@@ -140,7 +140,7 @@ def test_decode_windows_give_one_row_bits(model, prompt):
 def test_keep_rows_then_continue_equals_serial(model):
     """Rejected rows leave nothing behind: keep 2 of 7, continue, and match the serial run of the kept tokens."""
 
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     base = model.make_cache()
     mx.eval(model.hidden(mx.array([tokens(29, seed=7)], dtype=mx.uint32), base))
@@ -175,7 +175,7 @@ def drafter(tmp_path_factory):
 def test_official_mtp_shard_converts_to_the_mlx_layout(tmp_path):
     """FP8 linears become 4-bit affine rows of their exact bf16 values; the FP4 experts keep their bytes."""
 
-    from tensorfold.families.deepseek_v4.convert import convert_mtp, e8m0
+    from pli.families.deepseek_v4.convert import convert_mtp, e8m0
 
     raw = write_official_mtp(tmp_path / "official.safetensors")
     folder = convert_mtp(tmp_path / "official.safetensors", tmp_path / "mtp")
@@ -193,8 +193,8 @@ def test_official_mtp_shard_converts_to_the_mlx_layout(tmp_path):
 
 
 def _run_engine(runtime, prompt, n, drafts=True):
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.families.deepseek_v4 import engine_settings
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.families.deepseek_v4 import engine_settings
 
     engine = LaneEngine(runtime, **engine_settings(runtime))
     assert engine.family
@@ -230,9 +230,9 @@ def test_mtp_drafts_change_speed_only(model, drafter):
 def test_lane_engine_resumes_from_a_chunk_start(model, drafter, tmp_path, grid, length, cut, kept):
     """A checkpoint at a chunk start, in memory or read back from disk, resumes exactly like a fresh prefill."""
 
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.engine.prefix_snapshots import load_snapshot, save_snapshot
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.engine.prefix_snapshots import load_snapshot, save_snapshot
 
     runtime = cpu_runtime(model, ds_mtp.load(model, drafter / "model.safetensors"), 2)
     prompt = tokens(length, seed=5)
@@ -258,9 +258,9 @@ def test_lane_engine_resumes_from_a_chunk_start(model, drafter, tmp_path, grid, 
 
 
 def test_concurrent_streams_emit_what_they_emit_alone(model, drafter):
-    from tensorfold.engine.exact_sampling import Sampling
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.families.deepseek_v4 import engine_settings
+    from pli.engine.exact_sampling import Sampling
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.families.deepseek_v4 import engine_settings
 
     runtime = cpu_runtime(model, ds_mtp.load(model, drafter / "model.safetensors"), 3)
     runtime.max_streams = CPU_ROWS
@@ -291,11 +291,11 @@ def test_concurrent_streams_emit_what_they_emit_alone(model, drafter):
 def test_dspark_drafts_change_speed_only(model, tmp_path):
     """DSpark drafts a block after each round's read; the reply equals the serial run's, sampled or greedy."""
 
-    from tensorfold.engine.exact_sampling import Sampling
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.families.deepseek_v4 import dspark as ds_dspark
-    from tensorfold.families.deepseek_v4 import engine_settings
-    from tensorfold.families.deepseek_v4.runtime import DSparkFlash
+    from pli.engine.exact_sampling import Sampling
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.families.deepseek_v4 import dspark as ds_dspark
+    from pli.families.deepseek_v4 import engine_settings
+    from pli.families.deepseek_v4.runtime import DSparkFlash
 
     folder = write_dspark(tmp_path / "dspark")
     drafter = ds_dspark.load(model, folder / "model.safetensors", json.loads((folder / "config.json").read_text()))
@@ -325,8 +325,8 @@ def test_dspark_drafts_change_speed_only(model, tmp_path):
 def test_official_dspark_converts_and_drafts(model, tmp_path):
     """DSpark's shards convert block by block, load with its config's fields and draft a block."""
 
-    from tensorfold.families.deepseek_v4 import dspark as ds_dspark
-    from tensorfold.families.deepseek_v4.convert import convert_dspark
+    from pli.families.deepseek_v4 import dspark as ds_dspark
+    from pli.families.deepseek_v4.convert import convert_dspark
 
     folder = convert_dspark(write_official_dspark(tmp_path / "official"), tmp_path / "dspark")
     config = json.loads((folder / "config.json").read_text())
@@ -347,8 +347,8 @@ def test_a_loaded_runtime_decodes_on_another_thread(model):
 
     import threading
 
-    from tensorfold.engine.family_common import cache_arrays
-    from tensorfold.families.deepseek_v4.runtime import materialize
+    from pli.engine.family_common import cache_arrays
+    from pli.families.deepseek_v4.runtime import materialize
 
     runtime = DeepSeekFlash(model, None, drafts=0, check=False)
     assert materialize(runtime) > 100
@@ -372,7 +372,7 @@ def test_a_loaded_runtime_decodes_on_another_thread(model):
 def test_a_drafter_folder_names_its_head(tmp_path):
     """model.safetensors beside a config.json whose model_type is the head; anything else is refused before loading."""
 
-    from tensorfold.families.deepseek_v4.runtime import drafter_config
+    from pli.families.deepseek_v4.runtime import drafter_config
 
     assert drafter_config(write_mtp(tmp_path / "mtp"))["model_type"] == "deepseek_v4_mtp"
     assert drafter_config(write_dspark(tmp_path / "dspark")) == {"model_type": "deepseek_v4_dspark", **DSPARK}
@@ -390,8 +390,8 @@ def test_a_drafter_folder_names_its_head(tmp_path):
 def test_the_published_dspark_head_is_the_default_drafter(tmp_path, monkeypatch, capsys):
     """`--drafter auto` takes the pulled DSpark repo: its snapshot layout counts as complete weights."""
 
-    from tensorfold import cli, families, hub
-    from tensorfold.families.deepseek_v4.runtime import drafter_config
+    from pli import cli, families, hub
+    from pli.families.deepseek_v4.runtime import drafter_config
 
     family = families.families()["deepseek_v4"]
     assert family.package.DRAFTER == "TensorFold/DeepSeek-V4-Flash-DSpark-MLX"
@@ -401,4 +401,4 @@ def test_the_published_dspark_head_is_the_default_drafter(tmp_path, monkeypatch,
     assert drafter_config(snapshot)["model_type"] == "deepseek_v4_dspark"
     monkeypatch.setattr(hub, "cached", lambda repo, **kw: None)
     assert cli._drafter(family, "auto") == ""
-    assert "tensorfold pull TensorFold/DeepSeek-V4-Flash-DSpark-MLX" in capsys.readouterr().out
+    assert "pli pull TensorFold/DeepSeek-V4-Flash-DSpark-MLX" in capsys.readouterr().out

@@ -61,7 +61,7 @@ def main() -> None:
     args = p.parse_args()
     from tokenizers import Tokenizer
 
-    from tensorfold.cuda.server import ChatTemplate
+    from pli.cuda.server import ChatTemplate
 
     model_dir = Path(args.model_dir)
     tok = Tokenizer.from_file(str(model_dir / "tokenizer.json"))

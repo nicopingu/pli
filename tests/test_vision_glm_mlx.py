@@ -9,8 +9,8 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.vision.glm_mlx import GLMVisionFrontend  # noqa: E402
-from tensorfold.vision.glm_processing import PreparedGLMVisionPrompt  # noqa: E402
+from pli.vision.glm_mlx import GLMVisionFrontend  # noqa: E402
+from pli.vision.glm_processing import PreparedGLMVisionPrompt  # noqa: E402
 
 
 class Tower:

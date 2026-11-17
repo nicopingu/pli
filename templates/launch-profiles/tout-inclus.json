@@ -1,0 +1,230 @@
+{
+  "nom": "tout-inclus",
+  "titre": "All-inclusive",
+  "pour": "code and discussion, voice (speaking and listening), images and videos: the validated machine configuration",
+  "machine_profile": "auto",
+  "modele": "${PLI_MODELE}",
+  "arguments": [
+    "--name",
+    "qwen3.8-27b",
+    "--drafter",
+    "${PLI_BROUILLON}",
+    "--no-thinking",
+    "--decode-share",
+    "1",
+    "--snapshot-dir",
+    "${PLI_DONNEES}/instantanes/27b",
+    "--spill-gib",
+    "40"
+  ],
+  "environnement": {
+    "PLI_EVENTS": "${PLI_DONNEES}/logs/events.jsonl"
+  },
+  "conditions": [
+    {
+      "si_profil_machine": "m1-ultra",
+      "arguments": [
+        "--context",
+        "229376",
+        "--parallel",
+        "4"
+      ],
+      "environnement": {
+        "MLX_MAX_MB_PER_BUFFER": "500",
+        "MLX_MAX_OPS_PER_BUFFER": "100",
+        "PLI_ADMIT_BY_WORK": "1",
+        "PLI_ADMIT_SMALL": "0",
+        "PLI_SPILL_BACKGROUND": "1",
+        "PLI_DISK_REPLY_END": "1"
+      },
+      "effet": "m1-ultra machine profile: 229,376-token window, 4 conversations at a time (validated machine settings)",
+      "sinon": "no m1-ultra machine profile: PLI default settings, the window is adjusted to memory at startup"
+    },
+    {
+      "si_fichier": "${PLI_TETE_MTP}",
+      "environnement": {
+        "PLI_HYBRID": "1",
+        "PLI_MTP_HEAD": "${PLI_TETE_MTP}"
+      },
+      "effet": "MTP head present: hybrid DFlash2 drafter and MTP head (faster, same text)",
+      "sinon": "MTP head absent (pli setup writes it): DFlash2 drafter alone"
+    },
+    {
+      "si_profil_machine": "m1-ultra",
+      "si_fichier": "${PLI_CARTE_A1}",
+      "environnement": {
+        "PLI_A1_LSA_MAP": "${PLI_CARTE_A1}",
+        "PLI_S3B_THRESHOLD": "16384",
+        "PLI_S3B_ROWS": "4096"
+      },
+      "effet": "A1 card present: long prompts read faster (the text may change)",
+      "sinon": "A1 card absent or no m1-ultra machine profile: long prompts read without A1"
+    },
+    {
+      "si_module": "xgrammar",
+      "environnement": {
+        "PLI_TOOL_GRAMMAR": "1"
+      },
+      "effet": "xgrammar installed: tool calls constrained by their schema",
+      "sinon": "xgrammar absent (pip install 'pli[grammar]'): tool calls without grammar"
+    }
+  ],
+  "memoire": {
+    "ram_min_go": 64,
+    "statut": "measured: production of the validated machine (64 GB)",
+    "detail": "families are not all loaded at once: the supervisor stops those that are not used. Calculation of the largest: image 36 + 26 + 4 = 66 GB (the 27B returns memory); voice Kokoro 36 + 3 + 1.6 + 6 = 46.6 GB; video 36 + 12 + 6 = 54 GB; with Drama 3 added to the voice catalog: 67.6 GB",
+    "si_trop_petit": "With less than 64 GB, nothing is measured: code or petite-machine profile."
+  },
+  "disque": [
+    {
+      "quoi": "model ${PLI_MODELE}",
+      "go": 16,
+      "chemin": "hf:${PLI_MODELE}",
+      "statut": "measured: 15 GB on the validated machine, 16.1 GB announced by Hugging Face"
+    },
+    {
+      "quoi": "brouillon DFlash2 (z-lab/Qwen3.8-27B-DFlash2)",
+      "go": 4,
+      "chemin": "hf:z-lab/Qwen3.8-27B-DFlash2",
+      "statut": "measured: 3.6 GB"
+    },
+    {
+      "quoi": "MTP head (source bf16 0.85 GB and 4-bit 0.23 GB)",
+      "go": 1.1,
+      "chemin": "${PLI_TETE_MTP}",
+      "statut": "measured"
+    },
+    {
+      "quoi": "programme PLI (environnement Python)",
+      "go": 1.6,
+      "chemin": "${PLI_BIN}",
+      "statut": "measured: 1.6 GB"
+    },
+    {
+      "quoi": "conversation snapshots (ceiling --spill-gib 40)",
+      "go": 40,
+      "statut": "ceiling set"
+    },
+    {
+      "quoi": "environnement mlx-audio",
+      "go": 0.7,
+      "chemin": "${PLI_VENV_AUDIO}/bin/python",
+      "statut": "measured: 0.7 GB"
+    },
+    {
+      "quoi": "voix Kokoro (mlx-community/Kokoro-82M-bf16)",
+      "go": 0.4,
+      "chemin": "hf:mlx-community/Kokoro-82M-bf16",
+      "statut": "measured: 0.34 GB"
+    },
+    {
+      "quoi": "transcription Qwen3-ASR 0.6B (mlx-community/Qwen3-ASR-0.6B-8bit)",
+      "go": 1,
+      "chemin": "hf:mlx-community/Qwen3-ASR-0.6B-8bit",
+      "statut": "measured: 0.96 GB"
+    },
+    {
+      "quoi": "environnement mflux",
+      "go": 1.4,
+      "chemin": "${PLI_VENV_IMAGE}/bin/python",
+      "statut": "measured: 1.4 GB"
+    },
+    {
+      "quoi": "image model Qwen-Image 2.1 (OsaurusAI/Qwen-Image-2.1-mflux-8bit)",
+      "go": 17,
+      "chemin": "${PLI_MODELE_IMAGE}",
+      "statut": "measured: 17 GB"
+    },
+    {
+      "quoi": "images produites",
+      "go": 2,
+      "statut": "estimated, not measured"
+    },
+    {
+      "quoi": "video model MiniMax-H3, FL2VA folder (MiniMaxAI/MiniMax-H3)",
+      "go": 134,
+      "chemin": "${PLI_MODELE_VIDEO}",
+      "statut": "measured: 134 GB"
+    },
+    {
+      "quoi": "produced videos",
+      "go": 5,
+      "statut": "estimated, not measured"
+    }
+  ],
+  "generation": {
+    "config": {
+      "reserve_go": 6,
+      "seuil_echange_mo": 4096,
+      "echange_dispo_min_go": 4,
+      "familles": {
+        "audio": {
+          "argv": [
+            "${PLI_VENV_AUDIO}/bin/python",
+            "-I",
+            "${PLI_DEPOT}/src/pli/gen/fils_audio.py",
+            "--port",
+            "{port}",
+            "--voix",
+            "${CATALOGUE_VOIX}"
+          ],
+          "port": 18102,
+          "memoire_go": 3,
+          "delai_decharge_s": 600,
+          "sante_delai_s": 60
+        },
+        "image": {
+          "argv": [
+            "${PLI_VENV_IMAGE}/bin/python",
+            "-I",
+            "${PLI_DEPOT}/src/pli/gen/fils_image.py",
+            "--port",
+            "{port}",
+            "--catalogue",
+            "${CATALOGUE_IMAGE}",
+            "--sorties",
+            "${PLI_DONNEES}/sorties/images"
+          ],
+          "port": 18103,
+          "memoire_go": 26,
+          "delai_decharge_s": 300,
+          "sante_delai_s": 60,
+          "relais_delai_s": 900,
+          "reserve_go": 4
+        },
+        "video": {
+          "argv": [
+            "{python}",
+            "-m",
+            "pli.gen.fils_video",
+            "--port",
+            "{port}",
+            "--catalogue",
+            "${CATALOGUE_VIDEO}",
+            "--sorties",
+            "${PLI_DONNEES}/sorties/videos"
+          ],
+          "port": 18104,
+          "memoire_go": 12,
+          "delai_decharge_s": 0,
+          "sante_delai_s": 60,
+          "relais_delai_s": 900
+        }
+      }
+    },
+    "catalogues": {
+      "CATALOGUE_VOIX": "catalogues/voix.json",
+      "CATALOGUE_IMAGE": "catalogues/image.json",
+      "CATALOGUE_VIDEO": "catalogues/video.json"
+    }
+  },
+  "dossiers": [
+    "sorties/images",
+    "sorties/videos"
+  ],
+  "fichiers_requis": [
+    "${PLI_MODELE_IMAGE}",
+    "${PLI_H3}",
+    "${PLI_MODELE_VIDEO}"
+  ]
+}

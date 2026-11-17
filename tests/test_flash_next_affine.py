@@ -11,7 +11,7 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.kernels.qwen.flash_next.v1 import base, embed, experts, hc, rows  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import base, embed, experts, hc, rows  # noqa: E402
 
 FORMATS = [(5, 64), (6, 32), (8, 32), (8, 128), (6, 64), (3, 32), (2, 64)]
 
@@ -141,11 +141,11 @@ def test_lookups_equal_mlx_dequantize(fmt):
     assert same(got[:, :512], ref) and same(got[:, 512:], ref)
 
 
-@pytest.mark.skipif(not __import__("tensorfold.families.qwen3_5", fromlist=["tensor_units"]).tensor_units(),
+@pytest.mark.skipif(not __import__("pli.families.qwen3_5", fromlist=["tensor_units"]).tensor_units(),
                     reason="the lane matmul needs the M5's tensor units")
 @pytest.mark.parametrize("fmt", [(5, 32), (6, 32), (8, 32), (3, 32), (2, 32), (5, 64)])
 def test_lane_matmul_reads_group_32_for_every_width(fmt):
-    from tensorfold.kernels.qwen.dense.v1 import lane_qmm
+    from pli.kernels.qwen.dense.v1 import lane_qmm
 
     rng = np.random.default_rng(fmt[0] * 5 + fmt[1])
     lin = quantized(rng, (256, 2560), *fmt)

@@ -1,4 +1,4 @@
-"""Fit a draft head's node calibration (``tensorfold.drafters.calibration``) on public prompts.
+"""Fit a draft head's node calibration (``pli.drafters.calibration``) on public prompts.
 
     collect: send CORPUS to a server started with PLI_DRAFT_LOG=<log> (sampled and greedy, fixed seeds)
     fit:     label every logged tree node by whether its path matches what the stream committed, fit a table a
@@ -15,7 +15,22 @@ import math
 import sys
 import threading
 import urllib.request
+
 from pathlib import Path
+
+
+def _http_only() -> urllib.request.OpenerDirector:
+    """PLI 5.6.3: http:// and https:// only, like pli.net.urlopen (this script runs without PLI installed)."""
+
+    opener = urllib.request.OpenerDirector()
+    for handler in (urllib.request.ProxyHandler, urllib.request.UnknownHandler, urllib.request.HTTPHandler,
+                    urllib.request.HTTPSHandler, urllib.request.HTTPDefaultErrorHandler,
+                    urllib.request.HTTPRedirectHandler, urllib.request.HTTPErrorProcessor):
+        opener.add_handler(handler())
+    return opener
+
+
+_HTTP = _http_only()
 
 CORPUS = [
     ("completion", "Write a Python class for a bounded LRU cache with get and put methods, then add unit tests."),
@@ -50,7 +65,7 @@ def _send(base: str, model: str, kind: str, prompt: str, tokens: int, temperatur
         url = base + "/v1/completions"
         body["prompt"] = prompt
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=900) as response:
+    with _HTTP.open(req, timeout=900) as response:
         response.read()
 
 
@@ -97,7 +112,7 @@ def samples(paths: list[str]) -> dict[str, list[tuple[int, float, bool, int]]]:
 
 def fit(args: argparse.Namespace) -> None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from tensorfold.drafters import calibration
+    from pli.drafters import calibration
 
     tables = {}
     for regime, rows in samples(args.logs).items():

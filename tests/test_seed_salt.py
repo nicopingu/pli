@@ -2,7 +2,7 @@
 
 import pytest
 
-from tensorfold.engine import exact_sampling
+from pli.engine import exact_sampling
 
 
 def test_the_default_salt_keeps_the_prompt_seed(monkeypatch):

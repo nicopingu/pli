@@ -6,10 +6,10 @@ import threading
 import pytest
 
 from http_fakes import post
-from tensorfold.engine.call_gate import CallGate
-from tensorfold.server.errors import RequestError
-from tensorfold.server.request_options import RequestOptions
-from tensorfold.server.tools import active_tool_specs, tool_choice_requires_call
+from pli.engine.call_gate import CallGate
+from pli.server.errors import RequestError
+from pli.server.request_options import RequestOptions
+from pli.server.tools import active_tool_specs, tool_choice_requires_call
 
 TOOLS = [{"type": "function", "function": {"name": name, "parameters": {"type": "object", "properties": {}}}}
          for name in ("get_weather", "search")]
@@ -111,7 +111,7 @@ def test_a_template_without_tool_call_blocks_refuses():
 
 
 def test_the_call_format_comes_from_the_template():
-    from tensorfold.engine.call_gate import call_format
+    from pli.engine.call_gate import call_format
 
     qwen = "<|im_start|>assistant\n<tool_call>\n<function=tfprobe_fn>\n</function>\n</tool_call><|im_end|>"
     assert call_format(qwen, "tfprobe_fn", ["<tool_call>", "<|tool_call>"]) == ("<tool_call>", "\n<function=", ">")

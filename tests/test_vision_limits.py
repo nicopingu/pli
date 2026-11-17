@@ -8,19 +8,19 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from tensorfold import cli, serve_options
-from tensorfold.server.errors import RequestError
-from tensorfold.server.http import make_handler as mlx_handler
-from tensorfold.server.prompts import prepare_images, prepare_prompt
-from tensorfold.vision.images import ImageLimits
+from pli import cli, serve_options
+from pli.server.errors import RequestError
+from pli.server.http import make_handler as mlx_handler
+from pli.server.prompts import prepare_images, prepare_prompt
+from pli.vision.images import ImageLimits
 from tests.test_server_openai_compat import FakeApp, post_json
 from tests.test_vision_server import Frontend, image_messages, prompt_app
 
 
 @pytest.mark.parametrize("limit", [None, 8])
 def test_mlx_app_count_reaches_request_preparation(limit, monkeypatch):
-    from tensorfold.server.app import ChatApp
-    from tensorfold.server.scheduler import Scheduler
+    from pli.server.app import ChatApp
+    from pli.server.scheduler import Scheduler
     from tests.test_lane_server import FakeTokenizer
 
     # Preparation needs no engine rounds; don't start the model worker or watchdog.
@@ -61,7 +61,7 @@ class ImageApp(FakeApp):
                                                    ("-1", True, "positive integer"),
                                                    ("8", False, "needs --vision")])
 def test_bad_image_count_options_are_refused_before_checkpoint_reads(backend, value, vision, message, monkeypatch):
-    from tensorfold import families
+    from pli import families
 
     monkeypatch.setattr(families, "read_config", lambda *args: pytest.fail("read checkpoint before refusal"))
     args = cli.build_parser().parse_args(["serve", "owner/model", "--vision-max-images", value,

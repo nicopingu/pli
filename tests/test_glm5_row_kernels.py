@@ -6,9 +6,9 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.glm.flash.v1 import kernels as K  # noqa: E402
-from tensorfold.kernels.glm.flash.v1 import widths as W  # noqa: E402
-from tensorfold.families.glm5_next import config, linear, mla, mlp, weights  # noqa: E402
+from pli.kernels.glm.flash.v1 import kernels as K  # noqa: E402
+from pli.kernels.glm.flash.v1 import widths as W  # noqa: E402
+from pli.families.glm5_next import config, linear, mla, mlp, weights  # noqa: E402
 
 
 @pytest.fixture
@@ -176,7 +176,7 @@ def test_every_row_kernel_switch_keeps_windows_exact(gpu, monkeypatch, tmp_path)
     """Each row kernel alone and all of them keep 2/3/4/8-row windows exact on the tiny checkpoint."""
 
     from glm5_fakes import write_checkpoint
-    from tensorfold.families.glm5_next.runtime import GLMFlash
+    from pli.families.glm5_next.runtime import GLMFlash
 
     previous = mx.default_device()
     mx.set_default_device(mx.cpu)
@@ -223,7 +223,7 @@ def test_real_weights_long_context_windows_are_exact(gpu):
 
     import os
 
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     model = weights.load_backbone(os.environ["TF_GLM5_MODEL"], layers=8)
     assert config.ENABLED == frozenset(config.ROW_KERNELS)
@@ -318,7 +318,7 @@ def _requant(q: linear.Q, bits: int) -> linear.Q:
 def test_moe_window_with_8bit_shared_expert_is_row_by_row(gpu, monkeypatch):
     """The fused MoE with an 8-bit shared expert gives every row of a window the row-by-row block's bits."""
 
-    from tensorfold.kernels.glm.flash.v1 import moe as F
+    from pli.kernels.glm.flash.v1 import moe as F
 
     moe = _moe()
     moe.shared = mlp.DenseMLP(_requant(_rows_part(moe.shared.gate_up, 0), 8), _requant(_rows_part(moe.shared.gate_up, 1), 8),
@@ -343,7 +343,7 @@ def test_kda_rows_with_8bit_f_b_g_b_is_row_by_row(gpu, tmp_path, monkeypatch):
     """The fused KDA step with 8-bit f_b / g_b: a window equals its rows one at a time, and y equals the ops path's."""
 
     from glm5_fakes import write_checkpoint
-    from tensorfold.kernels.glm.flash.v1 import kda as KDA_K
+    from pli.kernels.glm.flash.v1 import kda as KDA_K
 
     previous = mx.default_device()
     mx.set_default_device(mx.cpu)
@@ -380,7 +380,7 @@ def test_prompt_experts_take_the_aligned_gather_with_mlx_bits(gpu, monkeypatch):
 
     from types import SimpleNamespace
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     if prefill_mm._tensor_units():
         pytest.skip("tensor units: MLX's sorted gather serves")

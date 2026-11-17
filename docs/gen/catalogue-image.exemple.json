@@ -1,0 +1,122 @@
+{
+  "_note": "Example: replace /chemin/pli with your directory (absolute paths). tools/pli-profil writes these files with the machine's paths (templates/launch-profiles).",
+  "defaut": "qwen21",
+  "modeles": {
+    "qwen21": {
+      "classe": "qwen21",
+      "memoire_go": 26,
+      "chemin": "/chemin/pli/modeles-image/Qwen-Image-2.1-mflux-8bit",
+      "horaire": "linear",
+      "etapes": 40,
+      "guidance": 4.0,
+      "taille": "1024x1024",
+      "cache_limit_go": 4,
+      "liberer_encodeur": true,
+      "low_ram": false,
+      "cibles": [
+        {
+          "source": "img_in",
+          "modele": "img_in"
+        },
+        {
+          "source": "proj_out",
+          "modele": "proj_out"
+        },
+        {
+          "source": "norm_out.linear",
+          "modele": "norm_out.linear"
+        },
+        {
+          "source": "txt_in.in_layer",
+          "modele": "txt_in.in_layer"
+        },
+        {
+          "source": "txt_in.out_layer",
+          "modele": "txt_in.out_layer"
+        }
+      ]
+    },
+    "qwen2512": {
+      "classe": "qwen2512",
+      "memoire_go": 34,
+      "chemin": "/chemin/pli/modeles-image/qwen-image-2512-mflux-q6",
+      "horaire": "linear",
+      "etapes": 30,
+      "guidance": 4.0,
+      "taille": "1024x1024",
+      "cache_limit_go": 4,
+      "liberer_encodeur": true,
+      "low_ram": false
+    },
+    "flux3klein": {
+      "classe": "flux3klein",
+      "memoire_go": 16,
+      "chemin": "/chemin/pli/modeles-image/flux-3-image-klein",
+      "horaire": "linear",
+      "etapes": 16,
+      "taille": "1024x1024",
+      "cache_limit_go": 4,
+      "liberer_encodeur": true,
+      "low_ram": false
+    },
+    "krea2": {
+      "classe": "krea2",
+      "memoire_go": 29,
+      "chemin": "/chemin/pli/modeles-image/Krea-2-Turbo",
+      "quantize": 8,
+      "horaire": "er_sde",
+      "etapes": 8,
+      "guidance": 1.0,
+      "taille": "1024x1024",
+      "cache_limit_go": 4,
+      "liberer_encodeur": true,
+      "low_ram": false
+    }
+  },
+  "lora": {
+    "lightning-v1": {
+      "chemin": "/chemin/pli/lora/lightning-v1.safetensors",
+      "base": [
+        "qwen21"
+      ],
+      "force": 1.0,
+      "horaire": "lightning1",
+      "etapes": 4,
+      "guidance": 1.0
+    },
+    "lightning-v2rl": {
+      "chemin": "/chemin/pli/lora/lightning-v2rl-r64.safetensors",
+      "base": [
+        "qwen21"
+      ],
+      "force": 1.0,
+      "horaire": "lightning2",
+      "etapes": 4,
+      "guidance": 1.0
+    },
+    "style-qwen2512": {
+      "chemin": "/chemin/pli/lora/style-qwen2512.safetensors",
+      "base": [
+        "qwen2512"
+      ],
+      "force": 1.0,
+      "cibles": [
+        {
+          "source": "img_mod.1",
+          "modele": "img_mod_linear"
+        },
+        {
+          "source": "txt_mod.1",
+          "modele": "txt_mod_linear"
+        }
+      ]
+    },
+    "style-krea2": {
+      "chemin": "/chemin/pli/lora/style-krea2.safetensors",
+      "base": [
+        "krea2"
+      ],
+      "force": 1.0
+    }
+  }
+}

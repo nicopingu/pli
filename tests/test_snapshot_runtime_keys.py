@@ -3,9 +3,9 @@
 from importlib import metadata
 from types import SimpleNamespace
 
-from tensorfold import cli, families
-from tensorfold.families import qwen4_exp
-from tensorfold.server import app
+from pli import cli, families
+from pli.families import qwen4_exp
+from pli.server import app
 
 
 def test_snapshot_identity_changes_with_mlx_lm_version(monkeypatch, tmp_path):

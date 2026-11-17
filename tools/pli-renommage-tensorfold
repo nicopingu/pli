@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""pli-renommage-tensorfold : mechanical renaming of the Python package tensorfold to pli (11/15/2026).
+
+To be run once, at the root of a clean repository (empty git status), on the commit before the renaming:
+
+  - src/tensorfold/      becomes src/pli/        (the PLI package);
+  - src/tensorfold/pli/  becomes src/pli/additions/  (the code that PLI added to TensorFold: the name pli.pli would be
+    unreadable, and "additions" says what it is);
+  - in text files tracked by git: tensorfold.pli -> pli.additions, tensorfold/pli -> pli/additions,
+    then tensorfold -> pli; except for legal mentions and history (LICENSE, LICENSES, NOTICE,
+    THIRD_PARTY_NOTICES.md, CHANGELOG.md), bench data, the production copy (tests/fixtures/reglages),
+    and names that are an interface or data (PROTEGES list: [tensorfold] prefix of logs read by the
+    dashboard, "tensorfold" field of HTTP responses, |tensorfold= of keys, ~/.cache/tensorfold directories,
+    launchd labels dev.tensorfold...);
+  - "TensorFold" with capital letters is never touched (attribution, Hugging Face repository names TensorFold/...).
+
+The tensorfold compatibility module (src/tensorfold/) is written separately, in the following commit.
+--verifier: redoes the renaming in a temporary copy of the given commit and compares with the current tree.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+EXCLUS = ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md")
+EXCLUS_DOSSIERS = ("LICENSES/", "src/pli/bench/data/", "tests/fixtures/reglages/")
+PROTEGES = (
+    "[tensorfold]",                 # prefix of log lines, read by the dashboard collector
+    "|tensorfold=",                 # form of checkpoint keys (PLI_CODE_KEY=0, pli.additions.rekey)
+    '".cache" / "tensorfold"', ".cache/tensorfold",      # data already on the disks
+    ".config/tensorfold", ".venvs/tensorfold-control", "dev.tensorfold",   # installations and launchd services
+    '["tensorfold"]', 'get("tensorfold")', '"owned_by": "tensorfold"', '"tensorfold": {',   # champs de l'API HTTP
+    "tensorfold_activation_dtype",  # config.json key written in models
+    "tensorfold-video-v1", "tensorfold-rgb-v1",          # hashed labels (vision cache keys)
+    "corpus/tensorfold",            # the upstream TensorFold repository, taken as corpus
+    'tensorfold = "',               # pyproject: the tensorfold command remains (compatibility)
+)
+REGLES = (
+    (re.compile(r"tensorfold\.pli\b"), "pli.additions"),
+    (re.compile(r"tensorfold/pli\b"), "pli/additions"),
+    (re.compile(r'"tensorfold" / "pli"'), '"pli" / "additions"'),
+    (re.compile(r"tensorfold"), "pli"),
+)
+
+
+def git(*args: str, cwd: Path) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
+
+
+def transformer(texte: str) -> str:
+    gardes = {}
+    for i, p in enumerate(PROTEGES):
+        jeton = f"\x00{i}\x00"
+        gardes[jeton] = p
+        texte = texte.replace(p, jeton)
+    for motif, par in REGLES:
+        texte = motif.sub(par, texte)
+    for jeton, p in gardes.items():
+        texte = texte.replace(jeton, p)
+    return texte
+
+
+CODE_KEY_AVANT = '    pli = root / "pli"\n'
+CODE_KEY_APRES = '    pli = root / "additions"\n'
+
+
+def transformer_fichier(nom: str, texte: str) -> str:
+    """The text of the file ``nom`` (path after renaming) as written by the renaming."""
+
+    texte = transformer(texte)
+    if nom == "src/pli/additions/code_key.py":
+        # the only hardcoded directory name: the sub-package hashed by the code key
+        assert CODE_KEY_AVANT in texte
+        texte = texte.replace(CODE_KEY_AVANT, CODE_KEY_APRES)
+    return texte
+
+
+def renommer(racine: Path) -> list[str]:
+    if git("status", "--porcelain", cwd=racine).strip():
+        raise SystemExit("repository not clean: commit or stash first")
+    if (racine / "src" / "pli").exists():
+        raise SystemExit("src/pli already exists (ignored leftovers by git, __pycache__?): remove it first")
+    git("mv", "src/tensorfold", "src/pli", cwd=racine)
+    git("mv", "src/pli/pli", "src/pli/additions", cwd=racine)
+    changes = []
+    for nom in git("ls-files", cwd=racine).splitlines():
+        if nom in EXCLUS or nom.startswith(EXCLUS_DOSSIERS):
+            continue
+        chemin = racine / nom
+        if not chemin.is_file() or chemin.is_symlink():
+            continue
+        try:
+            texte = chemin.read_text()
+        except UnicodeDecodeError:
+            continue
+        neuf = transformer_fichier(nom, texte)
+        if neuf != texte:
+            chemin.write_text(neuf)
+            changes.append(nom)
+    return changes
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--verifier", metavar="COMMIT", help="redo from COMMIT in a copy and compare")
+    ap.add_argument("--commit", default=None, help="the renaming commit to compare (default: HEAD)")
+    a = ap.parse_args()
+    racine = Path(git("rev-parse", "--show-toplevel", cwd=Path.cwd()).strip())
+    if not a.verifier:
+        changes = renommer(racine)
+        print(f"{len(changes)} files rewritten; reread git diff --stat")
+        return 0
+    with tempfile.TemporaryDirectory() as tmp:
+        copie = Path(tmp) / "depot"
+        git("worktree", "add", "--detach", str(copie), a.verifier, cwd=racine)
+        try:
+            renommer(copie)
+            git("add", "-A", cwd=copie)
+            attendu = git("write-tree", cwd=copie).strip()
+            git("reset", "-q", "--hard", cwd=copie)
+        finally:
+            git("worktree", "remove", "--force", str(copie), cwd=racine)
+    # the renaming commit, compared outside the script itself (absent from the starting commit)
+    commit = a.commit or "HEAD"
+    ecarts = git("diff", "--stat", attendu, f"{commit}^{{tree}}", "--", ".",
+                 ":(exclude)tools/pli-renommage-tensorfold", cwd=racine).strip()
+    print("identical" if not ecarts else f"different :\n{ecarts}")
+    return 0 if not ecarts else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

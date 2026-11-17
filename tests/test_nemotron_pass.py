@@ -7,8 +7,8 @@ mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 pytest.importorskip("mlx_lm")
 
-from tensorfold.engine.family_common import cache_contents  # noqa: E402
-from tensorfold.families.nemotron_h import prompt_pass  # noqa: E402
+from pli.engine.family_common import cache_contents  # noqa: E402
+from pli.families.nemotron_h import prompt_pass  # noqa: E402
 
 
 def _tiny():

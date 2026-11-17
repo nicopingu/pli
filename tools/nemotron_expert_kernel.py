@@ -76,11 +76,11 @@ def main() -> int:
         os.environ.setdefault(key, value)
     import mlx.core as mx
 
-    from tensorfold.engine.family_common import cache_arrays
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.families import nemotron_h
-    from tensorfold.kernels.nemotron.lightning.v1 import kernels as K
-    from tensorfold.kernels.nemotron.lightning.v1 import rows as R
+    from pli.engine.family_common import cache_arrays
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.families import nemotron_h
+    from pli.kernels.nemotron.lightning.v1 import kernels as K
+    from pli.kernels.nemotron.lightning.v1 import rows as R
 
     base_setting = (int(args.base_rows), False)                          # 0.6.3: pairs below 12 rows, route then group
     cand_setting = (int(args.group_rows), True)                          # grouping from --group-rows, route_group

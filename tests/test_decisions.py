@@ -5,10 +5,10 @@ import math
 
 import pytest
 
-from tensorfold.server.decisions import DecisionError, build_response, prepare, prompts_for, reduce_vocab_shards
-from tensorfold.server.errors import RequestError
-from tensorfold.server.http import make_handler
-from tensorfold.server.scheduler import ChatJob, Scheduler
+from pli.server.decisions import DecisionError, build_response, prepare, prompts_for, reduce_vocab_shards
+from pli.server.errors import RequestError
+from pli.server.http import make_handler
+from pli.server.scheduler import ChatJob, Scheduler
 from tests.http_fakes import post
 
 
@@ -189,9 +189,9 @@ def test_a_decision_prefill_reads_the_last_row_and_draws_nothing():
     pytest.importorskip("mlx.core")
     import mlx.core as mx
 
-    from tensorfold.engine.family_prefill import FamilyPrefill, drain
-    from tensorfold.engine.lane_engine import LaneStream
-    from tensorfold.engine.prefill_plan import PromptChunks
+    from pli.engine.family_prefill import FamilyPrefill, drain
+    from pli.engine.lane_engine import LaneStream
+    from pli.engine.prefill_plan import PromptChunks
 
     class Engine(FamilyPrefill):
         streams: list = []
@@ -258,7 +258,7 @@ def _long_choice(question: str) -> dict:
 
 def test_a_decision_keeps_a_shared_input_and_a_later_chat_resumes_it():
     pytest.importorskip("mlx.core")
-    from tensorfold.engine.prefill_plan import PrefillPlan
+    from pli.engine.prefill_plan import PrefillPlan
     from tests.lane_fakes import FakeEngine
     from tests.test_lane_server import make_app
 

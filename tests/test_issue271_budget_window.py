@@ -5,9 +5,9 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.prefill_step import CONTEXT_FLOOR, choose
-from tensorfold.server.memory_budget import PROCESS_BYTES, CacheMemory
-from tensorfold.server.prompt_memory import PromptMemory
+from pli.engine.prefill_step import CONTEXT_FLOOR, choose
+from pli.server.memory_budget import PROCESS_BYTES, CacheMemory
+from pli.server.prompt_memory import PromptMemory
 
 GIB = 1024**3
 MODEL_WINDOW = 262_144         # Flash Next's own window

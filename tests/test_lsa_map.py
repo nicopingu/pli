@@ -15,7 +15,7 @@ import zipfile
 import numpy as np
 import pytest
 
-from tensorfold.install import lsa_map
+from pli.install import lsa_map
 
 TINY = Path(__file__).parent / "fixtures" / "lsa-tiny.pt"
 

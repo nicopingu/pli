@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server.app import ChatJob, CheckpointStore, Scheduler
-from tensorfold.server.memory_budget import cache_nbytes
-from tensorfold.server.http import RequestError
-from tensorfold.server.prompt_memory import PromptMemory, attention_geometry
+from pli.server.app import ChatJob, CheckpointStore, Scheduler
+from pli.server.memory_budget import cache_nbytes
+from pli.server.http import RequestError
+from pli.server.prompt_memory import PromptMemory, attention_geometry
 from tests.test_memory_budget import Array
 from tests.lane_fakes import FakeEngine
 
@@ -452,7 +452,7 @@ def test_scheduler_refuses_before_copying_a_retained_prefix_or_running_prefill()
 
 
 def test_oversized_disk_snapshot_is_skipped_before_tensor_load(monkeypatch, tmp_path):
-    from tensorfold.engine import prefix_snapshots
+    from pli.engine import prefix_snapshots
 
     path = tmp_path / "prefix.safetensors"
     path.write_bytes(b"fixture")
@@ -546,7 +546,7 @@ def test_largest_window_releases_retained_prefixes_and_freed_buffers_but_nothing
 
 
 def test_growth_is_priced_per_entry_in_flight():
-    from tensorfold.server.memory_budget import CacheMemory
+    from pli.server.memory_budget import CacheMemory
 
     memory = controller()
     memory.profile = CacheMemory(1000, 16 * 64, 256, 64)          # sixteen entries of 64 bytes a position
@@ -573,7 +573,7 @@ def test_the_default_window_keeps_room_to_retain_the_prompt_for_the_next_turn():
 
 
 def test_concurrent_admission_counts_freed_buffers_and_retained_prefixes_as_reclaimable():
-    from tensorfold.engine.memory import Admission, StreamMemory
+    from pli.engine.memory import Admission, StreamMemory
 
     gib = 1024**3
     runtime = Runtime(resident=19 * gib)          # the second pass's 48 GB state: weights, a live stream
@@ -608,7 +608,7 @@ def test_the_window_counts_what_a_request_holds_between_chunks_and_the_probe_rea
 
 
 def test_probe_text_is_this_modules_source_through_the_models_tokenizer():
-    from tensorfold.server.prompt_memory import probe_tokens
+    from pli.server.prompt_memory import probe_tokens
 
     seen = []
     tokens = probe_tokens(SimpleNamespace(encode=lambda text, add_special_tokens: seen.append(text) or [1, 2, 3]))
@@ -668,7 +668,7 @@ def test_sizing_releases_the_probes_last_round_before_measuring_the_model():
 
 
 def test_nemotron_releases_its_last_rounds_row_states():
-    from tensorfold.families.nemotron_h.model import NemotronH
+    from pli.families.nemotron_h.model import NemotronH
 
     family = NemotronH.__new__(NemotronH)
     family.fused = SimpleNamespace(row_states={0: ("conv", "ssm")})
@@ -681,7 +681,7 @@ def test_nemotron_releases_its_last_rounds_row_states():
 def test_flash_next_sizing_releases_probe_rows_and_draft_references(fused):
     import weakref
 
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     class Buffer:
         pass

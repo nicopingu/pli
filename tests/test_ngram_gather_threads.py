@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pytest
 
-from tensorfold.families.qwen4_exp import host_table
-from tensorfold.families.qwen4_exp.host_table import HostTable, ReadAhead
+from pli.families.qwen4_exp import host_table
+from pli.families.qwen4_exp.host_table import HostTable, ReadAhead
 from tests.test_ple_ssd import _checkpoint, _same
 
 ROWS = 640                              # past 2 GATHER_SPLIT rows: copied on threads

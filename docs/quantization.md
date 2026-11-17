@@ -4,8 +4,8 @@ TensorFold reads the precision stored in a checkpoint, including its per-layer s
 Serve a local or Hugging Face checkpoint through the usual CLI:
 
 ```bash
-tensorfold info ./model-8bit
-tensorfold serve ./model-8bit
+pli info ./model-8bit
+pli serve ./model-8bit
 ```
 
 The `quants` branch extends the Qwen3.5/3.8 dense family to MLX affine weights at 2, 3, 4, 5, 6 and 8 bits, with group sizes 32, 64 and 128.

@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from tensorfold.server.tools import _tool_json_object
+from pli.server.tools import _tool_json_object
 
 
 @pytest.mark.parametrize("value", [None, "", " \t\r\n", "\u00a0", "\u2003\u00a0"])

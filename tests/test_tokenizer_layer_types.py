@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from tensorfold.families.tokenizer import trimmed_config
+from pli.families.tokenizer import trimmed_config
 
 transformers = pytest.importorskip("transformers")
 

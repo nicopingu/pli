@@ -6,9 +6,9 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.drafters import dflash_batch  # noqa: E402
-from tensorfold.families.qwen3_5.dflash_head import DFlashHead, DraftSlot, _Context, as_drafts, by_chance  # noqa: E402
-from tensorfold.families.qwen3_5.family import fill_widths  # noqa: E402
+from pli.drafters import dflash_batch  # noqa: E402
+from pli.families.qwen3_5.dflash_head import DFlashHead, DraftSlot, _Context, as_drafts, by_chance  # noqa: E402
+from pli.families.qwen3_5.family import fill_widths  # noqa: E402
 
 
 def test_fill_widths_steps_at_17_rows():
@@ -63,7 +63,7 @@ def test_a_prefill_checkpoint_keeps_the_prompt_taps_the_drafter_has_not_read():
 
 
 def test_a_prefill_holds_only_the_drafter_windows_taps_not_every_chunks():
-    from tensorfold.drafters.dflash_proposer import DFlashProposer
+    from pli.drafters.dflash_proposer import DFlashProposer
 
     class Proposer:
         absorb = DFlashProposer.absorb
@@ -128,8 +128,8 @@ def test_the_head_queues_drafts_with_their_chances():
 
 
 def test_one_read_draws_what_each_stream_draws_alone():
-    from tensorfold.engine.exact_sampling import Sampling
-    from tensorfold.families.qwen3_5.family import Qwen35Family
+    from pli.engine.exact_sampling import Sampling
+    from pli.families.qwen3_5.family import Qwen35Family
 
     family = Qwen35Family.__new__(Qwen35Family)
     logits = [mx.random.normal((1, n, 512), key=mx.random.key(n)).astype(mx.bfloat16) for n in (3, 1, 5)]

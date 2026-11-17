@@ -1,0 +1,35 @@
+{
+  "h3": "${PLI_H3}",
+  "defaut": "h3",
+  "ssd_streaming": true,
+  "modeles": {
+    "h3": {
+      "chemin": "${PLI_MODELE_VIDEO}",
+      "memoire_go": 12,
+      "memoire_go_resident": 43
+    }
+  },
+  "lora": {
+    "turbo": {
+      "chemin": "${PLI_LORA_VIDEO}",
+      "force": 1.0,
+      "mode": "sauvegardee",
+      "base": [
+        "h3"
+      ],
+      "steps": 8
+    }
+  },
+  "fusions": [
+    "${PLI_DONNEES}/video/fusions"
+  ],
+  "dossier_fusions": "${PLI_DONNEES}/video/fusions",
+  "cache_fusions": "${PLI_DONNEES}/video/cache-fusions",
+  "cache_go": 70,
+  "fusion": {
+    "python": "${PLI_FUSION_PYTHON}",
+    "script": "${PLI_FUSION_SCRIPT}",
+    "taille_go": 62,
+    "marge_go": 4
+  }
+}

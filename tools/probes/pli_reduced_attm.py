@@ -10,8 +10,8 @@ os.environ["PLI_ATTENTION_ATTM"] = "1"
 REG = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False).name
 os.environ["PLI_ATTENTION_TUNING_FILE"] = REG
 import mlx.core as mx  # noqa: E402
-from tensorfold.kernels.qwen.dense.v1 import exact_attention as ea  # noqa: E402
-from tensorfold.pli import attention_attm  # noqa: E402
+from pli.kernels.qwen.dense.v1 import exact_attention as ea  # noqa: E402
+from pli.additions import attention_attm  # noqa: E402
 
 
 class Cache:

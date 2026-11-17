@@ -4,8 +4,8 @@ import io
 import sys
 from types import SimpleNamespace
 
-from tensorfold.server import live
-from tensorfold.server.live import CLEAR, ChunkRate, LiveLine, Meter, snapshot, status
+from pli.server import live
+from pli.server.live import CLEAR, ChunkRate, LiveLine, Meter, snapshot, status
 
 from tests.test_lane_server import make_app
 

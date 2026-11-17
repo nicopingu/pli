@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("mlx.core")
 
-from tensorfold.engine.lane_engine import LaneStream  # noqa: E402
+from pli.engine.lane_engine import LaneStream  # noqa: E402
 from tests.lane_fakes import VOCAB, FakeEngine, FakeFamily, fake_next, fake_serial  # noqa: E402
 
 

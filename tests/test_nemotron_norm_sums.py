@@ -11,8 +11,8 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
-from tensorfold.kernels.qwen.dense.v1 import lane_glue, lane_qmm  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
+from pli.kernels.qwen.dense.v1 import lane_glue, lane_qmm  # noqa: E402
 
 D = 2688
 

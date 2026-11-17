@@ -8,7 +8,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
 
 V = 97
 NL, END, NLNL = 91, 90, 92          # "\n", "</think>", "\n\n"

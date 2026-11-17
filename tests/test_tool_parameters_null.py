@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from tensorfold.engine.tool_draft import ToolCallStreamer
+from pli.engine.tool_draft import ToolCallStreamer
 
-from tensorfold.server.tools import parse_tool_calls_from_content
+from pli.server.tools import parse_tool_calls_from_content
 from tests.test_lane_server import make_app
 from tests.test_server_openai_compat import post_json, serve_fake
 
@@ -46,7 +46,7 @@ def test_http_stream_with_null_parameters_tool():
                      headers={"Content-Type": "application/json"})
         text = conn.getresponse().read().decode()
         conn.close()
-        assert "tensorfold_error" not in text and '"error"' not in text, text
+        assert "pli_error" not in text and '"error"' not in text, text
         assert "data: [DONE]" in text
     finally:
         server.shutdown()

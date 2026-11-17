@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from tensorfold.server.http import make_handler
+from pli.server.http import make_handler
 
 
 class FakeTokenizer:

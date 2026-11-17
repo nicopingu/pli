@@ -1,6 +1,6 @@
 """PLI (lot 20261027-084147-5ce3, TensorFold #1291): a checkpoint where the prompt forks inside its last message."""
 
-from tensorfold.server import checkpoints as C
+from pli.server import checkpoints as C
 
 
 def test_document_sent_again_with_another_question():

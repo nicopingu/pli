@@ -7,7 +7,7 @@ import time
 
 import mlx.core as mx
 
-from tensorfold.kernels.qwen.dense.v1 import simd_qmm as Q
+from pli.kernels.qwen.dense.v1 import simd_qmm as Q
 
 SHAPES = [(17408, 5120), (5120, 17408), (6144, 5120), (1024, 5120), (64, 5120)]
 if "quick" in sys.argv or "rapide" in sys.argv:

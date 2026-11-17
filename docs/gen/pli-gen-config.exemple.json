@@ -1,0 +1,24 @@
+{
+  "_note": "Example: replace /chemin/pli with your directory (absolute paths). tools/pli-profil writes these files with the machine's paths (templates/launch-profiles).",
+  "reserve_go": 6,
+  "familles": {
+    "image": {
+      "argv": [
+        "/chemin/pli/venvs/mflux/bin/python",
+        "-I",
+        "/chemin/pli/source/src/pli/gen/fils_image.py",
+        "--port",
+        "{port}",
+        "--catalogue",
+        "/chemin/pli/source/docs/gen/catalogue-image.exemple.json",
+        "--sorties",
+        "/chemin/pli/sorties/images"
+      ],
+      "port": 18101,
+      "memoire_go": 26,
+      "delai_decharge_s": 300,
+      "sante_delai_s": 60,
+      "relais_delai_s": 900
+    }
+  }
+}

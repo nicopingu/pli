@@ -7,7 +7,7 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.families.qwen4_exp.runtime import FlashNext
+from pli.families.qwen4_exp.runtime import FlashNext
 
 
 def head_fixture():
@@ -49,7 +49,7 @@ def test_head_prologue_copy_rows_match_separate_steps(rows):
 
 
 def test_projection_tail_preserves_leading_shape_and_serial_bits():
-    from tensorfold.families.qwen4_exp.decode import project
+    from pli.families.qwen4_exp.decode import project
 
     flash, _ = head_fixture()
     inputs = mx.random.normal((3, 11, 512), key=mx.random.key(45)).astype(mx.bfloat16)

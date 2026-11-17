@@ -1,7 +1,7 @@
 """What the lane server streams while a reply is written: reasoning apart from the answer, tool-call
 markup out of the visible text, and nothing ever taken back."""
 
-from tensorfold.server.text import hide_tool_calls, split_thinking
+from pli.server.text import hide_tool_calls, split_thinking
 
 REPLY = ("The user wants the jobs listed. I could call <tool_call> here, but first think.\n</think>\n\n"
          "Checking the jobs.\n<tool_call>\n<function=hub>\n<parameter=op>\njobs\n</parameter>\n"
@@ -43,7 +43,7 @@ def test_text_without_calls_is_unchanged():
 
 
 def test_gemma_thought_channel_streams_as_reasoning():
-    from tensorfold.server.text import CHANNEL_MARKERS, think_markers
+    from pli.server.text import CHANNEL_MARKERS, think_markers
 
     reply = "<|channel>thought\nSky: Rayleigh scattering.\n<channel|>The sky is blue because air scatters blue light."
     sent = ""
@@ -71,7 +71,7 @@ def test_gemma_thought_channel_streams_as_reasoning():
 def test_gemma_tool_calls_are_parsed_and_kept_out_of_the_streamed_text():
     import json
 
-    from tensorfold.server.tools import parse_tool_calls_from_content
+    from pli.server.tools import parse_tool_calls_from_content
 
     tools = [{"type": "function", "function": {"name": "read_file", "parameters": {"type": "object"}}}]
     call = ('<|tool_call>call:read_file{flags:[<|"|>x, y: {z}<|"|>],limit:20,opts:{deep:true},'
@@ -95,7 +95,7 @@ def test_gemma_bare_colon_tool_call_is_structured():
 
     import json
 
-    from tensorfold.server.tools import parse_tool_calls_from_content
+    from pli.server.tools import parse_tool_calls_from_content
 
     def tool(name):
         return {"type": "function", "function": {"name": name, "parameters": {"type": "object", "properties": {
@@ -119,7 +119,7 @@ def test_glm_and_gemma_calls_parse_through_one_parser():
 
     import json
 
-    from tensorfold.server.tools import parse_tool_calls_from_content
+    from pli.server.tools import parse_tool_calls_from_content
 
     tools = [{"type": "function", "function": {"name": "read_file", "parameters": {"type": "object", "properties": {
         "path": {"type": "string"}, "limit": {"type": "integer"}}}}},
@@ -137,7 +137,7 @@ def test_glm_and_gemma_calls_parse_through_one_parser():
 
 def test_gemma_spontaneous_empty_thought_channel_is_stripped():
     """An empty thought channel is stripped, and a reply with no channel stays as written."""
-    from tensorfold.server.text import CHANNEL_MARKERS
+    from pli.server.text import CHANNEL_MARKERS
 
     reply = "<|channel>thought\n<channel|>The files are: a.py, b.py."
     assert split_thinking(reply, finished=True, markers=CHANNEL_MARKERS) == ("", "The files are: a.py, b.py.")
@@ -147,7 +147,7 @@ def test_gemma_spontaneous_empty_thought_channel_is_stripped():
 
 def test_gemma_thought_channel_not_at_the_start_is_stripped():
     """A thought channel after text, a newline, or a doubled opener is stripped from the answer."""
-    from tensorfold.server.text import CHANNEL_MARKERS as C
+    from pli.server.text import CHANNEL_MARKERS as C
 
     # after visible text (block empty) -> the text stays, the block goes
     assert split_thinking("### Read the findings first.\n\n<|channel>thought\n<channel|>", finished=True,
@@ -170,7 +170,7 @@ def test_gemma_thought_channel_not_at_the_start_is_stripped():
 
 def test_gemma_channel_after_text_streams_monotonically():
     """A streamed answer after a late thought channel only grows, and a partial opener stays hidden."""
-    from tensorfold.server.text import CHANNEL_MARKERS as C
+    from pli.server.text import CHANNEL_MARKERS as C
 
     reply = "Here is the plan.\n\n<|channel>thought\n<channel|>"
     seen = ""

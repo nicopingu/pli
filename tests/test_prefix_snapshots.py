@@ -7,7 +7,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.engine import prefix_snapshots as ps  # noqa: E402
+from pli.engine import prefix_snapshots as ps  # noqa: E402
 
 
 class Layer:
@@ -25,6 +25,15 @@ def test_numpy_state_round_trips(tmp_path):
     assert tokens == [1, 2, 3] and layer.offset == 7
     assert isinstance(layer.history, np.ndarray) and layer.history.tolist() == [[11, 12]]
     assert layer.slots[0] is None and mx.array_equal(layer.slots[1], mx.ones((2,)))
+
+
+def test_a_cache_class_outside_the_known_packages_is_not_imported(tmp_path, monkeypatch):
+    """PLI 5.6.3: a checkpoint names its cache classes; only mlx-lm's, PLI's and PLI's former name are imported."""
+
+    monkeypatch.setattr(ps, "SNAPSHOT_CLASS_PACKAGES", ("mlx_lm.models.", "pli.", "tensorfold."))   # without tests.
+    ps.save_snapshot(tmp_path, "model-a|mlx=1", [1, 2, 3], [Layer()])     # Layer: tests.test_prefix_snapshots
+    with pytest.raises(ImportError, match="outside"):
+        list(ps.load_snapshots(tmp_path, "model-a|mlx=1"))
 
 
 def test_warming_only_takes_blocks_of_the_same_model(tmp_path):
@@ -45,7 +54,7 @@ def test_keeping_the_newest_counts_one_model_only(tmp_path):
 def test_a_drafter_slot_is_left_out_of_a_saved_snapshot(tmp_path):
     from mlx_lm.models.cache import KVCache
 
-    from tensorfold.families.qwen3_5.dflash_head import DraftSlot
+    from pli.families.qwen3_5.dflash_head import DraftSlot
 
     kv = KVCache()
     kv.update_and_fetch(mx.ones((1, 2, 4, 4)), mx.ones((1, 2, 4, 4)))

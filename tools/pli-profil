@@ -1,0 +1,470 @@
+#!/usr/bin/env python3
+"""pli-profil: launch PLI with a ready-made launch profile (code, voice assistant, creation, small machine...).
+
+    pli-profil                         list of profiles, with the memory and disk they require
+    pli-profil NAME --dry-run          displays what would be launched and checks the machine, without launching anything
+    pli-profil NAME                    checks the machine then launches "pli serve" with the profile settings
+    pli-profil NAME -- --port 8081     adds options to "pli serve" (the last value wins)
+
+Deux couches distinctes :
+- a launch profile (NAME.json from templates/launch-profiles/, or from --folder / PLI_PROFILS_LANCEMENT) specifies which
+  model to serve, with which options, which generation families, and how much memory and disk are needed;
+- a machine profile (src/pli/additions/profiles/NAME/*.env, --profile option of pli serve) holds the PLI_* settings
+  measured for a chip. The launch profile designates it via "machine_profile": "auto" (chosen according to the chip,
+  like pli setup: m1-ultra for an Ultra chip with 64 GB or more, otherwise none), "none", or a name.
+Machine paths (models, Python environments, data directory) are ${NOM} variables: default values
+below (DEFAUTS), then the machine.env file (profiles directory, or ~/.config/pli/machine.env, or
+--machine FILE), then the environment, which always takes precedence. Standard library only (Python 3.9 or newer)
+: the script runs before any installation.
+
+Pre-launch checks: total Mac memory (sysctl hw.memsize) against the profile's "ram_min_go", free space
+on the disk (df of the data folder) against missing files and expected growth, presence of
+required programs and files. Refusal with a clear message (code 2); --force launches anyway.
+Tests without Mac or model: --simuler-ram-go, --simuler-disque-go, --simuler-puce; --plan-json gives the plan in JSON.
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ICI = Path(__file__).resolve().parent
+DEPOT = ICI.parent
+PROFILS_MACHINE = DEPOT / "src" / "pli" / "additions" / "profiles"
+GO = 1024**3
+
+# Default values for variables (an installation done by install.sh puts PLI in ~/pli).
+DEFAUTS = {
+    "PLI_DEPOT": str(DEPOT),                            # clone of the PLI repository (audio and image children, tools)
+    "PLI_DONNEES": "~/pli",                             # snapshots, outputs, logs, written configurations
+    "PLI_BIN": "~/pli/venv/bin/pli",                    # pli command (otherwise "pli" found in PATH)
+    "PLI_HOTE": "127.0.0.1",
+    "PLI_PORT": "8080",
+    "PLI_MODELE": "mlx-community/Qwen3.8-27B-4bit",     # general model (Hugging Face repository or folder)
+    "PLI_BROUILLON": "auto",                            # DFlash2 drafter: auto, none or a folder
+    "PLI_TETE_MTP": "~/pli/models/mtp-head-4bit.safetensors",    # written by pli setup
+    "PLI_CARTE_A1": "~/pli/models/qwen38_27b_d2048.npz",         # written by pli setup (Ultra chip)
+    "PLI_PETIT_MODELE": "prism-ml/Ternary-Bonsai-2-27B-mlx-2bit",
+    "PLI_VENV_AUDIO": "~/pli/venvs/mlx-audio",          # python -m venv then pip install mlx-audio
+    "PLI_VENV_IMAGE": "~/pli/venvs/mflux",              # python -m venv then pip install mflux
+    "PLI_MODELE_IMAGE": "~/pli/modeles-image/Qwen-Image-2.1-mflux-8bit",
+    "PLI_H3": "~/pli/h3.c/h3",                          # compiled h3 program (github.com/antirez/h3.c)
+    "PLI_MODELE_VIDEO": "~/pli/modeles-video/MiniMax-H3",
+    "PLI_FUSION_PYTHON": "~/pli/venv/bin/python",       # video LoRA fusion: a Python with numpy
+    "PLI_FUSION_SCRIPT": "${PLI_DEPOT}/tools/pli-lora-fusion",
+    "PLI_LORA_IMAGE": "~/pli/lora/lightning-v2rl-r64.safetensors",
+    "PLI_LORA_VIDEO": "~/pli/lora/minimax_h3_fl2v_turbo_8step_v1.1_768p_bf16.safetensors",
+}
+VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+class Refus(Exception):
+    """The profile cannot be launched on this machine: the message explains why and what to do."""
+
+
+# ---------------------------------------------------------------- variables
+
+def lire_env(chemin: Path) -> dict[str, str]:
+    valeurs = {}
+    for ligne in chemin.read_text(encoding="utf-8").splitlines():
+        ligne = ligne.strip()
+        if ligne and not ligne.startswith("#") and "=" in ligne:
+            cle, val = ligne.split("=", 1)
+            cle = cle.strip()
+            if cle.startswith("export "):
+                cle = cle[len("export "):].strip()
+            valeurs[cle] = val.strip().strip('"').strip("'")
+    return valeurs
+
+
+def fichier_machine(choisi: str | None) -> Path | None:
+    if choisi:
+        p = Path(choisi).expanduser()
+        if not p.is_file():
+            raise Refus(f"fichier de machine introuvable : {p}")
+        return p
+    for p in (dossier_profils() / "machine.env", Path.home() / ".config" / "pli" / "machine.env"):
+        if p.is_file():
+            return p
+    return None
+
+
+def variables(machine: Path | None, environ=os.environ) -> dict[str, str]:
+    v = dict(DEFAUTS)
+    if machine is not None:
+        v.update(lire_env(machine))
+    v.update({k: environ[k] for k in v if k in environ})       # l'environnement l'emporte
+    return v
+
+
+def remplacer(valeur, v: dict[str, str]):
+    """Replaces ${NOM} (recursively in lists and objects) and expands « ~ » at the start of a path."""
+
+    if isinstance(valeur, str):
+        for _ in range(10):                                      # a variable can reference another one
+            nouveau = VARIABLE.sub(lambda m: v.get(m.group(1), m.group(0)), valeur)
+            if nouveau == valeur:
+                break
+            valeur = nouveau
+        reste = VARIABLE.search(valeur)
+        if reste:
+            raise Refus(f"unknown variable ${{{reste.group(1)}}} (to be defined in machine.env)")
+        return os.path.expanduser(valeur) if valeur.startswith("~") else valeur
+    if isinstance(valeur, list):
+        return [remplacer(x, v) for x in valeur]
+    if isinstance(valeur, dict):
+        return {k: remplacer(x, v) for k, x in valeur.items()}
+    return valeur
+
+
+# ---------------------------------------------------------------- machine
+
+def _sortie(*commande: str) -> str:
+    try:
+        return subprocess.run(commande, capture_output=True, text=True, check=False).stdout.strip()
+    except OSError:
+        return ""
+
+
+def ram_go(simule: float | None) -> float:
+    if simule is not None:
+        return simule
+    brut = _sortie("sysctl", "-n", "hw.memsize")
+    if brut.isdigit():
+        return int(brut) / GO
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / GO
+    except (ValueError, OSError, AttributeError):
+        return 0.0
+
+
+def puce(simulee: str | None) -> str:
+    return simulee if simulee is not None else _sortie("sysctl", "-n", "machdep.cpu.brand_string")
+
+
+def dossier_existant(chemin: str) -> str:
+    p = Path(chemin)
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    return str(p)
+
+
+def disque_libre_go(chemin: str, simule: float | None) -> float:
+    if simule is not None:
+        return simule
+    return shutil.disk_usage(dossier_existant(chemin)).free / GO
+
+
+def cache_hf() -> Path:
+    if os.environ.get("HF_HUB_CACHE"):
+        return Path(os.environ["HF_HUB_CACHE"]).expanduser()
+    if os.environ.get("HF_HOME"):
+        return Path(os.environ["HF_HOME"]).expanduser() / "hub"
+    return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def present(chemin: str) -> bool:
+    """A path « hf:DEPOT_OU_DOSSIER » is present if it is a folder, or if the Hugging Face cache has its weights."""
+
+    if chemin.startswith("hf:"):
+        cible = chemin[3:]
+        if os.path.isdir(os.path.expanduser(cible)):
+            return True
+        dossier = cache_hf() / ("models--" + cible.replace("/", "--")) / "snapshots"
+        return bool(glob.glob(str(dossier / "*" / "*.safetensors")))
+    return os.path.exists(chemin)
+
+
+def ffmpeg() -> str:
+    for c in (shutil.which("ffmpeg"), "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"):
+        if c and os.path.exists(c):
+            return c
+    return ""
+
+
+def module_present(python: str, module: str) -> bool:
+    if not os.path.exists(python):
+        return False
+    try:
+        return subprocess.run([python, "-c", f"import {module}"], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, check=False).returncode == 0
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------- profils
+
+DOSSIER_CHOISI: list[str] = []
+
+
+def dossier_profils() -> Path:
+    """--dossier, otherwise PLI_PROFILS_LANCEMENT, otherwise the repository examples (templates/launch-profiles)."""
+
+    choisi = (DOSSIER_CHOISI or [os.environ.get("PLI_PROFILS_LANCEMENT", "")])[0]
+    return Path(choisi).expanduser() if choisi else DEPOT / "templates" / "launch-profiles"
+
+
+def profils() -> dict[str, Path]:
+    return {p.stem: p for p in sorted(dossier_profils().glob("*.json"))}
+
+
+def profil_machine(demande: str, nom_puce: str, ram: float) -> str:
+    """« auto »: m1-ultra for an Ultra chip with 64 GB or more (rule from pli setup, install/machine.py:83)."""
+
+    if demande in ("", "none"):
+        return ""
+    if demande == "auto":
+        return "m1-ultra" if "Ultra" in nom_puce and ram >= 63.5 else ""
+    if not (PROFILS_MACHINE / demande).is_dir():
+        connus = sorted(p.name for p in PROFILS_MACHINE.iterdir() if p.is_dir()) if PROFILS_MACHINE.is_dir() else []
+        raise Refus(f"unknown machine profile « {demande} » (machine profiles: {', '.join(connus) or 'none'})")
+    return demande
+
+
+def lire_profil(nom: str) -> dict:
+    tous = profils()
+    if nom not in tous:
+        raise Refus(f"unknown profile « {nom} » (profiles: {', '.join(tous) or 'none'})")
+    with open(tous[nom], encoding="utf-8") as f:
+        return json.load(f)
+
+
+def pli_bin(v: dict[str, str]) -> str:
+    choisi = remplacer(v["PLI_BIN"], v)
+    if os.path.exists(choisi):
+        return choisi
+    return shutil.which("pli") or choisi
+
+
+class Plan:
+    """What the launcher will do: command, environment, files to write, checks."""
+
+    def __init__(self) -> None:
+        self.commande: list[str] = []
+        self.environnement: dict[str, str] = {}
+        self.fichiers: dict[str, dict] = {}            # path -> JSON content to write before launch
+        self.notes: list[str] = []
+        self.refus: list[str] = []
+        self.disque: list[tuple[str, float, str, bool]] = []    # (what, GB, status, present)
+        self.besoin_disque_go = 0.0
+        self.ram_go = 0.0
+        self.ram_min_go = 0.0
+        self.libre_go = 0.0
+        self.dossiers: list[str] = []                   # subfolders of PLI_DONNEES created at launch
+        self.profil_machine = ""                         # machine profile passed to --profile (empty: none)
+
+
+def construire(nom: str, v: dict[str, str], a: argparse.Namespace, extra: list[str]) -> Plan:
+    p = lire_profil(nom)
+    plan = Plan()
+    binaire = pli_bin(v)
+    python_serveur = str(Path(binaire).parent / "python")
+    modele = remplacer(p["modele"], v)
+    arguments = remplacer(p.get("arguments", []), v)
+    env = remplacer(p.get("environnement", {}), v)
+    plan.ram_go, plan.ram_min_go = ram_go(a.simuler_ram_go), float(p["memoire"]["ram_min_go"])
+    nom_puce = puce(a.simuler_puce)
+    demande = str(p.get("machine_profile", "auto"))
+    plan.profil_machine = profil_machine(demande, nom_puce, plan.ram_go)
+    if plan.profil_machine:
+        arguments += ["--profile", plan.profil_machine]
+        plan.notes.append(f"machine profile: {plan.profil_machine} ({'chosen for the chip' if demande == 'auto' else 'requested'})")
+    else:
+        plan.notes.append(f"machine profile: none ({nom_puce or 'unknown chip'}, {plan.ram_go:.0f} GB): PLI default settings")
+
+    for c in p.get("conditions", []):
+        ok, quoi = True, []                                   # all « if_* » keys must hold
+        if "si_profil_machine" in c:
+            ok = ok and plan.profil_machine == c["si_profil_machine"]
+            quoi.append(f"profil machine {c['si_profil_machine']}")
+        if "si_ram_min_go" in c:
+            ok = ok and plan.ram_go + 0.5 >= float(c["si_ram_min_go"])
+            quoi.append(f"{c['si_ram_min_go']} GB of memory or more")
+        if "si_fichier" in c:
+            cible = remplacer(c["si_fichier"], v)
+            ok = ok and os.path.exists(cible)
+            quoi.append(f"fichier {cible}")
+        if "si_module" in c:
+            ok = ok and module_present(python_serveur, c["si_module"])
+            quoi.append(f"Python module {c['si_module']} in {python_serveur}")
+        if not quoi:
+            raise Refus(f"profile {nom}: condition without si_profil_machine, si_ram_min_go, si_fichier or si_module key")
+        if ok:
+            arguments += remplacer(c.get("arguments", []), v)
+            env.update(remplacer(c.get("environnement", {}), v))
+            plan.notes.append(f"yes: {c.get('effet', ' and '.join(quoi))}")
+        else:
+            plan.notes.append(f"no: {c.get('sinon', ' and '.join(quoi) + ': missing')}")
+
+    gen = p.get("generation")
+    if gen:
+        dossier = os.path.join(remplacer("${PLI_DONNEES}", v), "profils", nom)
+        locales = dict(v)
+        for cle, modele_catalogue in gen.get("catalogues", {}).items():
+            with open(dossier_profils() / modele_catalogue, encoding="utf-8") as f:
+                contenu = remplacer(json.load(f), v)
+            chemin = os.path.join(dossier, os.path.basename(modele_catalogue))
+            plan.fichiers[chemin] = contenu
+            locales[cle] = chemin
+        config = remplacer(gen["config"], locales)
+        chemin = os.path.join(dossier, "pli-gen.json")
+        plan.fichiers[chemin] = config
+        env.update({"PLI_GEN": "1", "PLI_GEN_CONFIG": chemin})
+        for nom_famille, fam in config["familles"].items():
+            programme = fam["argv"][0]
+            if programme != "{python}" and not os.path.exists(programme):
+                plan.refus.append(f"famille {nom_famille} : {programme} introuvable "
+                                  f"(Python environment to create: see docs/utilisation-rapide.md)")
+            for x in fam["argv"][1:]:
+                if x.endswith(".py") and not os.path.exists(x):
+                    plan.refus.append(f"famille {nom_famille} : {x} introuvable (PLI_DEPOT)")
+        if "video" in config["familles"]:
+            f = ffmpeg()
+            if not f:
+                plan.refus.append("video: ffmpeg not found (brew install ffmpeg)")
+            elif not shutil.which("ffmpeg"):
+                env.setdefault("H3_FFMPEG", f)              # h3 looks for ffmpeg via PATH (fils_video.py:178)
+    for chemin in remplacer(p.get("fichiers_requis", []), v):
+        if not present(chemin):
+            plan.refus.append(f"fichier requis absent : {chemin.replace('hf:', '')}")
+
+    # memory
+    if plan.ram_go + 0.5 < plan.ram_min_go:
+        plan.refus.append(f"memory: this profile requires {plan.ram_min_go:.0f} GB of memory, this Mac has "
+                          f"{plan.ram_go:.0f}. {p['memoire'].get('si_trop_petit', 'Choose a smaller profile: pli-profil petite-machine')}")
+    # disque
+    for d in p.get("disque", []):
+        chemin = remplacer(d["chemin"], v) if d.get("chemin") else ""
+        deja = bool(chemin) and present(chemin)
+        plan.disque.append((remplacer(d["quoi"], v), float(d["go"]), d.get("statut", "estimated"), deja))
+        if not deja:
+            plan.besoin_disque_go += float(d["go"])
+    donnees = remplacer("${PLI_DONNEES}", v)
+    plan.libre_go = disque_libre_go(donnees, a.simuler_disque_go)
+    if plan.libre_go < plan.besoin_disque_go:
+        plan.refus.append(f"disk: {plan.besoin_disque_go:.0f} GB free required (missing files and expected "
+                          f"growth), there is {plan.libre_go:.0f} on {dossier_existant(donnees)}")
+
+    plan.dossiers = list(p.get("dossiers", []))
+    env.setdefault("PLI_NO_UPDATE_CHECK", "1")
+    plan.environnement = env
+    plan.commande = [binaire, "serve", modele, *arguments, "--host", v["PLI_HOTE"], "--port", v["PLI_PORT"], *extra]
+    return plan
+
+
+# ---------------------------------------------------------------- display and launch
+
+def afficher(nom: str, p: dict, plan: Plan, dry: bool) -> None:
+    print(f"Profil : {nom} ({p.get('titre', nom)})")
+    print(f"  {p.get('pour', '')}")
+    m = p["memoire"]
+    print(f"Memory: {plan.ram_min_go:.0f} GB requested ({m.get('statut', 'estimated')}), this Mac: {plan.ram_go:.0f} GB")
+    if m.get("detail"):
+        print(f"  {m['detail']}")
+    print(f"Disk: {plan.besoin_disque_go:.0f} GB to plan for, {plan.libre_go:.0f} GB free")
+    for quoi, go, statut, deja in plan.disque:
+        print(f"  - {quoi} : {_go(go)} GB ({statut}){' : already there' if deja else ''}")
+    for n in plan.notes:
+        print(f"Setting: {n}")
+    if plan.fichiers:
+        print("Files written before launch" + (" (not in --dry-run)" if dry else "") + " :")
+        for chemin in plan.fichiers:
+            print(f"  {chemin}")
+    print("Variables :")
+    for k in sorted(plan.environnement):
+        print(f"  {k}={plan.environnement[k]}")
+    print("Commande :")
+    print("  " + " ".join(_citer(x) for x in plan.commande))
+
+
+def _go(x: float) -> str:
+    return f"{x:g}".replace(".", ",")
+
+
+def _citer(x: str) -> str:
+    return x if re.fullmatch(r"[A-Za-z0-9_./:=@,+-]+", x) else "'" + x.replace("'", "'\\''") + "'"
+
+
+def lister(v: dict[str, str]) -> int:
+    print("Profiles (pli-profil NOM --dry-run for details) :")
+    for nom in profils():
+        p = lire_profil(nom)
+        disque = sum(float(d["go"]) for d in p.get("disque", []))
+        print(f"  {nom:16} {p['memoire']['ram_min_go']:>4} GB of memory, {disque:>5.0f} GB of disk  "
+              f"{p.get('titre', '')} : {p.get('pour', '')}")
+    print("Memory: total Mac memory requested. Disk: entire profile, including files already present.")
+    return 0
+
+
+def principal(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    extra: list[str] = []
+    if "--" in argv:
+        i = argv.index("--")
+        argv, extra = argv[:i], argv[i + 1:]
+    ap = argparse.ArgumentParser(prog="pli-profil", description="Launch PLI with a ready-to-use usage profile.")
+    ap.add_argument("profil", nargs="?", help="profile name (no argument: the list)")
+    ap.add_argument("--dry-run", action="store_true", help="display and verify without launching or writing anything")
+    ap.add_argument("--machine", help="file with machine variables (default: machine.env)")
+    ap.add_argument("--dossier", help="directory for launch profiles (default: templates/launch-profiles)")
+    ap.add_argument("--forcer", action="store_true", help="launch even if a check refuses")
+    ap.add_argument("--plan-json", action="store_true",
+                    help="like --dry-run, but the plan in JSON (command, variables, files, refusals)")
+    ap.add_argument("--simuler-ram-go", type=float, default=None, help="tests: simulated total memory")
+    ap.add_argument("--simuler-disque-go", type=float, default=None, help="tests: simulated free space")
+    ap.add_argument("--simuler-puce", default=None, help="tests: simulated chip name (e.g. 'Apple M1 Ultra')")
+    a = ap.parse_args(argv)
+    if a.dossier:
+        DOSSIER_CHOISI[:] = [a.dossier]
+    try:
+        v = variables(fichier_machine(a.machine))
+        if not a.profil:
+            return lister(v)
+        p = lire_profil(a.profil)
+        plan = construire(a.profil, v, a, extra)
+    except Refus as exc:
+        print(f"pli-profil : {exc}", file=sys.stderr)
+        return 2
+    if a.plan_json:
+        print(json.dumps({"commande": plan.commande, "environnement": plan.environnement, "fichiers": plan.fichiers,
+                          "notes": plan.notes, "refus": plan.refus, "ram_go": plan.ram_go,
+                          "profil_machine": plan.profil_machine,
+                          "ram_min_go": plan.ram_min_go, "besoin_disque_go": plan.besoin_disque_go,
+                          "libre_go": plan.libre_go}, ensure_ascii=False, indent=1))
+        return 2 if plan.refus and not a.forcer else 0
+    afficher(a.profil, p, plan, a.dry_run)
+    if plan.refus:
+        print("\nREFUS :" if not a.forcer else "\nATTENTION (--forcer) :", file=sys.stderr)
+        for r in plan.refus:
+            print(f"  - {r}", file=sys.stderr)
+        if not a.forcer:
+            return 2
+    if a.dry_run:
+        print("\n--dry-run: nothing is launched.")
+        return 0
+    if platform.system() != "Darwin" and not a.forcer:
+        print("pli-profil: PLI only runs on an Apple Silicon Mac", file=sys.stderr)
+        return 2
+    for chemin, contenu in plan.fichiers.items():
+        os.makedirs(os.path.dirname(chemin), exist_ok=True)
+        with open(chemin, "w", encoding="utf-8") as f:
+            json.dump(contenu, f, ensure_ascii=False, indent=1)
+    donnees = remplacer("${PLI_DONNEES}", v)
+    for sous in ["logs", "instantanes"] + plan.dossiers:
+        os.makedirs(os.path.join(donnees, sous), exist_ok=True)
+    env = {**os.environ, **plan.environnement}
+    print("\nLaunch (Ctrl-C once to stop: PLI finishes writing its snapshots).", flush=True)
+    os.execvpe(plan.commande[0], plan.commande, env)
+    return 0                                                 # jamais atteint
+
+
+if __name__ == "__main__":
+    sys.exit(principal())

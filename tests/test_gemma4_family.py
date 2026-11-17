@@ -12,10 +12,10 @@ if not mx.metal.is_available():
     pytest.skip("the Gemma decode kernels are Metal kernels", allow_module_level=True)
 
 from gemma4_tiny import TINY, KnownReply, tiny_text, tokens  # noqa: E402
-from tensorfold.engine.exact_sampling import Sampling  # noqa: E402
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
-from tensorfold.families.gemma4.model import Gemma4  # noqa: E402
-from tensorfold.kernels.gemma.v1.matmul import tensor_units  # noqa: E402
+from pli.engine.exact_sampling import Sampling  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.families.gemma4.model import Gemma4  # noqa: E402
+from pli.kernels.gemma.v1.matmul import tensor_units  # noqa: E402
 
 BACKENDS = ["rows", pytest.param("lane", marks=pytest.mark.skipif(not tensor_units(), reason="needs tensor units"))]
 copy = LaneEngine.copy_single_cache
@@ -161,9 +161,9 @@ def test_concurrent_streams_emit_what_they_emit_alone(text, backend):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_a_prompt_resumed_from_a_grid_checkpoint_equals_a_fresh_one(text, backend, monkeypatch, tmp_path):
-    from tensorfold.engine.prefix_snapshots import load_snapshot, save_snapshot
+    from pli.engine.prefix_snapshots import load_snapshot, save_snapshot
 
-    from tensorfold.engine.prefill_plan import PrefillPlan
+    from pli.engine.prefill_plan import PrefillPlan
 
     monkeypatch.setattr(LaneEngine, "prefill_plan", PrefillPlan(64))          # chunks of 64 from position 0
     model = family(text, backend)
@@ -187,7 +187,7 @@ def test_a_prompt_resumed_from_a_grid_checkpoint_equals_a_fresh_one(text, backen
 
 
 def test_the_ring_is_fixed_memory_and_full_layers_grow():
-    from tensorfold.server.memory_budget import CacheMemory
+    from pli.server.memory_budget import CacheMemory
 
     model = Gemma4(tiny_text(), backend="rows", check=False)
     cache = prefilled(model, 300)
@@ -222,14 +222,14 @@ def test_forward_runs_on_another_thread(text):
 
 
 def test_check_refuses_the_layouts_the_kernels_do_not_cover(tmp_path):
-    from tensorfold import families
-    from tensorfold.families import gemma4
+    from pli import families
+    from pli.families import gemma4
 
     config = {"model_type": "gemma4", "text_config": dict(TINY, model_type="gemma4_text"),
               "quantization": {"group_size": 64, "bits": 4, "mode": "affine",
                                "language_model.model.layers.0.router.proj": {"group_size": 64, "bits": 8}}}
     (tmp_path / "config.json").write_text(json.dumps(config))
-    assert families.detect(tmp_path).module == "tensorfold.families.gemma4"
+    assert families.detect(tmp_path).module == "pli.families.gemma4"
     gemma4.check(tmp_path)
     for change in ({"enable_moe_block": False}, {"hidden_size_per_layer_input": 256}, {"num_kv_shared_layers": 2}):
         (tmp_path / "config.json").write_text(json.dumps(dict(config, text_config={**config["text_config"],

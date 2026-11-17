@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from tensorfold.control.cli import _profile, main, parser
-from tensorfold.control.config import Profile
+from pli.control.cli import _profile, main, parser
+from pli.control.config import Profile
 
 
 def test_smoke_name_loads_and_install_refuses_it(monkeypatch, tmp_path, capsys):
@@ -49,7 +49,7 @@ def test_real_snapshot_cli(tmp_path, suffix):
 
 
 def test_service_import_does_not_import_tui_or_gpu():
-    code = "before=set(__import__('sys').modules); import tensorfold.control.cli; " \
+    code = "before=set(__import__('sys').modules); import pli.control.cli; " \
            "loaded=set(__import__('sys').modules)-before; " \
            "assert not any(n.split('.')[0] in {'rich','prompt_toolkit','torch','mlx','tokenizers'} for n in loaded)"
     subprocess.run([sys.executable, "-c", code], check=True, timeout=10)
@@ -57,13 +57,13 @@ def test_service_import_does_not_import_tui_or_gpu():
 
 def test_tui_names_the_venv_install_for_prompt_toolkit(capsys, monkeypatch):
     import builtins
-    import tensorfold.control.cli as cli
+    import pli.control.cli as cli
     real = builtins.__import__
 
     def guarded(name, globals=None, locals=None, fromlist=(), level=0):
         # from .app import ControlApp arrives as name "app" at level 1.
         relative_app = name == "app" and level and fromlist and "ControlApp" in fromlist
-        if relative_app or name == "tensorfold.control.app":
+        if relative_app or name == "pli.control.app":
             raise ImportError("No module named prompt_toolkit", name="prompt_toolkit")
         return real(name, globals, locals, fromlist, level)
 
@@ -81,8 +81,8 @@ def test_missing_token_does_not_launch(capsys, monkeypatch):
 
 
 def test_service_definition_carries_limit_port_and_parallel(manager, monkeypatch):
-    from tensorfold.control import runner
-    from tensorfold.control.config import read_environment
+    from pli.control import runner
+    from pli.control.config import read_environment
 
     service, _transport = manager
     args = parser().parse_args([

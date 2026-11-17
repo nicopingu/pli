@@ -7,9 +7,9 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from tensorfold import cli, families, hub
-from tensorfold.server import memory_budget
-from tensorfold.server.memory_budget import (
+from pli import cli, families, hub
+from pli.server import memory_budget
+from pli.server.memory_budget import (
     PROCESS_BYTES,
     CacheMemory,
     cache_nbytes,
@@ -120,8 +120,8 @@ def test_raised_budget_keeps_the_process_reserve_and_cache_limit():
 ])
 def test_concurrent_admission_respects_the_resolved_budget_and_other_processes(monkeypatch, capsys,
                                                                              limit, elsewhere, expected):
-    from tensorfold.engine import memory
-    from tensorfold.server.admission import concurrency
+    from pli.engine import memory
+    from pli.server.admission import concurrency
 
     environ = {} if limit is None else {"PLI_MEMORY_LIMIT_GB": limit}
     budget = memory_limit_bytes(SimpleNamespace(), environ=environ, physical_bytes=128 * GIB)
@@ -267,7 +267,7 @@ def test_a_non_kv_entry_such_as_a_draft_slot_counts_as_fixed_memory():
 
 
 def _serve_to_app(monkeypatch, tmp_path, argv, capsys):
-    """Run `tensorfold serve` up to its HTTP loop with a stub app; returns the app's keyword arguments and output."""
+    """Run `pli serve` up to its HTTP loop with a stub app; returns the app's keyword arguments and output."""
 
     core = ModuleType("mlx.core")
     core.set_cache_limit = lambda value: None
@@ -318,8 +318,8 @@ def _serve_to_app(monkeypatch, tmp_path, argv, capsys):
         def server_close(self):
             pass
 
-    import tensorfold.server.app as app_module
-    import tensorfold.server.http as http_module
+    import pli.server.app as app_module
+    import pli.server.http as http_module
 
     monkeypatch.setattr(app_module, "ChatApp", App)
     monkeypatch.setattr(http_module, "Server", Server)
@@ -376,7 +376,7 @@ def test_weights_past_the_budget_are_refused_before_loading(monkeypatch, tmp_pat
 def test_the_27b_draft_slot_counts_its_drafter_context_as_fixed_memory_and_a_copy_as_none():
     import copy
 
-    from tensorfold.families.qwen3_5.dflash_head import DraftSlot
+    from pli.families.qwen3_5.dflash_head import DraftSlot
 
     keys = Array((1, 4, 512, 256))
     kv = SimpleNamespace(keys=keys, values=Array(keys.shape), state=(keys, keys), offset=512)
@@ -407,7 +407,7 @@ def test_growth_is_reserved_for_entries_in_flight_not_a_second_copy_of_every_lay
 
 
 def test_a_family_allowance_sets_the_budget():
-    from tensorfold.server.memory_budget import model_fraction
+    from pli.server.memory_budget import model_fraction
 
     mx = SimpleNamespace(device_info=lambda: {"max_recommended_working_set_size": 240 * GIB})
     ram = 256 * GIB
@@ -420,7 +420,7 @@ def test_a_family_allowance_sets_the_budget():
 
 
 def test_serve_applies_the_family_allowance_before_loading(monkeypatch, tmp_path):
-    from tensorfold.server import memory_budget
+    from pli.server import memory_budget
 
     calls = []
     core = ModuleType("mlx.core")

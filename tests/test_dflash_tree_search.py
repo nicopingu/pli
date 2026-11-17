@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("mlx.core")                                      # the drafter module imports MLX
 
-from tensorfold.drafters.dflash_drafter import best_first_tree
+from pli.drafters.dflash_drafter import best_first_tree
 
 
 def _reference(cands, unary, hproj, noise, anchor, pred, succ, temp, edge, noise_weight, tau, kids, nodes):
@@ -115,7 +115,7 @@ def _lattice(rng, vocab=300, rank=16, depth=8):
 
 
 def test_tree_with_a_prior_matches_the_offline_study():
-    from tensorfold.drafters.draft_ngram import SessionNGram
+    from pli.drafters.draft_ngram import SessionNGram
 
     rng = np.random.default_rng(2)
     for trial in range(20):
@@ -140,7 +140,7 @@ def test_tree_with_a_prior_matches_the_offline_study():
 
 
 def test_lattice_gain_is_the_true_tokens_log_softmax_change():
-    from tensorfold.drafters.dflash_drafter import lattice_gain
+    from pli.drafters.dflash_drafter import lattice_gain
 
     rng = np.random.default_rng(3)
     pred, succ, cands, unary, hproj = _lattice(rng)
@@ -170,7 +170,7 @@ def _fake_proposer(monkeypatch, lattices, vocab=300, rank=16, **attrs):
     import types
 
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.drafters.dflash_drafter import DFlashProposer
+    from pli.drafters.dflash_drafter import DFlashProposer
 
     rng = np.random.default_rng(4)
     drafter = types.SimpleNamespace(
@@ -196,7 +196,7 @@ def _fake_proposer(monkeypatch, lattices, vocab=300, rank=16, **attrs):
 
 def test_proposer_prior_is_off_at_weight_zero_and_gated_by_its_record(monkeypatch):
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.drafters.draft_ngram import SessionNGram
+    from pli.drafters.draft_ngram import SessionNGram
 
     rng = np.random.default_rng(5)
     phrase = [int(t) for t in rng.choice(300, size=40, replace=False)]
@@ -257,8 +257,8 @@ def test_pipelined_forward_is_the_models_forward_bit_for_bit():
     mx = pytest.importorskip("mlx.core")
     nn = pytest.importorskip("mlx.nn")
     pytest.importorskip("mlx_lm")
-    from tensorfold.drafters import dflash_drafter
-    from tensorfold.engine.topk import topk_rows
+    from pli.drafters import dflash_drafter
+    from pli.engine.topk import topk_rows
 
     vendor = dflash_drafter._vendor()
     config = vendor.DFlashConfig(hidden_size=128, num_hidden_layers=3, num_attention_heads=4, num_key_value_heads=2,
@@ -311,7 +311,7 @@ def test_drafter_cache_takes_one_row_updates_past_its_window() -> None:
     mx = pytest.importorskip("mlx.core")
     from mlx_lm.models.cache import RotatingKVCache
 
-    from tensorfold.drafters.dflash_drafter import concat_updates
+    from pli.drafters.dflash_drafter import concat_updates
 
     def rows(n: int, value: float):
         return mx.full((1, 2, n, 4), value, dtype=mx.float32)

@@ -9,7 +9,7 @@ mx = pytest.importorskip("mlx.core")
 
 from test_family_streams import END, NL, NLNL, StreamsModel  # noqa: E402
 
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
 
 
 class NarrowModel(StreamsModel):

@@ -8,9 +8,9 @@ import numpy as np
 
 import pytest
 
-from tensorfold import cli
-from tensorfold.engine import memory
-from tensorfold.engine.prefill_plan import PrefillPlan
+from pli import cli
+from pli.engine import memory
+from pli.engine.prefill_plan import PrefillPlan
 
 
 class CPUCache:
@@ -53,8 +53,8 @@ def test_the_plan_takes_the_chosen_step_and_cuts_replies_256_apart(monkeypatch):
         seen["rows"] = kwargs["max_rows"]
         raise Built
 
-    monkeypatch.setattr("tensorfold.server.app.ChatApp", app)
-    monkeypatch.setattr("tensorfold.engine.prefill_step.choose", lambda make, steps, *a, **k: max(steps))
+    monkeypatch.setattr("pli.server.app.ChatApp", app)
+    monkeypatch.setattr("pli.engine.prefill_step.choose", lambda make, steps, *a, **k: max(steps))
     for settings, step in (({"prefill_steps": (4096, 2048), "max_rows": 4}, 4096), ({"max_rows": 4}, 2048)):
         package = SimpleNamespace(load=lambda model_dir, **options: (SimpleNamespace(), None),
                                   engine_settings=lambda model, s=settings: dict(s), kernel_version=lambda m: "k")
@@ -76,7 +76,7 @@ def test_the_memory_probe_ends_on_full_chunks_of_the_plan_step(monkeypatch):
             lengths.append(len(tokens))
             return [SimpleNamespace(keys=mx.zeros((1, 1, len(tokens), 4)), values=mx.zeros((1, 1, len(tokens), 4)))]
 
-    monkeypatch.setattr("tensorfold.engine.family_common.cache_arrays",
+    monkeypatch.setattr("pli.engine.family_common.cache_arrays",
                         lambda cache: [a for c in cache for a in (c.keys, c.values)])
     measured = memory.measure(Engine())
     assert lengths[1:] == [64, 8 + 64, 2 * 8 + 64] and measured.chunk == 8
@@ -87,7 +87,7 @@ def test_the_largest_step_that_leaves_the_context_floor_is_chosen(monkeypatch):
     import mlx.core as mx
     KVCache = CPUCache
 
-    from tensorfold.engine import prefill_step
+    from pli.engine import prefill_step
 
     made = []
 
@@ -125,7 +125,7 @@ def test_a_probe_whose_peak_varies_run_to_run_gives_the_same_step(monkeypatch, n
     import mlx.core as mx
     KVCache = CPUCache
 
-    from tensorfold.engine import prefill_step
+    from pli.engine import prefill_step
 
     chunks, runs = [], []
 
@@ -150,7 +150,7 @@ def test_a_probe_whose_peak_varies_run_to_run_gives_the_same_step(monkeypatch, n
 
 
 def test_nemotron_offers_8192_token_prompt_chunks_with_tensor_units(monkeypatch):
-    from tensorfold.families import nemotron_h, qwen3_5
+    from pli.families import nemotron_h, qwen3_5
 
     model = SimpleNamespace(exact_width=5)
     for units, steps in ((True, (8192, 4096, 2048)), (False, None)):

@@ -11,9 +11,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 
 from glm5_fakes import TEXT, write_checkpoint  # noqa: E402
-from tensorfold.families.glm5_next import layouts, linear, weights  # noqa: E402
-from tensorfold.families.glm5_next import mtp as glm_mtp  # noqa: E402
-from tensorfold.families.glm5_next.runtime import GLMFlash  # noqa: E402
+from pli.families.glm5_next import layouts, linear, weights  # noqa: E402
+from pli.families.glm5_next import mtp as glm_mtp  # noqa: E402
+from pli.families.glm5_next.runtime import GLMFlash  # noqa: E402
 
 N = TEXT["num_hidden_layers"]
 # tensors re-quantized at other widths, as mixed conversions store them (routed experts stay 4-bit)
@@ -197,13 +197,13 @@ def test_names_map_onto_the_vontra_short_names():
 
 
 def test_mlxlm_checkpoint_is_detected_and_has_mtp(pair):
-    from tensorfold import families
-    from tensorfold.families import glm5_next
+    from pli import families
+    from pli.families import glm5_next
 
     vontra, mlxlm = pair
     assert layouts.detect(json.loads((mlxlm / "model.safetensors.index.json").read_text())["weight_map"]) == layouts.MLXLM
     assert layouts.detect(json.loads((vontra / "model.safetensors.index.json").read_text())["weight_map"]) == layouts.VONTRA
-    assert families.detect(mlxlm).module == "tensorfold.families.glm5_next"
+    assert families.detect(mlxlm).module == "pli.families.glm5_next"
     glm5_next.check(mlxlm)
     assert glm5_next.has_mtp(mlxlm) and glm5_next.has_mtp(vontra)
 
@@ -298,8 +298,8 @@ def test_mlxlm_decode_rows_give_one_row_bits(pair):
 
 
 def test_mlxlm_mtp_drafts_change_speed_only(pair):
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.families.glm5_next import engine_settings
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.families.glm5_next import engine_settings
 
     _, mlxlm = pair
     model = weights.load_backbone(mlxlm)
@@ -328,7 +328,7 @@ def test_mixed_bits_keep_every_rows_bits_in_windows_and_shared_rounds(pair, devi
 
     from test_glm5_next_family import _run_streams
 
-    from tensorfold.engine.exact_sampling import Sampling
+    from pli.engine.exact_sampling import Sampling
 
     if device == "gpu":
         if not mx.metal.is_available():

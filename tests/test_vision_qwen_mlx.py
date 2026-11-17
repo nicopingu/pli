@@ -10,9 +10,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tensorfold.vision import qwen_mlx, qwen_processing
-from tensorfold.vision.qwen_checkpoint import load_vision_weights, quantization_predicate, vision_tensors
-from tensorfold.vision.qwen_processing import QwenImageProcessor, _processor_options, image_positions
+from pli.vision import qwen_mlx, qwen_processing
+from pli.vision.qwen_checkpoint import load_vision_weights, quantization_predicate, vision_tensors
+from pli.vision.qwen_processing import QwenImageProcessor, _processor_options, image_positions
 
 
 CONFIG = {"model_type": "qwen3_5", "image_token_id": 10, "video_token_id": 11,
@@ -263,7 +263,7 @@ def test_encode_uses_target_embeddings_and_replaces_only_visual_rows():
 
 
 def test_a_continued_image_prompt_extends_positions_as_a_fresh_prepare_would():
-    from tensorfold.vision.qwen_processing import continued, image_positions
+    from pli.vision.qwen_processing import continued, image_positions
 
     front = QwenImageProcessor(CONFIG, ImageProcessor(), Tokenizer())
     prepared = front.prepare("a<start><image><end>b", [image()])

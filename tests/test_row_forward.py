@@ -6,9 +6,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.engine.family_common import cache_contents  # noqa: E402
-from tensorfold.engine.lane_engine import LaneEngine  # noqa: E402
-from tensorfold.kernels.qwen.dense.v1 import (  # noqa: E402
+from pli.engine.family_common import cache_contents  # noqa: E402
+from pli.engine.lane_engine import LaneEngine  # noqa: E402
+from pli.kernels.qwen.dense.v1 import (  # noqa: E402
     exact_attention, lane_glue, lane_tree, row_forward, row_glue, row_matmul)
 
 
@@ -201,9 +201,9 @@ def test_tree_nodes_equal_their_paths(tiny):
 def test_aligned_prefill_resumes_exactly(tiny, monkeypatch):
     """Resumed at a chunk start a prompt gets a fresh prefill's bits; between starts it is not; decodes are not kept."""
 
-    from tensorfold.engine.lane_engine import LaneStream
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.families.qwen3_5.family import Qwen35Family
+    from pli.engine.lane_engine import LaneStream
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.families.qwen3_5.family import Qwen35Family
 
     model, _, _ = tiny
     monkeypatch.setattr(LaneEngine, "prefill_plan", PrefillPlan(8))
@@ -376,7 +376,7 @@ def test_one_kernel_signature_for_every_window(monkeypatch):
 
     from tests.kernel_signatures import changed, recording
 
-    from tensorfold.kernels.qwen.dense.v1 import row_attention, row_streams, simd_qmm
+    from pli.kernels.qwen.dense.v1 import row_attention, row_streams, simd_qmm
 
     caches = [row_glue._kernels, row_streams._kernels, lane_tree._kernels, simd_qmm._kernels, simd_qmm._plans,
               row_attention._kernels]

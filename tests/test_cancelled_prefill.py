@@ -2,7 +2,7 @@
 
 import pytest
 
-from tensorfold.server.cancellation import Cancellation, RequestCancelled
+from pli.server.cancellation import Cancellation, RequestCancelled
 from tests.test_lane_server import expected_reply, make_app
 
 TURN = [{"role": "user", "content": "abcdefgh"}, {"role": "assistant", "content": "ijklmnop"},
@@ -32,9 +32,9 @@ def test_a_prefill_stopped_after_a_checkpoint_resumes_there_on_the_retry():
 
 
 def test_a_stopped_resume_keeps_the_prefix_it_took():
-    from tensorfold.server.checkpoints import CheckpointStore
-    from tensorfold.server.memory_budget import cache_nbytes
-    from tensorfold.server.scheduler import ChatJob
+    from pli.server.checkpoints import CheckpointStore
+    from pli.server.memory_budget import cache_nbytes
+    from pli.server.scheduler import ChatJob
     from tests.test_resume_memory import refuse_copy, scheduler_with, sized, stored
 
     prompt = [3] * 64

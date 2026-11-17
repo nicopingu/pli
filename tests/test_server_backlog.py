@@ -2,7 +2,7 @@
 
 import socket
 
-from tensorfold.server.http import Server
+from pli.server.http import Server
 
 
 def test_a_burst_of_connections_waits_in_the_backlog():

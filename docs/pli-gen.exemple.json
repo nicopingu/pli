@@ -1,0 +1,21 @@
+{
+  "_note": "Example: replace /chemin/pli with your directory (absolute paths). tools/pli-profil writes these files with the machine's paths (templates/launch-profiles).",
+  "reserve_go": 6,
+  "familles": {
+    "audio": {
+      "argv": [
+        "/chemin/pli/venvs/mlx-audio/bin/python",
+        "-I",
+        "/chemin/pli/source/src/pli/gen/fils_audio.py",
+        "--port",
+        "{port}",
+        "--voix",
+        "/chemin/pli/source/docs/pli-gen-voix.exemple.json"
+      ],
+      "port": 18102,
+      "memoire_go": 24,
+      "delai_decharge_s": 600,
+      "sante_delai_s": 60
+    }
+  }
+}

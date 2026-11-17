@@ -1,6 +1,6 @@
 # Adding an MLX family
 
-Create `src/tensorfold/families/<name>/`. The CLI discovers packages by `MODEL_TYPES`, matching
+Create `src/pli/families/<name>/`. The CLI discovers packages by `MODEL_TYPES`, matching
 `config.json` or its `text_config`. Keep backend imports inside the loader so discovery does not load a model.
 
 ## Package interface
@@ -10,7 +10,7 @@ MODEL_TYPES = ("mymodel",)
 TITLE = "My model"
 LANES = True
 MODELS = ("example/checkpoint",)
-KERNEL_PACKAGE = "tensorfold.kernels.mymodel.v1"
+KERNEL_PACKAGE = "pli.kernels.mymodel.v1"
 KERNEL_VERSION = "v1"
 
 def load(model_dir, **options):
@@ -73,5 +73,5 @@ Use `tests/lane_fakes.py` and `tests/test_family_streams.py` for model-free engi
 for forward correctness, row equality, shared streams, rollback, snapshots and context/memory admission.
 Exercise thinking on and off, tools, later instructions and templates that rewrite earlier turns.
 
-Measure whole requests with the [public benchmark fixtures](README.md#measurements). Record revisions,
+Measure whole requests with the [public benchmark fixtures](../benchmark.md#measurements). Record revisions,
 commands, runtime and output hashes. Measure complete dependent chains before promoting a kernel change.

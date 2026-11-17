@@ -8,9 +8,9 @@ mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 pytest.importorskip("mlx_lm")
 
-from tensorfold.engine.lane_engine import LaneEngine  # noqa: E402
-from tensorfold.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
-from tensorfold.kernels.nemotron.lightning.v1 import rows  # noqa: E402
+from pli.engine.lane_engine import LaneEngine  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import rows  # noqa: E402
 
 VOCAB = 4096
 IDS = [(37 * i + 11) % 4000 + 50 for i in range(400)]
@@ -38,7 +38,7 @@ def _tiny():
 
 
 def _load(patch):
-    from tensorfold.families.nemotron_h.model import NemotronH
+    from pli.families.nemotron_h.model import NemotronH
 
     patch.setattr(K, "tensor_units", lambda: False)          # the path rows.install takes on an M1-M4
     return NemotronH(_tiny(), mtp_path=None, drafts=0, tokenizer=SimpleNamespace(encode=lambda text: IDS))

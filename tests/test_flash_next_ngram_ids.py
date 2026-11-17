@@ -12,8 +12,8 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.families.qwen4_exp.model import NGramEmbedding, _nth_prime_after, layer_multipliers  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1 import ngram  # noqa: E402
+from pli.families.qwen4_exp.model import NGramEmbedding, _nth_prime_after, layer_multipliers  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import ngram  # noqa: E402
 
 VOCAB, EOS = 248320, 248044
 

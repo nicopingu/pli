@@ -2,11 +2,11 @@
 
 import sys
 
-from tensorfold.control.cli import parser as control_parser, _profile as profile_from
-from tensorfold.control.config import Profile
-from tensorfold.control.safety import redact
-from tensorfold.control.telemetry import Client
-from tensorfold.cli import build_parser
+from pli.control.cli import parser as control_parser, _profile as profile_from
+from pli.control.config import Profile
+from pli.control.safety import redact
+from pli.control.telemetry import Client
+from pli.cli import build_parser
 
 
 def test_serve_accepts_repeated_keys_and_metrics_exception():

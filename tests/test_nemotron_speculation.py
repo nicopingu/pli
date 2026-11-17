@@ -16,7 +16,7 @@ class _Cache:
 
 
 def _family():
-    from tensorfold.families.nemotron_h.model import NemotronH
+    from pli.families.nemotron_h.model import NemotronH
 
     nem = NemotronH.__new__(NemotronH)                      # the head's plumbing only, no checkpoint
     nem._last_hidden = mx.zeros((1, 4, 8))

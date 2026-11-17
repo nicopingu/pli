@@ -11,10 +11,10 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from rich.cells import cell_len
 
-from tensorfold.control.app import ControlApp
-from tensorfold.control.demo import demo_view
-from tensorfold.control.telemetry import Sample
-from tensorfold.control.view import View, Node, console_frame
+from pli.control.app import ControlApp
+from pli.control.demo import demo_view
+from pli.control.telemetry import Sample
+from pli.control.view import View, Node, console_frame
 
 
 async def until(condition, timeout=4):
@@ -40,7 +40,7 @@ def test_snapshot_uses_actual_logo_resource():
     from importlib.resources import files
     import json
     pixels = json.loads(
-        files("tensorfold.control.assets").joinpath("logo-pixels.json").read_text())
+        files("pli.control.assets").joinpath("logo-pixels.json").read_text())
     image = pixels["versions"]["30"]
     crop = pixels["crop"]
     aspect = (crop[2] - crop[0]) / (crop[3] - crop[1])
@@ -53,7 +53,7 @@ def test_snapshot_uses_actual_logo_resource():
 
 
 def test_logo_falls_back_to_the_wordmark(monkeypatch):
-    from tensorfold.control.view import logo
+    from pli.control.view import logo
     monkeypatch.delenv("COLORTERM", raising=False)
     monkeypatch.delenv("NO_COLOR", raising=False)
     plain, _ = console_frame(demo_view(), 144, 42)
@@ -66,7 +66,7 @@ def test_logo_falls_back_to_the_wordmark(monkeypatch):
 def test_small_logo_escape_snapshot():
     import io
     from rich.console import Console
-    from tensorfold.control.view import _logo_table, logo_image
+    from pli.control.view import _logo_table, logo_image
     image = _logo_table()["versions"]["8"]
     text = logo_image(8)
     assert text.plain.count("▀") == image["width"] * (image["height"] // 2)
@@ -124,7 +124,7 @@ def test_confirmation_is_required_and_target_is_stable(manager, profile, monkeyp
     async def body():
         m, fake = manager
         m.install(profile, start=True)
-        monkeypatch.setattr("tensorfold.control.app.Client.sample", lambda _: Sample(1, True, "ready"))
+        monkeypatch.setattr("pli.control.app.Client.sample", lambda _: Sample(1, True, "ready"))
         with create_pipe_input() as pipe:
             ui = ControlApp(manager=m, input=pipe, output=DummyOutput(), interval=0.5)
             task = asyncio.create_task(ui.run_async())
@@ -150,7 +150,7 @@ def test_confirmation_is_required_and_target_is_stable(manager, profile, monkeyp
 def test_new_service_key_refuses_the_smoke_name(manager, monkeypatch):
     async def body():
         m, fake = manager
-        monkeypatch.setattr("tensorfold.control.app.Client.sample", lambda _: Sample(1))
+        monkeypatch.setattr("pli.control.app.Client.sample", lambda _: Sample(1))
         with create_pipe_input() as pipe:
             ui = ControlApp(manager=m, input=pipe, output=DummyOutput(), interval=0.5)
             task = asyncio.create_task(ui.run_async())
@@ -171,7 +171,7 @@ def test_new_service_key_refuses_the_smoke_name(manager, monkeypatch):
 def test_new_service_form_and_paste_are_real_key_events(manager, monkeypatch):
     async def body():
         m, fake = manager
-        monkeypatch.setattr("tensorfold.control.app.Client.sample", lambda _: Sample(1))
+        monkeypatch.setattr("pli.control.app.Client.sample", lambda _: Sample(1))
         with create_pipe_input() as pipe:
             ui = ControlApp(manager=m, input=pipe, output=DummyOutput(), interval=0.5)
             task = asyncio.create_task(ui.run_async())
@@ -203,7 +203,7 @@ def test_poll_failure_and_recovery_do_not_retain_fake_rates(manager, profile, mo
         samples = iter([Sample(1, True, "ready", counters={"generation": 10}),
                         Sample(2, True, "ready", counters={"generation": 40}),
                         Sample(3, error="offline"), Sample(4, True, "ready", counters={"generation": 90})])
-        monkeypatch.setattr("tensorfold.control.app.Client.sample", lambda _: next(samples))
+        monkeypatch.setattr("pli.control.app.Client.sample", lambda _: next(samples))
         with create_pipe_input() as pipe:
             ui = ControlApp(manager=m, input=pipe, output=DummyOutput())
             await ui.refresh()
@@ -242,7 +242,7 @@ def test_in_flight_telemetry_cannot_resurrect_stopped_service(manager, profile, 
             began.set()
             assert finish.wait(4)
             return Sample(1, True, "ready", counters={"generation": 9000})
-        monkeypatch.setattr("tensorfold.control.app.Client.sample", delayed)
+        monkeypatch.setattr("pli.control.app.Client.sample", delayed)
         with create_pipe_input() as pipe:
             ui = ControlApp(manager=m, input=pipe, output=DummyOutput())
             polling = asyncio.create_task(ui.refresh())
@@ -265,11 +265,11 @@ def test_warming_visible_in_session():
 
 
 def test_cards_prefer_the_health_live_block():
-    from tensorfold.control.telemetry import normalize
+    from pli.control.telemetry import normalize
     sample = normalize(1, {"status": "ok", "model": "Fixture", "live": {
         "connections": 3, "waiting": 1, "decode_tokens_per_second": 142.4,
         "prefill_tokens_per_second": 1210,
-    }}, {"tensorfold:requests_running": [9], "tensorfold:requests_waiting": [8]})
+    }}, {"pli:requests_running": [9], "pli:requests_waiting": [8]})
     node = Node("local", "Fixture", "http://127.0.0.1:8080", True, "running",
                 sample=sample, rates={"generation": 17.5, "prompt": 6.5})
     text, _ = console_frame(View([node]), 144, 42, color=False)
@@ -278,7 +278,7 @@ def test_cards_prefer_the_health_live_block():
     assert "CONNECTIONS / WAIT" in text and "3 / 1" in text
     assert "17.5" not in text and "6.5" not in text
     fallback = normalize(1, {"status": "ok", "model": "Fixture"}, {
-        "tensorfold:requests_running": [2], "tensorfold:requests_waiting": [4],
+        "pli:requests_running": [2], "pli:requests_waiting": [4],
     })
     assert fallback.live == {}
     node.sample = fallback

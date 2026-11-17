@@ -7,7 +7,7 @@ import weakref
 
 import pytest
 
-from tensorfold.server.app import ChatApp
+from pli.server.app import ChatApp
 from tests.lane_fakes import FakeEngine, FakeFamily
 from tests.test_lane_server import FakeTokenizer
 from tests.test_memory_budget import Array
@@ -111,7 +111,7 @@ def test_weights_that_leave_no_room_refuse_to_start():
 
 @pytest.mark.parametrize("ceiling_gib, raise_it", [(64, True), (1, False)])
 def test_the_refusal_names_the_budget_that_would_fit_and_this_macs_ceiling(ceiling_gib, raise_it, monkeypatch):
-    from tensorfold.server import memory_budget
+    from pli.server import memory_budget
 
     monkeypatch.setattr(memory_budget, "physical_memory_bytes", lambda: 128 * 2**30)   # the host's RAM plays no part
     runtime = Runtime(2**30)

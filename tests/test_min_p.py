@@ -7,9 +7,9 @@ import math
 import numpy as np
 import pytest
 
-from tensorfold.engine.exact_sampling import Sampling, choose, choose_rows
-from tensorfold.server.errors import RequestError
-from tensorfold.server.request_options import parse_numbers
+from pli.engine.exact_sampling import Sampling, choose, choose_rows
+from pli.server.errors import RequestError
+from pli.server.request_options import parse_numbers
 
 
 def _rows(seed, rows=6, width=48):
@@ -82,7 +82,7 @@ def test_the_mac_server_reads_min_p():
 
 
 def test_the_mac_app_resolves_min_p_into_the_draw():
-    from tensorfold.server.request_options import RequestOptions
+    from pli.server.request_options import RequestOptions
 
     options = RequestOptions()
     options.default_sampling = {"temperature": 0.7, "top_k": 20, "top_p": 0.95, "min_p": 0.01}
@@ -95,7 +95,7 @@ def test_the_mlx_nucleus_path_cuts_what_the_full_rule_cuts():
     """top_k 0: the fast nucleus (GPU candidates + normalizer) draws what sorting every logit draws, with min_p."""
 
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.engine import exact_sampling as es
+    from pli.engine import exact_sampling as es
 
     rng = np.random.default_rng(6)
     drawn = 0
@@ -113,7 +113,7 @@ def test_the_mlx_nucleus_path_cuts_what_the_full_rule_cuts():
 
 def test_the_metal_kernel_draws_its_reference_with_min_p():
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.engine import gpu_sampling
+    from pli.engine import gpu_sampling
 
     logits = (mx.random.normal((6, 700), key=mx.random.key(8)) * 3).astype(mx.bfloat16)
     rows = np.array(logits.astype(mx.float32))

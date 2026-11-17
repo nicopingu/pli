@@ -4,18 +4,18 @@ import sys
 
 import pytest
 
-from tensorfold.control.config import Profile
-from tensorfold.control.launchd import Manager, Result, parse_status
-from tensorfold.control.safety import ControlError, atomic_write
+from pli.control.config import Profile
+from pli.control.launchd import Manager, Result, parse_status
+from pli.control.safety import ControlError, atomic_write
 
 
 def test_preview_has_no_side_effects(tmp_path, profile):
-    from tensorfold.control.config import Paths
+    from pli.control.config import Paths
     m = Manager(Paths(tmp_path), run=lambda *_: pytest.fail("must not call launchctl"), platform="linux")
     p = plistlib.loads(m.preview(profile))
     assert p["KeepAlive"] == {"SuccessfulExit": False}
     assert p["RunAtLoad"] is True and p["ThrottleInterval"] == 30
-    assert p["ProgramArguments"][:4] == [sys.executable, "-u", "-m", "tensorfold.control.runner"]
+    assert p["ProgramArguments"][:4] == [sys.executable, "-u", "-m", "pli.control.runner"]
     assert p["Umask"] == 0o077
     assert not list(tmp_path.iterdir())
 
@@ -142,7 +142,7 @@ def test_uninstall_enables_the_label(manager, profile):
 
 @pytest.mark.parametrize("platform,uid", [("linux", 501), ("win32", 501), ("darwin", 0), ("darwin", -1)])
 def test_platform_and_root_guard(tmp_path, platform, uid, profile):
-    from tensorfold.control.config import Paths
+    from pli.control.config import Paths
     m = Manager(Paths(tmp_path), run=lambda *_: pytest.fail("must not execute"), platform=platform, uid=uid)
     with pytest.raises(ControlError):
         m.install(profile)
@@ -157,7 +157,7 @@ def test_nested_fields_do_not_replace_job_status():
 
 def test_partial_install_rolls_back(manager, profile, monkeypatch):
     m, _ = manager
-    import tensorfold.control.launchd as mod
+    import pli.control.launchd as mod
     original = mod.atomic_write
     def fail(path, data):
         if path.suffix == ".plist":

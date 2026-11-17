@@ -10,7 +10,7 @@ import argparse
 
 import torch
 
-from tensorfold.families.glm5_next.cuda import kda, qmm
+from pli.families.glm5_next.cuda import kda, qmm
 
 
 def timed(fn, reps):

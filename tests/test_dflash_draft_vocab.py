@@ -7,8 +7,8 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
-from tensorfold.drafters.dflash_drafter import DFlashDrafter  # noqa: E402
+from pli.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
+from pli.drafters.dflash_drafter import DFlashDrafter  # noqa: E402
 
 
 def _drafter_with_head(n: int, k: int, bits: int = 4, group: int = 64):

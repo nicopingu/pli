@@ -8,7 +8,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.families.qwen4_exp import model as q4  # noqa: E402
+from pli.families.qwen4_exp import model as q4  # noqa: E402
 
 TEXT = {
     "hidden_size": 64, "num_hidden_layers": 4, "vocab_size": 97, "rms_norm_eps": 1e-6,
@@ -145,9 +145,9 @@ def test_ngram_ids_match_the_reference_formula_at_full_vocab():
 
 
 def test_lane_engine_resumes_from_a_grid_checkpoint_bit_identically():
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     model = FlashNext(tiny(), None, drafts=0)         # no fused kernels on the CPU: one token a round
     assert model.lane_family and model.exact_width == 1
@@ -184,9 +184,9 @@ def test_long_context_attention_in_query_parts(monkeypatch):
     """Past ``split_keys`` keys the reference attention runs its query rows in parts, each over the keys up to its
     last row: the same outputs up to rounding, and a resumed prompt still equals a fresh one bit for bit."""
 
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     model = tiny()
     prompt = [int(t) for t in np.random.default_rng(5).integers(6, 97, size=40)]
@@ -216,7 +216,7 @@ def test_long_context_attention_in_query_parts(monkeypatch):
 
 
 def test_prompt_chunks_offer_8192_with_tensor_units(monkeypatch):
-    from tensorfold.families import qwen3_5, qwen4_exp
+    from pli.families import qwen3_5, qwen4_exp
 
     model = q4.Qwen4Exp(q4.Config.from_dict({"text_config": TEXT}))
     for units, steps in ((True, (8192, 4096, 2048)), (False, (4096, 2048))):
@@ -228,7 +228,7 @@ def test_prompt_chunks_offer_8192_with_tensor_units(monkeypatch):
 def test_releasing_rounds_drops_the_last_forwards_rows():
     from types import SimpleNamespace
 
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     heads = [SimpleNamespace(row_states={0: [("conv", "ssm", 0)]}, last_streams="streams", _last_heads=["head"])
              for _ in range(2)]
@@ -243,7 +243,7 @@ def test_releasing_rounds_drops_the_last_forwards_rows():
 
 
 def test_the_head_absorbs_every_prompt_row_into_its_cache_and_carries_only_the_last():
-    from tensorfold.families.qwen4_exp.runtime import last_row_layer
+    from pli.families.qwen4_exp.runtime import last_row_layer
 
     mx.random.seed(3)
     model = q4.Qwen4Exp(q4.Config.from_dict({"text_config": TEXT}))
@@ -283,7 +283,7 @@ def test_a_prompt_chunk_leaves_only_its_states_in_the_cache():
 def test_the_prompt_read_ahead_asks_for_each_chunks_lookup_ids():
     from types import SimpleNamespace
 
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     model = tiny()
     emb = next(layer.ple.ple_embedding for layer in model.layers if "ple" in layer)

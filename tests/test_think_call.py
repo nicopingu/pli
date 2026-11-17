@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from http_fakes import post
-from tensorfold.server.text import CHANNEL_MARKERS, split_thinking
+from pli.server.text import CHANNEL_MARKERS, split_thinking
 
 CALL = "<tool_call>\n<function=terminal>\n<parameter=command>\nls\n</parameter>\n</function>\n</tool_call>"
 REASONING = "The user wants the files listed. I will run ls.\n"
@@ -67,7 +67,7 @@ class ScriptTokenizer:
 
 def script_app():
     pytest.importorskip("mlx.core")
-    from tensorfold.server.app import ChatApp
+    from pli.server.app import ChatApp
     from tests.lane_fakes import FakeEngine, FakeFamily
 
     class ScriptFamily(FakeFamily):
@@ -95,7 +95,7 @@ def served_post(app, body):
     import http.client
     from http.server import ThreadingHTTPServer
 
-    from tensorfold.server.http import make_handler
+    from pli.server.http import make_handler
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -166,7 +166,7 @@ def test_the_template_kwargs_effort_is_read(body, effort):
 
 
 def test_a_stream_ends_with_what_the_final_reply_adds():
-    from tensorfold.server.stopping import StopPolicy
+    from pli.server.stopping import StopPolicy
 
     sent = []
     policy = StopPolicy({}, None, threading.Lock(), frozenset())

@@ -9,8 +9,8 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.kernels.qwen.flash_next.v1 import block_select  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1.base import ints, kernel  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import block_select  # noqa: E402
+from pli.kernels.qwen.flash_next.v1.base import ints, kernel  # noqa: E402
 
 TOP = 512
 # the kernel the sampled-threshold select replaced (0.6.1): the radix select over every block; the reference bits

@@ -6,7 +6,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.qwen.dense.v1 import exact_attention, prompt_attention
+from pli.kernels.qwen.dense.v1 import exact_attention, prompt_attention
 
 
 def test_fused_prompt_heads_keep_stock_dispatch(monkeypatch):

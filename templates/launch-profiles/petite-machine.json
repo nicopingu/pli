@@ -1,0 +1,66 @@
+{
+  "nom": "petite-machine",
+  "titre": "Petite machine",
+  "pour": "Mac with 24 to 32 GB (24 GB: M2, M3, M4, M4 Pro): Ternary Bonsai 2 27B in 2 bits, one conversation, 32,768-token window; conservative default, not measured under PLI",
+  "machine_profile": "auto",
+  "modele": "${PLI_PETIT_MODELE}",
+  "arguments": [
+    "--name",
+    "petit",
+    "--drafter",
+    "none",
+    "--context",
+    "32768",
+    "--parallel",
+    "1",
+    "--snapshot-dir",
+    "${PLI_DONNEES}/instantanes/petit",
+    "--spill-gib",
+    "10"
+  ],
+  "environnement": {
+    "PLI_EVENTS": "${PLI_DONNEES}/logs/events.jsonl"
+  },
+  "conditions": [
+    {
+      "si_ram_min_go": 32,
+      "arguments": [
+        "--drafter",
+        "${PLI_BROUILLON}"
+      ],
+      "effet": "32 GB or more: DFlash2 drafter (it requires about 20 GiB of budget, ternary-bonsai-2.md recipe)",
+      "sinon": "less than 32 GB: no drafter (with it you need about 20 GiB of budget)"
+    }
+  ],
+  "memoire": {
+    "ram_min_go": 24,
+    "statut": "estimated, not measured under PLI",
+    "detail": "Bonsai 2 27B: 2-bit codes 7.2 GiB, 13.9 GiB expanded to 4 bits on M1 to M4 when budget allows; default budget 70% of memory (16.8 GiB on 24 GB), including 3 GiB outside allocator (RUNBOOK); TensorFold measurements, not PLI",
+    "si_trop_petit": "Under 24 GB, PLI has no measured or estimated model that fits: the smallest family is a 27B. Use another engine for a small model."
+  },
+  "disque": [
+    {
+      "quoi": "model ${PLI_PETIT_MODELE}",
+      "go": 8.6,
+      "chemin": "hf:${PLI_PETIT_MODELE}",
+      "statut": "8.6 GB announced by Hugging Face"
+    },
+    {
+      "quoi": "DFlash2 drafter (from 32 GB)",
+      "go": 4,
+      "chemin": "hf:z-lab/Qwen3.8-27B-DFlash2",
+      "statut": "measured: 3.6 GB"
+    },
+    {
+      "quoi": "programme PLI (environnement Python)",
+      "go": 1.6,
+      "chemin": "${PLI_BIN}",
+      "statut": "measured"
+    },
+    {
+      "quoi": "conversation snapshots (cap --spill-gib 10)",
+      "go": 10,
+      "statut": "cap set"
+    }
+  ]
+}

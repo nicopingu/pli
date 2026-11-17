@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server.app import ChatJob, CheckpointStore, Scheduler
-from tensorfold.server.http import RequestError
-from tensorfold.server.memory_budget import cache_nbytes
-from tensorfold.server.prompt_memory import PromptMemory
+from pli.server.app import ChatJob, CheckpointStore, Scheduler
+from pli.server.http import RequestError
+from pli.server.memory_budget import cache_nbytes
+from pli.server.prompt_memory import PromptMemory
 from tests.lane_fakes import FakeBatchItem, FakeEngine
 from tests.test_memory_budget import Array
 from tests.test_prompt_memory import Runtime, controller, populated
@@ -162,7 +162,7 @@ def test_prefixes_freed_by_admission_do_not_count_as_prefill_workspace():
 
 
 def test_a_prompt_that_fits_only_alone_waits_for_the_running_stream_instead_of_being_refused():
-    from tensorfold.engine.lane_engine import LaneStream
+    from pli.engine.lane_engine import LaneStream
 
     store = CheckpointStore(3, copier=lambda c: c, sizer=cache_nbytes)
     scheduler, engine = scheduler_with(store, budget=2000)

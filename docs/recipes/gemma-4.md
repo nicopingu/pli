@@ -1,7 +1,7 @@
 # Gemma 4 26B-A4B (`gemma4`)
 
 Measured on an M4 Pro with 64 GB (273 GB/s) and MLX 0.31.2, with `mlx-community/gemma-4-26b-a4b-it-4bit`.
-Packages: `src/tensorfold/families/gemma4/` and `src/tensorfold/kernels/gemma/v1/`.
+Packages: `src/pli/families/gemma4/` and `src/pli/kernels/gemma/v1/`.
 
 ## What decides the speed
 
@@ -18,7 +18,7 @@ Packages: `src/tensorfold/families/gemma4/` and `src/tensorfold/kernels/gemma/v1
 ## Drafts
 
 The checkpoint has no draft head, so a stream drafts copies of its context. With `--drafter
-z-lab/gemma-4-26B-A4B-it-DFlash --drafter-bits 8` (Apache-2.0; `tensorfold pull` it first), z-lab's DFlash model
+z-lab/gemma-4-26B-A4B-it-DFlash --drafter-bits 8` (Apache-2.0; `pli pull` it first), z-lab's DFlash model
 drafts a chain of up to 15 tokens a round. It reads the target's hidden rows after layers 1, 6, 11, 17, 22 and 27,
 and the engine sets each round's depth from its costs. Replies stay equal to `"draft": false` ones.
 

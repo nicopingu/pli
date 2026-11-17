@@ -1,0 +1,28 @@
+{
+  "_note": "Example: replace /path/pli with your folder (absolute paths). tools/pli-profil writes these files with the machine's paths (templates/launch-profiles). Drama 3 clones a voice from a recording (WAV) and its text: use a voice you have the right to (yours, or with the person's consent).",
+  "voix": {
+    "drama-exemple": {
+      "modele": "drama3",
+      "memoire_go": 24,
+      "references": [
+        [
+          "/chemin/pli/voix/reference.wav",
+          "/chemin/pli/voix/reference.txt"
+        ]
+      ],
+      "alias": [
+        "old-voice-name"
+      ]
+    },
+    "kokoro-siwis": {
+      "modele": "kokoro",
+      "memoire_go": 3,
+      "voice": "ff_siwis",
+      "lang_code": "f"
+    }
+  },
+  "defaut": {
+    "drama3": "drama-exemple",
+    "*": "kokoro-siwis"
+  }
+}

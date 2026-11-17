@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tensorfold.server.checkpoints import CheckpointStore
+from pli.server.checkpoints import CheckpointStore
 
 
 def _store(slots=2, budget=None, spilled=None):
@@ -74,8 +74,8 @@ class Layer:
 
 def test_a_spilled_conversation_is_found_and_read_back(tmp_path):
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.engine.prefix_snapshots import DiskBlocks, load_snapshot
-    from tensorfold.server.checkpoints import spill_conversation
+    from pli.engine.prefix_snapshots import DiskBlocks, load_snapshot
+    from pli.server.checkpoints import spill_conversation
 
     model = "/models/qwen|mlx=1"
     store = CheckpointStore(1, copier=lambda c: c, sizer=lambda c: sum(int(x.keys.nbytes) for x in c),
@@ -93,7 +93,7 @@ def test_the_spill_directory_keeps_the_newest_within_its_byte_limit(tmp_path):
 
     pytest.importorskip("mlx.core")
 
-    from tensorfold.server.checkpoints import CheckpointEntry, spill_conversation
+    from pli.server.checkpoints import CheckpointEntry, spill_conversation
 
     model = "/models/qwen|mlx=1"
     for i in range(3):

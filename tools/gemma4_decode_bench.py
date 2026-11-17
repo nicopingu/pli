@@ -22,7 +22,7 @@ def main() -> int:
 
     import mlx.core as mx
 
-    from tensorfold.families.gemma4.model import load
+    from pli.families.gemma4.model import load
 
     ours = args.backend != "mlx"
     model, tokenizer = load(Path(args.model), backend=args.backend if ours else None, check=ours)
@@ -47,7 +47,7 @@ def main() -> int:
           f"p90 {times[len(times) * 9 // 10] * 1e3:.2f})", flush=True)
     print("greedy head:", repr(tokenizer.decode(out[:40])), flush=True)
     if ours:
-        from tensorfold.engine.lane_engine import LaneEngine
+        from pli.engine.lane_engine import LaneEngine
 
         for width in (int(w) for w in args.windows.split(",") if w):
             best = float("inf")

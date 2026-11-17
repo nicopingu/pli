@@ -62,7 +62,7 @@ def test_flash_next_pass(sizes):
 def test_glm_pass(tmp_path, sizes):
     from glm5_fakes import TEXT, write_checkpoint
 
-    from tensorfold.families.glm5_next import weights
+    from pli.families.glm5_next import weights
 
     previous = mx.default_device()
     mx.set_default_device(mx.cpu)
@@ -81,7 +81,7 @@ def test_glm_pass(tmp_path, sizes):
 def test_nemotron_pass(sizes):
     from test_nemotron_pass import _tiny
 
-    from tensorfold.families.nemotron_h import prompt_pass
+    from pli.families.nemotron_h import prompt_pass
 
     model = _tiny()
     backbone = model.backbone

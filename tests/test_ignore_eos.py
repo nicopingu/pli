@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.lane_engine import LaneEngine
+from pli.engine.lane_engine import LaneEngine
 from tests.http_fakes import post
 from tests.lane_fakes import FakeEngine, PatternProposer, fake_serial
 from tests.test_lane_server import make_app
@@ -111,7 +111,7 @@ def test_ignore_eos_rejects_non_booleans_before_stream_headers(route, stream, va
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("user_stop", [False, True])
 def test_native_fake_engine_ignore_eos_matches_serial(monkeypatch, route, stream, user_stop):
-    from tensorfold.server import app as app_module
+    from pli.server import app as app_module
 
     monkeypatch.setattr(app_module, "SuffixLookupProposer", lambda **kwargs: PatternProposer([4]))
     app = make_app(engine_factory=FakeEngine, use_proposer=True)

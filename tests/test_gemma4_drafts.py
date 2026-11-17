@@ -13,10 +13,10 @@ if not mx.metal.is_available():
 
 from gemma4_tiny import TINY, tiny_text, tokens  # noqa: E402
 from mlx.utils import tree_flatten  # noqa: E402
-from tensorfold.drafters.dflash_drafter import DFlashDrafter, DFlashProposer, _vendor  # noqa: E402
-from tensorfold.engine.exact_sampling import Sampling  # noqa: E402
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
-from tensorfold.families.gemma4.model import Gemma4  # noqa: E402
+from pli.drafters.dflash_drafter import DFlashDrafter, DFlashProposer, _vendor  # noqa: E402
+from pli.engine.exact_sampling import Sampling  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.families.gemma4.model import Gemma4  # noqa: E402
 
 DRAFT = {"architectures": ["DFlashDraftModel"], "block_size": 8, "hidden_size": TINY["hidden_size"], "head_dim": 64,
          "intermediate_size": 256, "num_attention_heads": 4, "num_key_value_heads": 2, "num_hidden_layers": 2,
@@ -114,7 +114,7 @@ def test_streams_sharing_rounds_with_drafts_emit_what_they_emit_alone(drafted):
 def test_long_and_resumed_prompts_draft_past_the_drafters_window(drafted, monkeypatch):
     """A prompt past the drafter's window starts its full-attention context late; resumed prompts start late too."""
 
-    from tensorfold.engine.prefill_plan import PrefillPlan
+    from pli.engine.prefill_plan import PrefillPlan
 
     monkeypatch.setattr(LaneEngine, "prefill_plan", PrefillPlan(64))
     model = family(drafted)

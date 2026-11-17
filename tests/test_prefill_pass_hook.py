@@ -13,10 +13,10 @@ mx = pytest.importorskip("mlx.core")
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lane_fakes import FakeEngine, FakeFamily  # noqa: E402
-from tensorfold.engine.family_common import cache_arrays  # noqa: E402
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
-from tensorfold.engine.prefill_plan import PrefillPlan  # noqa: E402
-from tensorfold.server.cancellation import Cancellation, PrefillGuard  # noqa: E402
+from pli.engine.family_common import cache_arrays  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.engine.prefill_plan import PrefillPlan  # noqa: E402
+from pli.server.cancellation import Cancellation, PrefillGuard  # noqa: E402
 
 
 class PassFamily(FakeFamily):
@@ -198,7 +198,7 @@ def test_a_request_after_a_raised_pass_is_admitted_as_after_any_other():
 def test_a_pass_is_sized_by_its_routed_experts_where_the_model_has_them():
     from test_prompt_memory import Runtime, controller
 
-    from tensorfold.server.prompt_memory import pass_row_bytes
+    from pli.server.prompt_memory import pass_row_bytes
 
     moe = SimpleNamespace(args=SimpleNamespace(num_experts_per_tok=8, hidden_size=4096, moe_intermediate_size=2048))
     assert pass_row_bytes(moe) == 3 * 8 * (6 * 4096 + 8 * 2048) // 2
@@ -254,9 +254,9 @@ def glm_checkpoint(tmp_path_factory):
 
 
 def _glm(checkpoint, drafts):
-    from tensorfold.families.glm5_next import mtp as glm_mtp
-    from tensorfold.families.glm5_next import weights
-    from tensorfold.families.glm5_next.runtime import GLMFlash
+    from pli.families.glm5_next import mtp as glm_mtp
+    from pli.families.glm5_next import weights
+    from pli.families.glm5_next.runtime import GLMFlash
 
     model = weights.load_backbone(checkpoint)
     return GLMFlash(model, glm_mtp.load(model) if drafts else None, drafts=drafts)
@@ -265,7 +265,7 @@ def _glm(checkpoint, drafts):
 def _flash_next():
     from test_qwen4_exp_prefill import tiny_model
 
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     return FlashNext(tiny_model(seed=4), None, drafts=0)
 
@@ -273,7 +273,7 @@ def _flash_next():
 def _nemotron():
     from test_nemotron_pass import _tiny
 
-    from tensorfold.families.nemotron_h.model import NemotronH
+    from pli.families.nemotron_h.model import NemotronH
 
     # without the fused decode kernels (tuned to the checkpoint's widths): the prompt path and plain decode
     return NemotronH(_tiny(), fused=False, mtp_path=None, drafts=0, tokenizer=SimpleNamespace(encode=lambda t: [1]))
@@ -314,7 +314,7 @@ def test_passes_leave_one_chunk_a_forwards_replies_and_checkpoints(device, glm_c
     if family == "flash-next":
         pytest.skip("the tiny Flash Next prompts on Metal only and decodes on the GPU only at the checkpoint's widths "
                     "(qmv_rows needs K % 512); tests/test_prompt_pass.py runs its pass, the served runs its engine")
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm as PM
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm as PM
 
     monkeypatch.setattr(PM, "gpu_tensor_units", lambda: False)         # the passes, on an M5 too
     make = {"glm": lambda: _glm(glm_checkpoint, 0), "glm-drafts": lambda: _glm(glm_checkpoint, 2),
@@ -343,7 +343,7 @@ def test_tensor_unit_chips_fill_a_chunk_a_forward(device, glm_checkpoint, monkey
     """With tensor units (M5) GLM-5.3 and Nemotron fill a prompt a chunk a forward, as 0.5.0 does, until a run there
     measures their passes; on M1-M4 the same runtime takes passes and gives the same reply."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm as PM
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm as PM
 
     def chip(units):
         monkeypatch.setattr(PM, "gpu_tensor_units", lambda: units)

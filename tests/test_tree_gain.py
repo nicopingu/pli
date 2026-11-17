@@ -8,7 +8,7 @@ import numpy as np
 
 def _kf(gain: str):
     os.environ["PLI_TREE_GAIN_MIN"] = gain
-    from tensorfold.pli import kflash
+    from pli.additions import kflash
     return importlib.reload(kflash)
 
 

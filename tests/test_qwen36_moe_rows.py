@@ -8,8 +8,8 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.engine.lane_engine import LaneEngine  # noqa: E402
-from tensorfold.kernels.qwen.dense.v1 import exact_attention, row_forward, row_matmul  # noqa: E402
+from pli.engine.lane_engine import LaneEngine  # noqa: E402
+from pli.kernels.qwen.dense.v1 import exact_attention, row_forward, row_matmul  # noqa: E402
 
 
 def _same(a, b):
@@ -79,7 +79,7 @@ def test_moe_streams_in_one_forward_equal_each_alone(tiny):
 
 
 def test_dflash_v1_head_drafts_a_chain():
-    from tensorfold.families.qwen3_5.dflash_head import DFlashHead
+    from pli.families.qwen3_5.dflash_head import DFlashHead
 
     seen = []
 
@@ -104,8 +104,8 @@ def test_dflash_v1_head_drafts_a_chain():
 def test_dflash_v1_chains_even_with_a_draft_vocabulary(monkeypatch):
     """A v1 head with draft-vocabulary rows drafts through block_chain, not DFlash2's selector."""
 
-    from tensorfold.drafters import dflash_block
-    from tensorfold.drafters.dflash_proposer import DFlashProposer
+    from pli.drafters import dflash_block
+    from pli.drafters.dflash_proposer import DFlashProposer
 
     monkeypatch.setattr(dflash_block, "block_chain", lambda drafter, inputs, context, cache: mx.array([[5, 6, 7]]))
     item = SimpleNamespace(offset=0)
@@ -121,7 +121,7 @@ def test_dflash_v1_chains_even_with_a_draft_vocabulary(monkeypatch):
 def test_dflash_v1_family_sizes_chains_from_round_costs(monkeypatch):
     """A v1 head gives no per-draft chances, so the family exposes none and the engine sizes chains by depth."""
 
-    from tensorfold.families.qwen3_5.family import Qwen35Family
+    from pli.families.qwen3_5.family import Qwen35Family
 
     monkeypatch.setattr(Qwen35Family, "check_windows", lambda self, widest, rows: (widest, {}))
     core = SimpleNamespace(embed_tokens=object())
@@ -135,7 +135,7 @@ def test_dflash_v1_family_sizes_chains_from_round_costs(monkeypatch):
 def test_dflash_v1_block_reads_the_draft_vocabulary_rows():
     """``block_chain`` argmaxes the draft vocabulary's head rows and maps each column back to its token id."""
 
-    from tensorfold.drafters.dflash_block import block_chain
+    from pli.drafters.dflash_block import block_chain
 
     def full_head(_):
         raise AssertionError("the full vocabulary head was read")
@@ -149,10 +149,10 @@ def test_dflash_v1_block_reads_the_draft_vocabulary_rows():
 
 
 def test_shutdown_saves_prompt_side_entries_before_reply_ends(tmp_path, monkeypatch):
-    from tensorfold.server import checkpoints
+    from pli.server import checkpoints
 
     saved = []
-    monkeypatch.setattr("tensorfold.engine.prefix_snapshots.save_snapshot",
+    monkeypatch.setattr("pli.engine.prefix_snapshots.save_snapshot",
                         lambda directory, model_id, tokens, cache, keep: saved.append(list(tokens)))
     store = checkpoints.CheckpointStore(8, copier=lambda c: c, sizer=lambda c: 1)
     # Two conversations, each with a prompt-side entry and a longer reply end. Qwen3.6's template drops the empty

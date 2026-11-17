@@ -31,8 +31,8 @@ def _weights(n: int, k: int, seed: int) -> tuple[mx.array, ...]:
 
 
 def simd_qmm() -> None:
-    from tensorfold.kernels.qwen.dense.v1 import row_matmul
-    from tensorfold.kernels.qwen.dense.v1 import simd_qmm as sq
+    from pli.kernels.qwen.dense.v1 import row_matmul
+    from pli.kernels.qwen.dense.v1 import simd_qmm as sq
 
     back = row_matmul.simd_qmm_backend()
     for n, k in ((48, 5120), (1024, 5120), (5120, 6144), (6144, 5120), (2048, 1024)):
@@ -46,7 +46,7 @@ def simd_qmm() -> None:
 
 
 def norm() -> None:
-    from tensorfold.kernels.qwen.dense.v1 import row_glue
+    from pli.kernels.qwen.dense.v1 import row_glue
 
     for K in (5120, 8192, 16384):
         w = mx.random.uniform(0.5, 1.5, (K,), key=mx.random.key(1)).astype(mx.bfloat16)
@@ -61,7 +61,7 @@ def row_forward() -> None:
     import mlx.nn as nn
     from mlx_lm.models.qwen3_5 import TextModel, TextModelArgs
 
-    from tensorfold.kernels.qwen.dense.v1 import exact_attention, row_forward as rf, row_matmul
+    from pli.kernels.qwen.dense.v1 import exact_attention, row_forward as rf, row_matmul
 
     args = TextModelArgs(model_type="qwen3_5_text", hidden_size=1024, intermediate_size=17408, num_hidden_layers=4,
                          num_attention_heads=24, num_key_value_heads=4, head_dim=256, rms_norm_eps=1e-6,
@@ -91,7 +91,7 @@ def row_forward() -> None:
 def sampling() -> None:
     from types import SimpleNamespace
 
-    from tensorfold.engine import gpu_sampling, topk
+    from pli.engine import gpu_sampling, topk
 
     for vocab in (248320, 131072):
         logits = (mx.random.normal((4, vocab), key=mx.random.key(vocab)) * 3).astype(mx.bfloat16)
@@ -106,7 +106,7 @@ def sampling() -> None:
 
 
 def nemotron() -> None:
-    from tensorfold.kernels.nemotron.lightning.v1 import kernels as nk, rows
+    from pli.kernels.nemotron.lightning.v1 import kernels as nk, rows
 
     dims = 2688
     h = mx.random.normal((16, dims), key=mx.random.key(1)).astype(mx.bfloat16)
@@ -126,7 +126,7 @@ def nemotron() -> None:
 
 
 def row_attention() -> None:
-    from tensorfold.kernels.qwen.dense.v1 import row_attention as ra
+    from pli.kernels.qwen.dense.v1 import row_attention as ra
 
     H, HKV, D, cap, start = 24, 4, 256, 400, 300
     q = mx.random.normal((1, H, 6, D), key=mx.random.key(1)).astype(mx.bfloat16)
@@ -137,7 +137,7 @@ def row_attention() -> None:
 
 
 def flash_next() -> None:
-    from tensorfold.kernels.qwen.flash_next.v1 import base, embed, rows
+    from pli.kernels.qwen.flash_next.v1 import base, embed, rows
 
     x = mx.random.normal((32, 2560), key=mx.random.key(1)).astype(mx.bfloat16)
     scale = mx.random.uniform(-0.5, 0.5, (2560,), key=mx.random.key(2)).astype(mx.bfloat16)
@@ -154,9 +154,9 @@ def flash_next() -> None:
 def gemma() -> None:
     from gemma4_tiny import tiny_text, tokens
 
-    from tensorfold.families.gemma4.model import Gemma4
-    from tensorfold.kernels.gemma.v1 import glue
-    from tensorfold.kernels.inputs import ints
+    from pli.families.gemma4.model import Gemma4
+    from pli.kernels.gemma.v1 import glue
+    from pli.kernels.inputs import ints
 
     eps = mx.array([1e-6], dtype=mx.float32)
     dims, heads, kv = 2816, 4, 2
@@ -183,7 +183,7 @@ SCENARIOS = {"simd_qmm": simd_qmm, "norm": norm, "row_forward": row_forward, "sa
 
 
 if __name__ == "__main__":
-    from tensorfold.kernels import threads
+    from pli.kernels import threads
 
     SCENARIOS[sys.argv[1]]()
     print(json.dumps({"out": out, "largest": thread_limit.largest, "reserved": thread_limit.reserved,

@@ -11,8 +11,8 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.engine import prefix_snapshots as ps  # noqa: E402
-from tensorfold.server.checkpoints import CheckpointEntry, spill_conversation  # noqa: E402
+from pli.engine import prefix_snapshots as ps  # noqa: E402
+from pli.server.checkpoints import CheckpointEntry, spill_conversation  # noqa: E402
 
 MODEL = "/models/qwen|mlx=1"
 
@@ -89,8 +89,8 @@ def test_removing_partials_tolerates_a_missing_directory(tmp_path):
 
 
 def test_a_starting_server_clears_both_snapshot_directories(tmp_path, capsys):
-    from tensorfold.server.checkpoints import CheckpointStore
-    from tensorfold.server.scheduler import Scheduler
+    from pli.server.checkpoints import CheckpointStore
+    from pli.server.scheduler import Scheduler
     from tests.lane_fakes import FakeEngine
 
     blocks, sessions = tmp_path / "prefix-snapshots", tmp_path / "session-snapshots"

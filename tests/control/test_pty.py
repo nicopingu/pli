@@ -18,7 +18,7 @@ def test_actual_terminal_entry_and_restoration():
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 144, 0, 0))
     env = {key: value for key, value in os.environ.items() if key != "NO_COLOR"}
     env.update(TERM="xterm-256color", COLORTERM="truecolor")
-    process = subprocess.Popen([sys.executable, "-m", "tensorfold.control", "tui", "--demo"],
+    process = subprocess.Popen([sys.executable, "-m", "pli.control", "tui", "--demo"],
                                stdin=slave, stdout=slave, stderr=slave, env=env)
     os.close(slave)
     collected = b""

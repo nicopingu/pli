@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("mlx.core")
 
-from tensorfold.families.qwen3_5.family import Qwen35Family  # noqa: E402
+from pli.families.qwen3_5.family import Qwen35Family  # noqa: E402
 
 
 class Record:

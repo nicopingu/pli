@@ -15,11 +15,11 @@ from types import ModuleType, SimpleNamespace
 import numpy as np
 import pytest
 
-from tensorfold import cli, families, hub
-from tensorfold.families import qwen4_exp
-from tensorfold.families.qwen4_exp import host_table, ssd_table
-from tensorfold.families.qwen4_exp.host_table import HostTable
-from tensorfold.families.qwen4_exp.ssd_table import SSDTable
+from pli import cli, families, hub
+from pli.families import qwen4_exp
+from pli.families.qwen4_exp import host_table, ssd_table
+from pli.families.qwen4_exp.host_table import HostTable
+from pli.families.qwen4_exp.ssd_table import SSDTable
 
 PARTS = ("weight", "scales", "biases")
 COUNTS = (37, 5, 64, 19, 3, 41, 1, 33)
@@ -381,7 +381,7 @@ def test_the_flag_reaches_the_metal_family_only_when_given(tmp_path, mlx_cpu):
 
 def test_the_flag_reaches_the_metal_loader(tmp_path, monkeypatch):
     seen = []
-    runtime = ModuleType("tensorfold.families.qwen4_exp.runtime")
+    runtime = ModuleType("pli.families.qwen4_exp.runtime")
     runtime.load = lambda path, **k: seen.append(k) or ("model", "tokenizer")
     monkeypatch.setitem(sys.modules, runtime.__name__, runtime)
     assert qwen4_exp.load(tmp_path, ple_on_ssd=True) == ("model", "tokenizer")
@@ -495,7 +495,7 @@ def test_metal_loads_give_the_same_logits_with_the_tables_on_ssd(tmp_path, monke
     import mlx_lm.utils
     from mlx.utils import tree_flatten
 
-    from tensorfold.families.qwen4_exp import model as q4
+    from pli.families.qwen4_exp import model as q4
 
     config = {"model_type": "qwen4_exp", "text_config": TEXT, "quantization": {"group_size": 32, "bits": 4}}
     mx.random.seed(0)
@@ -536,7 +536,7 @@ def test_metal_loads_give_the_same_logits_with_the_tables_on_ssd(tmp_path, monke
 
 
 def test_tables_on_ssd_take_the_host_path_without_asking_the_gpu(tmp_path, monkeypatch, mlx_cpu):
-    from tensorfold.families.qwen4_exp import model as q4
+    from pli.families.qwen4_exp import model as q4
 
     monkeypatch.setattr(mlx_cpu, "device_info", lambda: pytest.fail("asked the GPU"), raising=False)
     monkeypatch.delenv("PLI_NGRAM_HOST", raising=False)

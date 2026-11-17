@@ -1,13 +1,13 @@
 # Nemotron 3.5 Lightning
 
-The MLX family is `src/tensorfold/families/nemotron_h/`, with Metal kernels in
-`src/tensorfold/kernels/nemotron/lightning/v1/`. It combines Mamba-2, attention and MoE blocks.
+The MLX family is `src/pli/families/nemotron_h/`, with Metal kernels in
+`src/pli/kernels/nemotron/lightning/v1/`. It combines Mamba-2, attention and MoE blocks.
 
 ## Run
 
 ```bash
-tensorfold pull TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit
-tensorfold serve TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit --name bench
+pli pull TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit
+pli serve TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit --name bench
 ```
 
 The checkpoint includes `mtp-4bit.safetensors`; `pull` and `serve` check that it is available.
@@ -37,8 +37,8 @@ Use the [CUDA container setup](../../RUNBOOK.md#nvidia-gpus). One or two ranks a
 Pull the checkpoint on each rank and start rank 1 first:
 
 ```bash
-tensorfold serve TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit --tp 2 --rank 1 --master 192.0.2.1
-tensorfold serve TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
+pli serve TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit --tp 2 --rank 1 --master 192.0.2.1
+pli serve TensorFold/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-MLX-4bit --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
 ```
 
 The default cap is three MTP drafts. Later drafts stop when their cumulative head confidence falls below
@@ -109,7 +109,7 @@ rebuild. This subset affects draft proposals only; the target still verifies aga
 
 ## Measurements
 
-Use the [public benchmark command](README.md#measurements) with the server above.
+Use the [public benchmark command](../benchmark.md#measurements) with the server above.
 Compare drafted/serial and resumed/fresh output on each backend and rank count, plus concurrent/solo
 requests on MLX. Decode rate, cold/resumed first-token latency and peak memory are TBD [release-0.3.5].
 

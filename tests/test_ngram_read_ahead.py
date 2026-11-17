@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from tensorfold.families.qwen4_exp.host_table import ReadAhead
+from pli.families.qwen4_exp.host_table import ReadAhead
 
 
 class Table:

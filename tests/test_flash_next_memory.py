@@ -9,10 +9,10 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from tensorfold import cli
-from tensorfold.families import qwen4_exp
-from tensorfold.families.qwen4_exp import host_table
-from tensorfold.server import memory_budget
+from pli import cli
+from pli.families import qwen4_exp
+from pli.families.qwen4_exp import host_table
+from pli.server import memory_budget
 
 GIB = 1024**3
 NGRAM = "language_model.model.layers.1.ple.ple_embedding.ngram_embedding"

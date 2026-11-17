@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""pli-renommage-cles : keep the saved conversations when deploying the tensorfold -> pli rename.
+
+A checkpoint key names the code that computed it: ``kernels=<fingerprint of the family's kernels>`` and
+``code=<fingerprint of pli.additions and the read path>``. The rename changes the text of these files (module
+names) without changing the computation: both fingerprints change, the bits do not. This script, without loading a model:
+
+1. proves that each hashed file in the new tree is exactly the old tree's file passed through the mechanical
+   rename (``transformer`` from tools/pli-renommage-tensorfold); if one is missing or differs, it refuses;
+2. computes the old and new fingerprints (code, kernels of each family of the keys found), with
+   the production environment given by ``--env`` (some settings enter the kernel fingerprint);
+3. lists the keys of the folders carrying the old fingerprints, and the new key for each;
+4. with ``--appliquer``, moves these checkpoints (``python -m pli.additions.rekey move``); otherwise writes nothing.
+
+Usage, server stopped:
+  tools/pli-renommage-cles --ancien ARBRE_AVANT --env pli.env --env pli-27b.env DOSSIER [DOSSIER...] [--appliquer]
+ARBRE_AVANT: a worktree of the commit served before the deployment (its src/tensorfold). The new tree is the script's.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import struct
+import subprocess
+import sys
+from pathlib import Path
+
+ICI = Path(__file__).resolve().parent.parent
+
+SONDE = r'''
+import json, sys
+from pathlib import Path
+paquet = sys.argv[1]
+modeles = json.loads(sys.argv[2])
+fam = __import__(paquet + ".families", fromlist=["x"])
+ck = __import__(paquet + (".additions" if paquet == "pli" else ".pli") + ".code_key", fromlist=["x"])
+racine = ck.ROOT.parent
+fichiers = {p.relative_to(racine).as_posix() for p in ck.files()}
+noyaux = {}
+class Factice:
+    pass
+# the line engine is chosen at model load time; without a model, the default name on a chip without tensor units
+# (M1). A wrong choice does not pass: the old fingerprint must match that of the keys.
+try:
+    rm = __import__(paquet + ".kernels.qwen.dense.v1.row_matmul", fromlist=["x"])
+    if rm.BACKEND is None:
+        rm.BACKEND = type("Nom", (), {"name": "simd_qmm"})()
+except Exception:
+    pass
+for m in modeles:
+    try:
+        f = fam.detect(Path(m))
+    except Exception as e:
+        noyaux[m] = "erreur: " + str(e)
+        continue
+    noyaux[m] = fam.kernel_version(f, Factice())
+    import importlib
+    for nom in filter(None, (f.module, getattr(f.package, "KERNEL_PACKAGE", ""),
+                             *getattr(f.package, "KERNEL_DEPENDENCIES", ()))):
+        mod = importlib.import_module(nom)
+        src = Path(mod.__file__)
+        for p in (sorted(src.parent.rglob("*.py")) if src.name == "__init__.py" else [src]):
+            fichiers.add(p.relative_to(racine).as_posix())
+print(json.dumps({"code": ck.digest(), "noyaux": noyaux, "fichiers": sorted(fichiers)}))
+'''
+
+
+def _renommage():
+    chargeur = importlib.machinery.SourceFileLoader("renommage", str(ICI / "tools" / "pli-renommage-tensorfold"))
+    spec = importlib.util.spec_from_loader("renommage", chargeur)
+    module = importlib.util.module_from_spec(spec)
+    chargeur.exec_module(module)
+    return module
+
+
+def environnement(fichiers: list[str]) -> dict[str, str]:
+    script = "set -a; " + "".join(f'. "${{{i}}}"; ' for i in range(1, len(fichiers) + 1)) + "env -0"
+    sortie = subprocess.run(["/bin/bash", "-c", script, "bash", *fichiers], env={"PATH": "/usr/bin:/bin"},
+                            capture_output=True, check=True).stdout
+    return dict(e.split("=", 1) for e in sortie.decode().split("\0") if "=" in e)
+
+
+def sonder(src: Path, paquet: str, modeles: list[str], env: dict[str, str]) -> dict:
+    sortie = subprocess.run([sys.executable, "-c", SONDE, paquet, json.dumps(modeles)], capture_output=True,
+                            text=True, env={**env, "PYTHONPATH": str(src), "HOME": os.environ.get("HOME", ""), "PYTHONDONTWRITEBYTECODE": "1"},
+                            cwd=str(src))
+    if sortie.returncode:
+        raise SystemExit(f"sonde {paquet} : {sortie.stderr[-2000:]}")
+    return json.loads(sortie.stdout.splitlines()[-1])
+
+
+def cle_de(chemin: Path) -> str | None:
+    try:
+        with open(chemin, "rb") as f:
+            n = struct.unpack("<Q", f.read(8))[0]
+            return (json.loads(f.read(n)).get("__metadata__") or {}).get("model")
+    except (OSError, ValueError, struct.error):
+        return None
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--ancien", required=True, type=Path, help="tree of the commit served before the deployment")
+    ap.add_argument("--env", action="append", default=[], help="production .env file (in order)")
+    ap.add_argument("--appliquer", action="store_true", help="move the checkpoints (otherwise: plan only)")
+    ap.add_argument("--plan-json", type=Path, default=None,
+                    help="write the plan ([{ancienne, nouvelle, dossiers, points}]): the rollback reads it to restore "
+                         "the old keys")
+    ap.add_argument("dossiers", nargs="+", type=Path)
+    a = ap.parse_args()
+    env = environnement(a.env) if a.env else {"PATH": "/usr/bin:/bin"}
+    cles: dict[str, list[Path]] = {}
+    for d in a.dossiers:
+        for p in sorted(d.expanduser().glob("*.safetensors")):
+            if ".partial." in p.name:
+                continue
+            k = cle_de(p)
+            if k:
+                cles.setdefault(k, []).append(d.expanduser())
+    modeles = sorted({k.split("|")[0] for k in cles})
+    ancien = sonder(a.ancien / "src", "tensorfold", modeles, env)
+    neuf = sonder(ICI / "src", "pli", modeles, env)
+    # 1. proof: hashed files = old files passed through the mechanical rename
+    transformer = _renommage().transformer_fichier
+
+    def nouveau_chemin(rel: str) -> str:
+        return rel.replace("tensorfold/pli/", "pli/additions/", 1).replace("tensorfold/", "pli/", 1)
+
+    attendus = {nouveau_chemin(r): r for r in ancien["fichiers"]}
+    ecarts = sorted(set(attendus) ^ set(neuf["fichiers"]))
+    for rel in sorted(set(attendus) & set(neuf["fichiers"])):
+        vieux = (a.ancien / "src" / attendus[rel]).read_bytes().decode()
+        if transformer("src/" + rel, vieux) != (ICI / "src" / rel).read_text():
+            ecarts.append(rel)
+    if ecarts:
+        print("REFUS: these hashed files are not just the rename of the old tree (the computation may "
+              "differ, the checkpoints must not be resumed):")
+        for e in ecarts:
+            print("  " + e)
+        return 1
+    print(f"proof: {len(neuf['fichiers'])} hashed files identical up to the rename")
+    print(f"code     {ancien['code']} -> {neuf['code']}")
+    for m in modeles:
+        print(f"noyaux   {Path(m).name} : {ancien['noyaux'][m]} -> {neuf['noyaux'][m]}")
+    # 2. the plan
+    plan = []
+    for k, dossiers in cles.items():
+        m = k.split("|")[0]
+        vieux_n, neuf_n = ancien["noyaux"].get(m, ""), neuf["noyaux"].get(m, "")
+        if f"|code={ancien['code']}" not in k or not vieux_n or f"kernels={vieux_n}" not in k:
+            print(f"left (other code or other kernels): {k[:120]}... ({len(dossiers)} files)")
+            continue
+        nouvelle = k.replace(f"kernels={vieux_n}", f"kernels={neuf_n}").replace(f"|code={ancien['code']}",
+                                                                                  f"|code={neuf['code']}")
+        plan.append((k, nouvelle, sorted(set(dossiers)), len(dossiers)))
+    for vieille, nouvelle, dossiers, n in plan:
+        print(f"{n} points : {vieille}\n        -> {nouvelle}")
+    if a.plan_json:
+        a.plan_json.write_text(json.dumps([{"ancienne": v, "nouvelle": n, "dossiers": [str(x) for x in d], "points": c}
+                                           for v, n, d, c in plan], ensure_ascii=False, indent=1) + "\n")
+    if not a.appliquer:
+        print("plan only: rerun with --appliquer, server stopped")
+        return 0
+    for vieille, nouvelle, dossiers, _ in plan:
+        subprocess.run([sys.executable, "-m", "pli.additions.rekey", "move", "--old", vieille, "--new", nouvelle,
+                        *map(str, dossiers)], check=True, env={**os.environ, "PYTHONPATH": str(ICI / "src")})
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

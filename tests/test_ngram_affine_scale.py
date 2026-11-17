@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from tensorfold.families.qwen4_exp.host_table import open_table, shard_keys
+from pli.families.qwen4_exp.host_table import open_table, shard_keys
 from tests.test_ple_ssd import _checkpoint
 
 

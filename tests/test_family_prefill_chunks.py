@@ -9,8 +9,8 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
-from tensorfold.engine.prefill_plan import PrefillPlan  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.engine.prefill_plan import PrefillPlan  # noqa: E402
 
 V = 97
 GRID = 4
@@ -158,7 +158,7 @@ def test_a_state_between_chunk_starts_is_not_resumed():
 
 
 def test_the_guards_run_at_every_message_chunk():
-    from tensorfold.server.cancellation import Cancellation, PrefillGuard, RequestCancelled
+    from pli.server.cancellation import Cancellation, PrefillGuard, RequestCancelled
 
     calls: list[tuple[str, int]] = []
 
@@ -196,7 +196,7 @@ def test_the_guards_run_at_every_message_chunk():
 
 
 def test_a_prefill_stopped_between_chunks_keeps_its_last_start_and_a_retry_equals_fresh():
-    from tensorfold.server.cancellation import Cancellation, PrefillGuard, RequestCancelled
+    from pli.server.cancellation import Cancellation, PrefillGuard, RequestCancelled
 
     turn = [OPEN, 11, 12, 13, 14, 15, OPEN, 16, 17, OPEN, ASSIST]     # chunks start at 0, 4, 6 and 9
     fresh = LaneStream("fresh", turn, 5)

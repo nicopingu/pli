@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="250" viewBox="0 0 900 250" role="img" aria-label="PLI at a glance: 111 tokens/s writing, 229k-token context, 0.12 s to resume a saved conversation, text, voice, images and video on one Mac" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif">
+<title>PLI at a glance: 111 tokens/s writing, 229k-token context, 0.12 s to resume a saved conversation, text, voice, images and video on one Mac</title>
+<defs>
+<pattern id="hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="7" stroke="#F0A050" stroke-width="1.6"/></pattern>
+<pattern id="hatch2" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5FB7BD" stroke-width="1.6"/></pattern>
+<pattern id="hatchm" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="9" stroke="#9CA3B5" stroke-width="1.1"/></pattern>
+<marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9CA3B5"/></marker>
+</defs>
+<rect x="0.5" y="0.5" width="899" height="249" rx="14" fill="#11151F" stroke="#3A4152"/>
+<text x="36" y="50" font-size="21" font-weight="650" fill="#E8E3D6" text-anchor="start">One Mac Studio. One server. Every model it needs.</text>
+<text x="36" y="76" font-size="13.5" font-weight="400" fill="#9CA3B5" text-anchor="start">Qwen3.8-27B 4-bit on an M1 Ultra 64 GB, measured on the validated machine</text>
+<rect x="36" y="98" width="196" height="122" rx="10" fill="#181D29" stroke="#3A4152"/>
+<rect x="36" y="98" width="6" height="122" rx="3" fill="url(#hatch)"/>
+<g transform="translate(194,112) scale(0.9166666666666666)" fill="none" stroke="#F0A050" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L5 14h6l-1 8 8-12h-6z"/></g>
+<text x="56" y="154" fill="#E8E3D6"><tspan font-size="36" font-weight="700">111</tspan><tspan font-size="15" font-weight="500" fill="#F0A050" dx="6">tok/s</tspan></text>
+<text x="56" y="182" font-size="13.5" font-weight="500" fill="#E8E3D6" text-anchor="start">writing, short prompt</text>
+<text x="56" y="201" font-size="12.5" font-weight="400" fill="#9CA3B5" text-anchor="start">(public suite, PLI 4.0.0)</text>
+<rect x="248" y="98" width="196" height="122" rx="10" fill="#181D29" stroke="#3A4152"/>
+<rect x="248" y="98" width="6" height="122" rx="3" fill="url(#hatch)"/>
+<g transform="translate(406,112) scale(0.9166666666666666)" fill="none" stroke="#F0A050" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></g>
+<text x="268" y="154" fill="#E8E3D6"><tspan font-size="36" font-weight="700">229k</tspan><tspan font-size="15" font-weight="500" fill="#F0A050" dx="6">tokens</tspan></text>
+<text x="268" y="182" font-size="13.5" font-weight="500" fill="#E8E3D6" text-anchor="start">context window</text>
+<text x="268" y="201" font-size="12.5" font-weight="400" fill="#9CA3B5" text-anchor="start">4 conversations at a time</text>
+<rect x="460" y="98" width="196" height="122" rx="10" fill="#181D29" stroke="#3A4152"/>
+<rect x="460" y="98" width="6" height="122" rx="3" fill="url(#hatch)"/>
+<g transform="translate(618,112) scale(0.9166666666666666)" fill="none" stroke="#F0A050" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></g>
+<text x="480" y="154" fill="#E8E3D6"><tspan font-size="36" font-weight="700">0.12</tspan><tspan font-size="15" font-weight="500" fill="#F0A050" dx="6">s</tspan></text>
+<text x="480" y="182" font-size="13.5" font-weight="500" fill="#E8E3D6" text-anchor="start">to resume a saved</text>
+<text x="480" y="201" font-size="12.5" font-weight="400" fill="#9CA3B5" text-anchor="start">14k-token conversation</text>
+<rect x="672" y="98" width="196" height="122" rx="10" fill="#181D29" stroke="#3A4152"/>
+<rect x="672" y="98" width="6" height="122" rx="3" fill="url(#hatch)"/>
+<g transform="translate(830,112) scale(0.9166666666666666)" fill="none" stroke="#F0A050" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></g>
+<text x="692" y="154" fill="#E8E3D6"><tspan font-size="36" font-weight="700">5</tspan><tspan font-size="15" font-weight="500" fill="#F0A050" dx="6">families</tspan></text>
+<text x="692" y="182" font-size="13.5" font-weight="500" fill="#E8E3D6" text-anchor="start">text, voice, transcription,</text>
+<text x="692" y="201" font-size="12.5" font-weight="400" fill="#9CA3B5" text-anchor="start">images, video with sound</text>
+</svg>

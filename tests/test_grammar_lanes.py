@@ -10,8 +10,8 @@ xgr = pytest.importorskip("xgrammar")
 
 from test_family_streams import END, NL, NLNL, V, StreamsModel, TreeModel, after, chain  # noqa: E402
 
-from tensorfold.engine import grammar  # noqa: E402
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.engine import grammar  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
 
 STOP = 0
 VOCAB = ["", *[chr(c) for c in range(0x21, 0x7f) if chr(c) not in "~|`^_"], "</think>", "\n", "\n\n",

@@ -8,7 +8,7 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 pytest.importorskip("mlx_lm")
 
-from tensorfold.families.gemma4.cache import RingKVCache  # noqa: E402
+from pli.families.gemma4.cache import RingKVCache  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

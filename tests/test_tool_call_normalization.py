@@ -15,9 +15,9 @@ import json
 
 import pytest
 
-from tensorfold.server.messages import _normalize_tool_call_arguments
-from tensorfold.server.responses_translate import messages as response_messages
-from tensorfold.server.text import render_prompt_ids
+from pli.server.messages import _normalize_tool_call_arguments
+from pli.server.responses_translate import messages as response_messages
+from pli.server.text import render_prompt_ids
 
 
 # The Qwen3.8 tool-call block: unlike tojson-only templates, items requires a mapping.

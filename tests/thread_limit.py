@@ -16,7 +16,7 @@ _RESERVED = re.compile(r"max_total_threads_per_threadgroup\((\d+)\)")
 def install(limit: int) -> None:
     """Wrap mx.fast.metal_kernel before any kernel is built (modules cache theirs); a reserved size is the limit."""
 
-    from tensorfold.kernels import threads
+    from pli.kernels import threads
 
     threads.probing = True                    # an emulated M1/M2: fit() probes, as it does there
     real = mx.fast.metal_kernel

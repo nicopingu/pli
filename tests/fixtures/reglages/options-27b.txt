@@ -1,0 +1,1 @@
+/home/exemple/modeles-mlx/Sabi-Noema-MLX-4bit-gptq2 --name qwen3.8-27b --alias expert --alias expert-pense --context 229376 --parallel 4 --no-thinking --vision --decode-share 1 --drafter /home/exemple/.cache/huggingface/hub/models--z-lab--Qwen3.8-27B-DFlash2/snapshots/50307d4c4cde6860d4eee73e2547cd786fe8e8a4 --snapshot-dir /home/exemple/serveurs/pli/27b --spill-gib 120

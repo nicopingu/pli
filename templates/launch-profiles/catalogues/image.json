@@ -1,0 +1,40 @@
+{
+  "defaut": "qwen21",
+  "modeles": {
+    "qwen21": {
+      "classe": "qwen21",
+      "memoire_go": 26,
+      "chemin": "${PLI_MODELE_IMAGE}",
+      "horaire": "linear",
+      "etapes": 40,
+      "guidance": 4.0,
+      "taille": "1024x1024",
+      "cache_limit_go": 4,
+      "liberer_encodeur": true,
+      "low_ram": false,
+      "cibles": [
+        {
+          "source": "img_in",
+          "modele": "img_in"
+        },
+        {
+          "source": "proj_out",
+          "modele": "proj_out"
+        },
+        {
+          "source": "norm_out.linear",
+          "modele": "norm_out.linear"
+        },
+        {
+          "source": "txt_in.in_layer",
+          "modele": "txt_in.in_layer"
+        },
+        {
+          "source": "txt_in.out_layer",
+          "modele": "txt_in.out_layer"
+        }
+      ]
+    }
+  },
+  "lora": {}
+}

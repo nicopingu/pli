@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" role="img" aria-label="How one 64 GB Mac is shared: the 27B with its drafts and conversations takes about 31 GB, one generation model at a time fits in the rest, memory is counted before it starts" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif">
+<title>How one 64 GB Mac is shared: the 27B with its drafts and conversations takes about 31 GB, one generation model at a time fits in the rest, memory is counted before it starts</title>
+<defs>
+<pattern id="hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="7" stroke="#F0A050" stroke-width="1.6"/></pattern>
+<pattern id="hatch2" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5FB7BD" stroke-width="1.6"/></pattern>
+<pattern id="hatchm" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="9" stroke="#9CA3B5" stroke-width="1.1"/></pattern>
+<marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9CA3B5"/></marker>
+</defs>
+<rect x="0.5" y="0.5" width="899" height="329" rx="14" fill="#11151F" stroke="#3A4152"/>
+<text x="36" y="46" font-size="19" font-weight="650" fill="#E8E3D6" text-anchor="start">64 GB, counted before anything starts</text>
+<text x="36" y="70" font-size="13" font-weight="400" fill="#9CA3B5" text-anchor="start">memory measured on the validated M1 Ultra 64 GB, PLI 5.6.2</text>
+<rect x="36.0" y="98" width="208.3" height="58" fill="url(#hatch)" stroke="#F0A050" stroke-width="1.5"/>
+<text x="140.14687500000002" y="125.0" font-size="12.5" font-weight="600" fill="#E8E3D6" text-anchor="middle" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">27B weights</text>
+<text x="140.14687500000002" y="142.0" font-size="11.5" font-weight="500" fill="#E8E3D6" text-anchor="middle" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">16.1 GB</text>
+<rect x="244.3" y="98" width="53.0" height="58" fill="url(#hatch)" stroke="#F0A050" stroke-width="1.5"/>
+<text x="270.815625" y="125.0" font-size="11.5" font-weight="600" fill="#E8E3D6" text-anchor="middle" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">drafts</text>
+<text x="270.815625" y="142.0" font-size="11.5" font-weight="500" fill="#E8E3D6" text-anchor="middle" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">4.1 GB</text>
+<rect x="297.3" y="98" width="135.8" height="58" fill="url(#hatch)" stroke="#F0A050" stroke-width="1.5"/>
+<text x="365.25937500000003" y="125.0" font-size="12.5" font-weight="600" fill="#E8E3D6" text-anchor="middle" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">conversations</text>
+<text x="365.25937500000003" y="142.0" font-size="11.5" font-weight="500" fill="#E8E3D6" text-anchor="middle" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">10.5 GB</text>
+<rect x="433.2" y="98" width="430.8" height="58" fill="none" stroke="#3A4152" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="648.590625" y="132.0" font-size="12.5" font-weight="500" fill="#9CA3B5" text-anchor="middle">33 GB left: macOS and one generation model</text>
+<path d="M36 166 v8 H433.2 v-8" fill="none" stroke="#F0A050" stroke-width="1.5"/>
+<text x="234.59062500000002" y="192" font-size="13" font-weight="600" fill="#E8E3D6" text-anchor="middle">the LLM: 30.7 GB, always loaded</text>
+<path d="M435.2 166 v8 H864 v-8" fill="none" stroke="#5FB7BD" stroke-width="1.5"/>
+<text x="648.590625" y="192" font-size="13" font-weight="600" fill="#E8E3D6" text-anchor="middle">one of these at a time, started on demand</text>
+<rect x="435.2" y="210" width="339.0" height="26" rx="4" fill="url(#hatch2)" stroke="#5FB7BD" stroke-width="1.3"/>
+<rect x="441.2" y="213" width="22" height="20" rx="3" fill="#11151F"/>
+<g transform="translate(442.18125000000003,214) scale(0.75)" fill="none" stroke="#5FB7BD" stroke-width="1.7999999999999998" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/></g>
+<text x="471.18125000000003" y="228" font-size="12" font-weight="600" fill="#E8E3D6" text-anchor="start" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">Voice, Drama 3 in 3 bits</text>
+<text x="782.14375" y="228" font-size="12" font-weight="600" fill="#E8E3D6" text-anchor="start">26.2 GB</text>
+<rect x="435.2" y="244" width="313.1" height="26" rx="4" fill="url(#hatch2)" stroke="#5FB7BD" stroke-width="1.3"/>
+<rect x="441.2" y="247" width="22" height="20" rx="3" fill="#11151F"/>
+<g transform="translate(442.18125000000003,248) scale(0.75)" fill="none" stroke="#5FB7BD" stroke-width="1.7999999999999998" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 17l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.6"/></g>
+<text x="471.18125000000003" y="262" font-size="12" font-weight="600" fill="#E8E3D6" text-anchor="start" paint-order="stroke" stroke="#11151F" stroke-width="4" stroke-linejoin="round">Images, Krea 2 Turbo in 4/8 bits</text>
+<text x="756.26875" y="262" font-size="12" font-weight="600" fill="#E8E3D6" text-anchor="start">24.2 GB</text>
+<rect x="435.2" y="278" width="142.3" height="26" rx="4" fill="url(#hatch2)" stroke="#5FB7BD" stroke-width="1.3"/>
+<rect x="441.2" y="281" width="22" height="20" rx="3" fill="#11151F"/>
+<g transform="translate(442.18125000000003,282) scale(0.75)" fill="none" stroke="#5FB7BD" stroke-width="1.7999999999999998" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></g>
+<text x="585.5" y="296" font-size="12" fill="#E8E3D6"><tspan font-weight="600">11 GB</tspan><tspan fill="#9CA3B5" dx="8">Video with sound, MiniMax H3</tspan></text>
+<text x="36" y="228" font-size="12.5" font-weight="500" fill="#E8E3D6" text-anchor="start">While one of them runs,</text>
+<text x="36" y="248" font-size="12.5" font-weight="400" fill="#9CA3B5" text-anchor="start">the LLM is capped at what it holds:</text>
+<text x="36" y="268" font-size="12.5" font-weight="400" fill="#9CA3B5" text-anchor="start">its oldest conversations go to disk</text>
+<text x="36" y="288" font-size="12.5" font-weight="400" fill="#9CA3B5" text-anchor="start">instead of growing (PLI 5.6.3).</text>
+</svg>

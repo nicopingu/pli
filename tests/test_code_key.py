@@ -5,15 +5,15 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from tensorfold.pli import code_key
+from pli.additions import code_key
 
 
 def _tree(tmp_path: Path) -> Path:
-    root = tmp_path / "tensorfold"
+    root = tmp_path / "pli"
     for rel, text in {
-        "pli/a1_lsa.py": "A = 1\n", "pli/ane/ffn.py": "F = 1\n", "pli/ane/native/pli_ane.mm": "// ane\n",
-        "pli/events.py": "E = 1\n", "pli/trace.py": "T = 1\n", "pli/falcon/capture.py": "C = 1\n",
-        "pli/extended-list-2048.txt": "1 2 3\n", "pli/__pycache__/a1_lsa.cpython-312.pyc": "x",
+        "additions/a1_lsa.py": "A = 1\n", "additions/ane/ffn.py": "F = 1\n", "additions/ane/native/pli_ane.mm": "// ane\n",
+        "additions/events.py": "E = 1\n", "additions/trace.py": "T = 1\n", "additions/falcon/capture.py": "C = 1\n",
+        "additions/extended-list-2048.txt": "1 2 3\n", "additions/__pycache__/a1_lsa.cpython-312.pyc": "x",
         "engine/family_prefill.py": "P = 1\n", "engine/grammar.py": "G = 1\n",
     }.items():
         path = root / rel
@@ -30,16 +30,16 @@ def _key(root: Path) -> str:
 def test_hashed_files(tmp_path):
     root = _tree(tmp_path)
     names = [p.relative_to(root).as_posix() for p in code_key.files(root)]
-    assert names == ["pli/a1_lsa.py", "pli/ane/ffn.py", "pli/ane/native/pli_ane.mm", "engine/family_prefill.py"]
+    assert names == ["additions/a1_lsa.py", "additions/ane/ffn.py", "additions/ane/native/pli_ane.mm", "engine/family_prefill.py"]
 
 
 def test_compute_change_changes_key(tmp_path):
     root = _tree(tmp_path)
     before = _key(root)
     assert before.startswith("|code=") and len(before) == len("|code=") + 12
-    (root / "pli/a1_lsa.py").write_text("A = 2\n")
+    (root / "additions/a1_lsa.py").write_text("A = 2\n")
     assert _key(root) != before
-    (root / "pli/a1_lsa.py").write_text("A = 1\n")
+    (root / "additions/a1_lsa.py").write_text("A = 1\n")
     assert _key(root) == before
     (root / "engine/family_prefill.py").write_text("P = 2\n")
     assert _key(root) != before
@@ -48,7 +48,7 @@ def test_compute_change_changes_key(tmp_path):
 def test_non_compute_change_keeps_key(tmp_path):
     root = _tree(tmp_path)
     before = _key(root)
-    for rel in ("pli/events.py", "pli/trace.py", "pli/falcon/capture.py", "pli/extended-list-2048.txt", "engine/grammar.py"):
+    for rel in ("additions/events.py", "additions/trace.py", "additions/falcon/capture.py", "additions/extended-list-2048.txt", "engine/grammar.py"):
         (root / rel).write_text("changed\n")
     assert _key(root) == before
 
@@ -56,7 +56,7 @@ def test_non_compute_change_keeps_key(tmp_path):
 def test_moved_file_changes_key(tmp_path):
     root = _tree(tmp_path)
     before = _key(root)
-    shutil.move(root / "pli/ane/ffn.py", root / "pli/ffn.py")
+    shutil.move(root / "additions/ane/ffn.py", root / "additions/ffn.py")
     assert _key(root) != before
 
 

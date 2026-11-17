@@ -5,8 +5,8 @@ import threading
 
 import pytest
 
-from tensorfold.control.telemetry import (Client, Sample, Rates, base_url, normalize, numeric, parse_metrics)
-from tensorfold.control.safety import ControlError
+from pli.control.telemetry import (Client, Sample, Rates, base_url, normalize, numeric, parse_metrics)
+from pli.control.safety import ControlError
 
 
 @contextmanager
@@ -46,19 +46,19 @@ def test_endpoint_normalization():
 
 
 def test_real_http_mac_contract_and_alias_deduplication():
-    metrics = b'''# TYPE tensorfold:requests_running gauge
-    tensorfold:requests_running 3
-    tensorfold:num_requests_running 3
-    tensorfold:requests_waiting 1
-    tensorfold:generation_tokens_total 1000
+    metrics = b'''# TYPE pli:requests_running gauge
+    pli:requests_running 3
+    pli:num_requests_running 3
+    pli:requests_waiting 1
+    pli:generation_tokens_total 1000
     vllm:generation_tokens_total 1000
-    tensorfold:prompt_tokens_total 8000
-    tensorfold:mtp_drafted_total 100
-    tensorfold:mtp_accepted_total 81
-    tensorfold:time_to_first_token_seconds_sum 4.5
-    tensorfold:time_to_first_token_seconds_count 3
-    tensorfold:kv_cache_usage_ratio{pool="a"} 0.2
-    tensorfold:kv_cache_usage_ratio{pool="b"} 0.7
+    pli:prompt_tokens_total 8000
+    pli:mtp_drafted_total 100
+    pli:mtp_accepted_total 81
+    pli:time_to_first_token_seconds_sum 4.5
+    pli:time_to_first_token_seconds_count 3
+    pli:kv_cache_usage_ratio{pool="a"} 0.2
+    pli:kv_cache_usage_ratio{pool="b"} 0.7
     '''
     metrics = b"\n".join(line.strip() for line in metrics.splitlines())
     requests = []

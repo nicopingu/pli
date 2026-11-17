@@ -10,8 +10,8 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.kernels.qwen.flash_next.v1 import attention  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1.base import ints, kernel, pick  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import attention  # noqa: E402
+from pli.kernels.qwen.flash_next.v1.base import ints, kernel, pick  # noqa: E402
 
 # the kernel the multi-block one replaced (0.6.1): a simdgroup a block, rows in grid y; the reference bits
 _ONE_BLOCK = r"""

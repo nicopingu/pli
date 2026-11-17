@@ -9,8 +9,8 @@ pytest.importorskip("mlx_lm")
 
 from mlx_lm.models.cache import ArraysCache, KVCache  # noqa: E402
 
-from tensorfold.engine.alternating_kv import AlternatingKVCache  # noqa: E402
-from tensorfold.engine.family_common import cache_arrays, cache_contents  # noqa: E402
+from pli.engine.alternating_kv import AlternatingKVCache  # noqa: E402
+from pli.engine.family_common import cache_arrays, cache_contents  # noqa: E402
 
 
 def _layers():

@@ -6,9 +6,9 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.families.glm5_next import config, linear, mlp, model  # noqa: E402
-from tensorfold.families.glm5_next.caches import KDACache  # noqa: E402
-from tensorfold.families.glm5_next.kda import KDA  # noqa: E402
+from pli.families.glm5_next import config, linear, mlp, model  # noqa: E402
+from pli.families.glm5_next.caches import KDACache  # noqa: E402
+from pli.families.glm5_next.kda import KDA  # noqa: E402
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def _kda(dims: int, heads: int, dim: int) -> KDA:
 def test_prompt_kda_glue_is_the_ops_path(gpu, monkeypatch, shape):
     """Two prompt chunks through a KDA layer: output rows, conv window and fp32 state equal the MLX ops' bits."""
 
-    from tensorfold.kernels.glm.flash.v1 import prompt as PK
+    from pli.kernels.glm.flash.v1 import prompt as PK
 
     kda = _kda(*shape)
     assert PK.kda_fits(kda)
@@ -109,7 +109,7 @@ def test_prompt_moe_glue_is_the_ops_path(gpu, monkeypatch, limit):
 def test_prompt_hc_boundary_is_the_prompt_path(gpu):
     """At GLM's width the boundary kernels with MLX's GEMM for the mixes give prompt rows the prompt path's bits."""
 
-    from tensorfold.kernels.glm.flash.v1 import hc as F
+    from pli.kernels.glm.flash.v1 import hc as F
 
     cfg = _cfg(4096)
     mx.random.seed(21)
@@ -135,7 +135,7 @@ def test_prompt_forward_is_the_ops_forward(gpu, tmp_path, monkeypatch):
     """A tiny checkpoint's two prompt chunks: every hidden row and cache array equal with the kernels on and off."""
 
     from glm5_fakes import write_checkpoint
-    from tensorfold.families.glm5_next import weights
+    from pli.families.glm5_next import weights
 
     previous = mx.default_device()
     mx.set_default_device(mx.cpu)
@@ -161,10 +161,10 @@ def test_tensor_unit_chips_take_the_ops_prompt_path(gpu, tmp_path, monkeypatch):
     are the ops path's, and decode keeps its fused boundary; the same checkpoint on M1-M4 takes the kernels."""
 
     from glm5_fakes import write_checkpoint
-    from tensorfold.families.glm5_next import weights
-    from tensorfold.kernels.glm.flash.v1 import hc as HCK
-    from tensorfold.kernels.glm.flash.v1 import prompt as PK
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm as PM
+    from pli.families.glm5_next import weights
+    from pli.kernels.glm.flash.v1 import hc as HCK
+    from pli.kernels.glm.flash.v1 import prompt as PK
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm as PM
 
     previous = mx.default_device()
     mx.set_default_device(mx.cpu)
@@ -216,7 +216,7 @@ def test_staged_scan_is_mlx_lm_s_kernel(gpu, dims):
 
     from mlx_lm.models import gated_delta as gd
 
-    from tensorfold.kernels.glm.flash.v1 import prompt as PK
+    from pli.kernels.glm.flash.v1 import prompt as PK
 
     heads, d = dims
     for steps in (17, 300, 2048):
@@ -237,7 +237,7 @@ def test_staged_scan_is_mlx_lm_s_kernel(gpu, dims):
 def test_prompt_projections_keep_mlx_s_bits(gpu, fmt):
     """GLM's prompt projections through the 64-row-tile qmm (split-K shapes stay MLX's) give MLX's bits."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm as PM
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm as PM
 
     bits, group = fmt
     shapes = [(24896, 4096), (4096, 8192), (1536, 4096), (128, 4096), (16384, 1536), (4096, 16384), (4096, 2048),
@@ -254,8 +254,8 @@ def test_prompt_projections_keep_mlx_s_bits(gpu, fmt):
 def test_fused_index_scores_are_the_three_ops(gpu):
     """The DSA index scores in one kernel give iq @ pool.T, relu, the weight product and the head sum's bits."""
 
-    from tensorfold.families.glm5_next.mla import MLA
-    from tensorfold.kernels.glm.flash.v1 import prompt as PK
+    from pli.families.glm5_next.mla import MLA
+    from pli.kernels.glm.flash.v1 import prompt as PK
 
     for rows, blocks in ((512, 4096), (512, 513), (17, 700), (100, 16384), (1, 512), (512, 32768)):
         mx.random.seed(rows + blocks)

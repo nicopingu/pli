@@ -7,9 +7,9 @@ mx = pytest.importorskip("mlx.core")
 import mlx.nn as nn
 
 from tests.test_flash_next_host_table import DIMS, _checkpoint
-from tensorfold.families.qwen4_exp import host_table
-from tensorfold.families.qwen4_exp.model import NGramEmbedding
-from tensorfold.kernels.qwen.flash_next.v1 import embed
+from pli.families.qwen4_exp import host_table
+from pli.families.qwen4_exp.model import NGramEmbedding
+from pli.kernels.qwen.flash_next.v1 import embed
 
 
 @pytest.mark.parametrize("value", [0.000199, 1.0])

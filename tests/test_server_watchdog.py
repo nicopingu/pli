@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from tensorfold.server import app
+from pli.server import app
 
 
 def run_watch(monkeypatch, frames):

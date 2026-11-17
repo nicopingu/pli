@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server import stacks
+from pli.server import stacks
 
 HEADER = "most recent call first"
 

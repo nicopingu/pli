@@ -12,8 +12,8 @@ from urllib.parse import quote_from_bytes
 
 import pytest
 
-from tensorfold.vision import images, images_http
-from tensorfold.vision.images import ImageInput, ImageInputError, ImageLimits, ImageSource, load_images, split_images
+from pli.vision import images, images_http
+from pli.vision.images import ImageInput, ImageInputError, ImageLimits, ImageSource, load_images, split_images
 
 Image = pytest.importorskip("PIL.Image")
 
@@ -230,7 +230,7 @@ def test_pillow_missing_error_is_actionable(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", missing)
-    with pytest.raises(ImageInputError, match=r"install tensorfold\[vision\]"):
+    with pytest.raises(ImageInputError, match=r"install pli\[vision\]"):
         load_images([ImageSource(data_url())])
 
 

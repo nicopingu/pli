@@ -19,9 +19,9 @@ from types import SimpleNamespace
 import mlx.core as mx
 import numpy as np
 
-from tensorfold.pli import relayout
-from tensorfold.pli.ane import client, ffn
-from tensorfold.pli.ane import requant_cpu as rq
+from pli.additions import relayout
+from pli.additions.ane import client, ffn
+from pli.additions.ane import requant_cpu as rq
 
 OUTPUT = sys.argv[1]
 os.makedirs(OUTPUT, exist_ok=True)

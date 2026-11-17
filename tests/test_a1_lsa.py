@@ -16,9 +16,9 @@ mx = pytest.importorskip("mlx.core")
 
 from mlx_lm.models.cache import KVCache  # noqa: E402
 
-from tensorfold.kernels.qwen.dense.v1 import exact_attention as EA  # noqa: E402
-from tensorfold.pli import a1_lsa as A1  # noqa: E402
-from tensorfold.pli import attention_attm as AT  # noqa: E402
+from pli.kernels.qwen.dense.v1 import exact_attention as EA  # noqa: E402
+from pli.additions import a1_lsa as A1  # noqa: E402
+from pli.additions import attention_attm as AT  # noqa: E402
 
 LAYER, THRESHOLD, SCALE = 11, 2048, 256 ** -0.5
 
@@ -159,8 +159,8 @@ def test_s3b_like_decode(a1, monkeypatch):
 def test_resume_same_bits(a1):
     """Index keys rebuilt at once (fresh resumed cache), cache copy (other id), rollback and start of a request."""
 
-    from tensorfold.engine.family_prefill import FamilyPrefill
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.family_prefill import FamilyPrefill
+    from pli.engine.lane_engine import LaneEngine
 
     kk, vv, qq = _data(4400, seed=4)
     q0 = 4000
@@ -242,7 +242,7 @@ def test_tree(a1):
 
 
 def test_snapshot_skips_index_keys(a1, tmp_path):
-    from tensorfold.engine.prefix_snapshots import save_snapshot
+    from pli.engine.prefix_snapshots import save_snapshot
 
     kk, vv, qq = _data(4200)
     c = _cache(kk, vv)

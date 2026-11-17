@@ -6,7 +6,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
 
 def _broken() -> bool:
@@ -52,7 +52,7 @@ def test_kernels_that_match_say_nothing(check, capsys):
 
 
 def test_glm_checks_its_expert_kernels_at_startup(monkeypatch):
-    from tensorfold.families.glm5_next.runtime import GLMFlash
+    from pli.families.glm5_next.runtime import GLMFlash
 
     calls = []
     monkeypatch.setattr(prefill_mm, "fast_prefill", lambda: True)

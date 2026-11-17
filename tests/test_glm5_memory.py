@@ -9,11 +9,11 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 
 from glm5_fakes import TEXT, write_checkpoint  # noqa: E402
-from tensorfold.engine.memory import _kv_bytes  # noqa: E402
-from tensorfold.families.glm5_next import caches, weights  # noqa: E402
-from tensorfold.families.glm5_next.runtime import GLMFlash  # noqa: E402
-from tensorfold.server.memory_budget import CacheMemory  # noqa: E402
-from tensorfold.server.prompt_memory import PromptMemory  # noqa: E402
+from pli.engine.memory import _kv_bytes  # noqa: E402
+from pli.families.glm5_next import caches, weights  # noqa: E402
+from pli.families.glm5_next.runtime import GLMFlash  # noqa: E402
+from pli.server.memory_budget import CacheMemory  # noqa: E402
+from pli.server.prompt_memory import PromptMemory  # noqa: E402
 
 
 def _mla_cache(tokens: int) -> caches.MLACache:
@@ -71,8 +71,8 @@ def test_glm_states_its_prefill_workspace(tmp_path):
 
 
 def test_glm_states_its_allowance_for_a_256_gb_mac():
-    from tensorfold.families import glm5_next
-    from tensorfold.server.memory_budget import model_fraction
+    from pli.families import glm5_next
+    from pli.server.memory_budget import model_fraction
 
     gib = 1024**3
     assert model_fraction(glm5_next, 256 * gib) == 0.85

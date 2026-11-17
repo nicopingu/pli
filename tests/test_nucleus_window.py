@@ -6,8 +6,8 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.engine.exact_sampling import Sampling  # noqa: E402
-from tensorfold.families.qwen3_5.family import Qwen35Family  # noqa: E402
+from pli.engine.exact_sampling import Sampling  # noqa: E402
+from pli.families.qwen3_5.family import Qwen35Family  # noqa: E402
 
 V = 512
 

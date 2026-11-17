@@ -16,10 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import glm5_q8_0_gguf_to_mlx as tool  # noqa: E402
 from glm5_fakes import write_checkpoint  # noqa: E402
 from test_glm5_next_family import _run_engine, tokens  # noqa: E402
-from tensorfold.families import glm5_next  # noqa: E402
-from tensorfold.families.glm5_next import linear, weights  # noqa: E402
-from tensorfold.families.glm5_next import mtp as glm_mtp  # noqa: E402
-from tensorfold.families.glm5_next.runtime import GLMFlash  # noqa: E402
+from pli.families import glm5_next  # noqa: E402
+from pli.families.glm5_next import linear, weights  # noqa: E402
+from pli.families.glm5_next import mtp as glm_mtp  # noqa: E402
+from pli.families.glm5_next.runtime import GLMFlash  # noqa: E402
 
 DENSE = ("f_a_proj", "f_b_proj", "g_a_proj", "g_b_proj", "b_proj", "indexer.wq_b", "indexer.wk", "indexer.weights_proj")
 
@@ -148,9 +148,9 @@ def test_the_prompt_kernels_leave_it_to_mlx_s_ops(q8_checkpoint, monkeypatch):
 
     if not mx.metal.is_available():
         pytest.skip("needs Metal")
-    from tensorfold.families.glm5_next import config
-    from tensorfold.kernels.glm.flash.v1 import prompt as PK
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm as PM
+    from pli.families.glm5_next import config
+    from pli.kernels.glm.flash.v1 import prompt as PK
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm as PM
 
     mx.set_default_device(mx.gpu)                                        # the autouse fixture restores the CPU
     model = weights.load_backbone(q8_checkpoint)

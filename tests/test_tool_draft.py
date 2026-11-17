@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tensorfold.engine.tool_draft import ToolCallProposer, tool_schema
+from pli.engine.tool_draft import ToolCallProposer, tool_schema
 
 TOOLS = [
     {"type": "function", "function": {"name": "read", "parameters": {
@@ -49,7 +49,7 @@ def test_snapshot_round_trip(tmp_path):
     mx = pytest.importorskip("mlx.core")
     from mlx_lm.models.cache import ArraysCache, KVCache
 
-    from tensorfold.engine.prefix_snapshots import load_snapshots, save_snapshot
+    from pli.engine.prefix_snapshots import load_snapshots, save_snapshot
 
     kv = KVCache()
     kv.update_and_fetch(mx.ones((1, 2, 5, 4)), mx.full((1, 2, 5, 4), 2.0))
@@ -71,8 +71,8 @@ def test_snapshot_round_trip(tmp_path):
 def test_streamed_tool_call_arguments_equal_the_parsed_call():
     import json
 
-    from tensorfold.server.tools import parse_tool_calls_from_content
-    from tensorfold.engine.tool_draft import ToolCallStreamer
+    from pli.server.tools import parse_tool_calls_from_content
+    from pli.engine.tool_draft import ToolCallStreamer
 
     tools = [{"type": "function", "function": {"name": "write", "parameters": {
         "type": "object", "properties": {"path": {}, "content": {}}, "required": ["path", "content"]}}}]
@@ -92,7 +92,7 @@ def test_streamed_tool_call_arguments_equal_the_parsed_call():
 
 
 def test_unknown_tool_is_not_streamed():
-    from tensorfold.engine.tool_draft import ToolCallStreamer
+    from pli.engine.tool_draft import ToolCallStreamer
 
     streamer = ToolCallStreamer([{"type": "function", "function": {"name": "read", "parameters": {}}}])
     assert streamer.feed("<tool_call>\n<function=bash>\n<parameter=command>\nls\n") == []
@@ -108,8 +108,8 @@ def test_parameter_values_keep_their_own_whitespace():
     """
     import json
 
-    from tensorfold.server.tools import parse_tool_calls_from_content
-    from tensorfold.engine.tool_draft import ToolCallStreamer
+    from pli.server.tools import parse_tool_calls_from_content
+    from pli.engine.tool_draft import ToolCallStreamer
 
     tools = [{"type": "function", "function": {"name": "write", "parameters": {
         "type": "object", "properties": {"path": {}, "content": {}}}}}]
@@ -134,7 +134,7 @@ def test_disk_blocks_read_the_longest_stored_prefix(tmp_path):
 
     from mlx_lm.models.cache import KVCache
 
-    from tensorfold.engine.prefix_snapshots import DiskBlocks, load_snapshot, save_snapshot
+    from pli.engine.prefix_snapshots import DiskBlocks, load_snapshot, save_snapshot
 
     def cache(n):
         kv = KVCache()
@@ -166,9 +166,9 @@ def test_target_candidates_reach_the_capture_sidecar(tmp_path):
     mx = pytest.importorskip("mlx.core")
     import numpy as np
 
-    from tensorfold.drafters.dflash_drafter import DFlashProposer, _capture_writer
-    from tensorfold.engine.exact_sampling import Sampling, choose, sample_rows
-    from tensorfold.engine.tool_draft import ToolCallProposer
+    from pli.drafters.dflash_drafter import DFlashProposer, _capture_writer
+    from pli.engine.exact_sampling import Sampling, choose, sample_rows
+    from pli.engine.tool_draft import ToolCallProposer
 
     logits = mx.array(np.random.default_rng(0).normal(size=(3, 300)).astype(np.float32)).astype(mx.bfloat16)
     s = Sampling(seed=7)

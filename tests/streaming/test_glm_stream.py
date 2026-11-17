@@ -10,11 +10,11 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 
 import glm5_fakes  # noqa: E402
-from tensorfold.families import glm5_next  # noqa: E402
-from tensorfold.families.glm5_next import config, stream, weights  # noqa: E402
-from tensorfold.kernels.glm.flash.v1 import moe as MK  # noqa: E402
-from tensorfold.kernels.glm.flash.v1 import stream_moe  # noqa: E402
-from tensorfold.streaming.pool import Slots, expert_nbytes, sources  # noqa: E402
+from pli.families import glm5_next  # noqa: E402
+from pli.families.glm5_next import config, stream, weights  # noqa: E402
+from pli.kernels.glm.flash.v1 import moe as MK  # noqa: E402
+from pli.kernels.glm.flash.v1 import stream_moe  # noqa: E402
+from pli.streaming.pool import Slots, expert_nbytes, sources  # noqa: E402
 
 
 def metal():
@@ -125,7 +125,7 @@ def test_the_checkpoints_decoder_experts_are_named_and_counted(tmp_path):
 
 @needs_metal
 def test_streamed_experts_give_the_resident_forward(tmp_path, monkeypatch):
-    from tensorfold.streaming import build
+    from pli.streaming import build
 
     try:
         build.load()

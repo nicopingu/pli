@@ -17,12 +17,12 @@ With no keys, the existing open routes and health details stay unchanged; a non-
 
 Replace the key file atomically to rotate keys. Its modification time is checked at most once a second; SIGHUP
 requests an immediate reload. An empty, unreadable or malformed replacement closes authenticated routes until a
-valid file returns. Request logs and `tensorfold:requests_total` use labels, never keys or digests.
+valid file returns. Request logs and `pli:requests_total` use labels, never keys or digests.
 Unnamed keys receive `cli-N`, `env-N` or `file-N` labels. Labels contain at most 64 letters, digits, dots,
 underscores or hyphens; choose non-secret labels.
 
-`tensorfold service install MODEL --api-key-file PATH` forwards the file to its server.
-For the control room, `tensorfold tui --url URL --token-env VARIABLE` sends that variable's value as a bearer key.
+`pli service install MODEL --api-key-file PATH` forwards the file to its server.
+For the control room, `pli tui --url URL --token-env VARIABLE` sends that variable's value as a bearer key.
 Prefer a restricted file over command-line keys, which can appear in the operating system's process list.
 
 | Route | Behavior |
@@ -147,7 +147,7 @@ The model writes the arguments; a malformed call returns as content.
 Every model enforces `response_format` (`{"type": "json_schema", "json_schema": {"schema": ...}}`
 or `{"type": "json_object"}`) and vLLM's `guided_json`, `guided_regex`, `guided_choice`, `guided_grammar` (EBNF) and
 `structured_outputs` (`json`, `json_object`, `regex`, `choice` or `grammar`), alone or under `--parallel N`.
-It needs xgrammar on the server: `pip install 'tensorfold[grammar]'`, which also
+It needs xgrammar on the server: `pip install 'pli[grammar]'`, which also
 installs torch, Macs included. Drafting stays on. Before each verify forward the engine cuts the drafts the grammar
 rejects, then masks each remaining row's logits to the tokens the grammar allows after that row's path, so a
 constrained reply equals its `"draft": false` reply and its solo run.
@@ -240,17 +240,17 @@ The scrape carries `requests_running`, `requests_waiting`, `prompt_tokens_total`
 (draft tokens verified and kept on finished requests; the engines keep one draft counter, so copies and chain
 drafts share it), `request_latency_seconds`, `time_to_first_token_seconds` and `request_decode_seconds` (each
 finished request's decode time, from first token to end; its `_sum`
-over `generation_tokens_total` is the decode rate), all under the `tensorfold:` prefix. Every reading is repeated under a vLLM-compatible name (`num_requests_running`, `num_requests_waiting`,
+over `generation_tokens_total` is the decode rate), all under the `pli:` prefix. Every reading is repeated under a vLLM-compatible name (`num_requests_running`, `num_requests_waiting`,
 `kv_cache_usage_perc`, `spec_decode_num_draft_tokens_total`, `spec_decode_num_accepted_tokens_total`,
 `e2e_request_latency_seconds`, `request_decode_time_seconds`) with identical values, so a dashboard copied from vLLM fills by swapping the
-`tensorfold:` prefix for the metric name. `client_disconnections_total` (requests the client walked away from)
+`pli:` prefix for the metric name. `client_disconnections_total` (requests the client walked away from)
 and `preemptions_total` (background work that gave up a lane to a later request) are published where the
 server counts those events, and never at a fabricated zero.
 
 ## The Responses API
 
 `POST /v1/responses` takes OpenAI's Responses request and runs it as the equivalent chat completion, through the
-same handler and engine path. A response has that chat completion's prompt and tokens (the `tensorfold` block's
+same handler and engine path. A response has that chat completion's prompt and tokens (the `pli` block's
 `token_sha` matches), drafts, and equals its `"draft": false` run and its solo run.
 
 - `input` is a string or a list of items: messages (`input_text`, and `input_image` with `--vision`),
@@ -300,7 +300,7 @@ requires a vision-capable model served with `--vision`. Thinking is off unless e
 `display` does not suppress it. Claude Code's `context_management` keep-all thinking directive is accepted. Mid-conversation system text stays
 in place with its system role; the model's chat template must support later system messages. Turn-scoped
 system messages, per-message output configuration and inline tool changes are unsupported.
-JSON schema output, including Claude Code title requests, requires `pip install 'tensorfold[grammar]'`.
+JSON schema output, including Claude Code title requests, requires `pip install 'pli[grammar]'`.
 
 Usage separates uncached `input_tokens` from `cache_read_input_tokens` and reports `output_tokens_details.thinking_tokens`
 when the backend counts them. Prefix caching remains automatic,

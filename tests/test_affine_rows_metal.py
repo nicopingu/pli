@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 mx = pytest.importorskip('mlx.core')
-from tensorfold.kernels.qwen.dense.v1 import affine_rows
+from pli.kernels.qwen.dense.v1 import affine_rows
 
 pytestmark = pytest.mark.skipif(not mx.metal.is_available(), reason='requires Metal')
 

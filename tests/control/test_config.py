@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from tensorfold.control.config import Paths, Profile, Store, read_environment, validate_env
-from tensorfold.control.safety import ControlError, atomic_write, clean, private_read, redact
+from pli.control.config import Paths, Profile, Store, read_environment, validate_env
+from pli.control.safety import ControlError, atomic_write, clean, private_read, redact
 
 
 @pytest.mark.parametrize("name", ["", "../bad", "UPPER", "a/b", "-x", "a.b", "a" * 49, "a\n"])

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tensorfold.pli import env_names, profiles
+from pli.additions import env_names, profiles
 
 SRC = str(Path(__file__).resolve().parents[1] / "src")
 
@@ -15,7 +15,7 @@ SRC = str(Path(__file__).resolve().parents[1] / "src")
 def test_table_is_one_to_one():
     olds = [old for old, _ in env_names.RENAMED]
     news = [new for _, new in env_names.RENAMED]
-    assert len(set(olds)) == len(olds) == len(set(news)) == len(news) == 174
+    assert len(set(olds)) == len(olds) == len(set(news)) == len(news) == 172
     assert not set(olds) & set(news)
 
 
@@ -43,7 +43,7 @@ def test_import_applies_old_names_first():
     env = {**os.environ, "PYTHONPATH": SRC, "PLI_ARBRE_SEUL": "1", "PLI_PROFIL": "m1-ultra"}
     env.pop("PLI_TREE_ALONE", None)
     env.pop("PLI_PROFILE", None)
-    out = subprocess.run([sys.executable, "-c", "import os, tensorfold; print(os.environ['PLI_TREE_ALONE'], "
+    out = subprocess.run([sys.executable, "-c", "import os, pli; print(os.environ['PLI_TREE_ALONE'], "
                           "os.environ['PLI_PROFILE'])"], env=env, capture_output=True, text=True, check=True)
     assert out.stdout.split() == ["1", "m1-ultra"]
 
@@ -76,7 +76,7 @@ def test_old_values_of_prefill_cpu_mode():
                                            ("layer", "layer"), (None, "shifted")])
 def test_prefill_cpu_mode_reads_old_names_and_values(monkeypatch, name, text, expected):
     pytest.importorskip("mlx.core")
-    from tensorfold.families.qwen3_5 import prefill_cpu
+    from pli.families.qwen3_5 import prefill_cpu
 
     monkeypatch.delenv("PLI_LECTURE_CPU_MODE", raising=False)
     monkeypatch.delenv("PLI_PREFILL_CPU_MODE", raising=False)
@@ -102,7 +102,7 @@ def test_settings_fingerprint_counts_each_setting_once():
 
 
 def test_service_profiles_accept_the_new_names():
-    from tensorfold.control.config import validate_env
+    from pli.control.config import validate_env
 
     env = {"PLI_HYBRID": "1", "PLI_MTP_HEAD": "/models/mtp.safetensors", "TF_FLASH_MTP": "2"}
     assert validate_env(env, secrets=False) == env
@@ -115,7 +115,7 @@ def test_settings_of_4_0_0_read_under_their_old_names():
 
 
 def test_extended_list_old_file_name(tmp_path):
-    from tensorfold.pli import extended_list
+    from pli.additions import extended_list
 
     (tmp_path / "extended-list-2048.txt").write_text("5\n3\n5\n")
     assert extended_list._path(str(tmp_path / "liste-plus-2048.txt")) == str(tmp_path / "extended-list-2048.txt")

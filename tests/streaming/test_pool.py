@@ -12,7 +12,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.streaming import pool  # noqa: E402
+from pli.streaming import pool  # noqa: E402
 
 LAYERS, EXPERTS, TOPK = 3, 8, 2
 

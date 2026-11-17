@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tensorfold.families.deepseek_v4.prompts import DeepSeekTokenizer, render
-from tensorfold.server.text import hide_tool_calls
-from tensorfold.server.tools import parse_tool_calls_from_content
+from pli.families.deepseek_v4.prompts import DeepSeekTokenizer, render
+from pli.server.text import hide_tool_calls
+from pli.server.tools import parse_tool_calls_from_content
 
 FIXTURES = Path(__file__).parent / "fixtures" / "deepseek_v4"
 
@@ -85,7 +85,7 @@ class SpecialEncoder:
 def test_prompt_chunks_start_at_replies():
     """The history renders without the reply prefix, and the reply marker starts a follow-up's chunk."""
 
-    from tensorfold.engine.prefill_plan import PrefillPlan, message_markers
+    from pli.engine.prefill_plan import PrefillPlan, message_markers
 
     tok = DeepSeekTokenizer(SpecialEncoder())
     talk = [{"role": "user", "content": "x" * 300}]

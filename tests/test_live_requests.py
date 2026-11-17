@@ -4,8 +4,8 @@ import queue
 import threading
 from types import SimpleNamespace
 
-from tensorfold.server import live
-from tensorfold.server.live import requests
+from pli.server import live
+from pli.server.live import requests
 
 
 def job(job_id, prompt, *, submitted=0.0, started=0.0, cached=0, emitted=0, stream=True, background=False,

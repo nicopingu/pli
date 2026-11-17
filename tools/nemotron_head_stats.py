@@ -89,7 +89,7 @@ class HeadWalk:
         return self.embed(self.mx.array([[value]], dtype=self.mx.uint32))
 
     def _draw(self, logits: Any, position: int) -> Any:
-        from tensorfold.engine.gpu_sampling import sample
+        from pli.engine.gpu_sampling import sample
 
         return sample(logits.reshape(1, -1), self.sampling, [position], ids=self.ids)
 
@@ -181,9 +181,9 @@ def measure_reply(model: Any, tokenizer: Any, prompt: str, sampling: Any, max_to
 
     import mlx.core as mx
 
-    from tensorfold.engine.family_common import cache_arrays
-    from tensorfold.engine.gpu_sampling import sample
-    from tensorfold.engine.lane_engine import SuffixLookupProposer
+    from pli.engine.family_common import cache_arrays
+    from pli.engine.gpu_sampling import sample
+    from pli.engine.lane_engine import SuffixLookupProposer
 
     ids = chat_ids(tokenizer, prompt)
     cache = model.make_cache()
@@ -355,8 +355,8 @@ def main() -> int:
 
     for key, value in (("MLX_MAX_OPS_PER_BUFFER", "200"), ("MLX_MAX_MB_PER_BUFFER", "100000")):
         os.environ.setdefault(key, value)
-    from tensorfold.engine.exact_sampling import Sampling
-    from tensorfold.families import nemotron_h
+    from pli.engine.exact_sampling import Sampling
+    from pli.families import nemotron_h
 
     model, tokenizer = nemotron_h.load(Path(args.model))
     if model.mtp is None:

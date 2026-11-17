@@ -10,13 +10,13 @@ import numpy as np
 def _module(tmp_path, monkeypatch, days="7"):
     monkeypatch.setenv("PLI_FALCON_TOKENS", str(tmp_path / "jetons"))
     monkeypatch.setenv("PLI_FALCON_TOKENS_DAYS", days)
-    from tensorfold.pli.falcon import tokens
+    from pli.additions.falcon import tokens
     return importlib.reload(tokens)
 
 
 def test_off_by_default(monkeypatch):
     monkeypatch.delenv("PLI_FALCON_TOKENS", raising=False)
-    from tensorfold.pli.falcon import tokens
+    from pli.additions.falcon import tokens
     t = importlib.reload(tokens)
     assert not t.active()
     t.record([1, 2], [3])

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.lane_family import FamilyRounds
+from pli.engine.lane_family import FamilyRounds
 
 COSTS = {1: 8.0, 2: 11.0, 3: 11.6, 4: 12.1, 5: 13.0}         # ms by verify rows (the M3 Ultra's Qwen3.6 curve)
 
@@ -89,7 +89,7 @@ def test_plain_round_times_are_learned_only_with_the_guard():
 
 
 def test_shared_rounds_draft_nothing_where_nothing_pays_and_still_probe(monkeypatch):
-    from tensorfold.engine import allocate
+    from pli.engine import allocate
 
     engine = policy([0.1] * 4)
     engine.node_probabilities = False

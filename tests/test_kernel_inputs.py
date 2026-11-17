@@ -8,11 +8,11 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.engine import gpu_sampling  # noqa: E402
-from tensorfold.engine.exact_sampling import Sampling  # noqa: E402
-from tensorfold.kernels import inputs  # noqa: E402
-from tensorfold.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
-from tensorfold.kernels.nemotron.lightning.v1 import rows  # noqa: E402
+from pli.engine import gpu_sampling  # noqa: E402
+from pli.engine.exact_sampling import Sampling  # noqa: E402
+from pli.kernels import inputs  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import rows  # noqa: E402
 
 
 def test_padding():

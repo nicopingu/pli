@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from tensorfold.engine.prefill_plan import PrefillPlan, PromptChunks, message_markers
+from pli.engine.prefill_plan import PrefillPlan, PromptChunks, message_markers
 
 OPEN, ASSIST = 99, 98                    # a message's first token; the role token after it in an assistant message
 
@@ -183,8 +183,8 @@ def test_serve_cuts_prompts_at_the_templates_markers_and_names_the_plan_in_snaps
     pytest.importorskip("mlx.core")
     from pathlib import Path
 
-    from tensorfold import cli
-    import tensorfold.server.app as app_module
+    from pli import cli
+    import pli.server.app as app_module
 
     seen: dict[str, Any] = {}
 

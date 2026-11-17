@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("mlx.core")                  # the Mac server's fakes
 
-from tensorfold.server.http import reply_model
+from pli.server.http import reply_model
 from tests.http_fakes import post
 from tests.test_lane_server import make_app
 

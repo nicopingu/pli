@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from tensorfold.server.checkpoints import choose_checkpoints
-from tensorfold.server.prompt_blocks import PromptBlocks
+from pli.server.checkpoints import choose_checkpoints
+from pli.server.prompt_blocks import PromptBlocks
 
 
 class GemmaLikeTokenizer:

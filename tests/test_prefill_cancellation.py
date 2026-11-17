@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.lane_engine import LaneStream
-from tensorfold.server.app import ChatJob, Scheduler
-from tensorfold.server.cancellation import Cancellation, PrefillGuard, RequestCancelled, socket_cancellation
+from pli.engine.lane_engine import LaneStream
+from pli.server.app import ChatJob, Scheduler
+from pli.server.cancellation import Cancellation, PrefillGuard, RequestCancelled, socket_cancellation
 from tests.lane_fakes import FakeEngine, fake_serial
 
 

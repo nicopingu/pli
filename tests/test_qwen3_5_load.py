@@ -11,8 +11,8 @@ from types import ModuleType, SimpleNamespace as NS
 
 import pytest
 
-from tensorfold import families
-from tensorfold.families import qwen3_5
+from pli import families
+from pli.families import qwen3_5
 
 
 class Linear(dict):
@@ -59,10 +59,10 @@ def gate(monkeypatch):
     mlx.core, mlx.nn = core, nn
     for name, module in (("mlx", mlx), ("mlx.core", core), ("mlx.nn", nn)):
         monkeypatch.setitem(sys.modules, name, module)
-    inputs = ModuleType("tensorfold.kernels.inputs")
+    inputs = ModuleType("pli.kernels.inputs")
     inputs.ints = lambda *args, **kwargs: pytest.fail("a load gate must not allocate kernel inputs")
     monkeypatch.setitem(sys.modules, inputs.__name__, inputs)
-    package = importlib.import_module("tensorfold.kernels.qwen.dense.v1")
+    package = importlib.import_module("pli.kernels.qwen.dense.v1")
     source = Path(package.__file__).with_name("lane_qmm.py")
     spec = importlib.util.spec_from_file_location("quant_gate_lane_qmm", source)
     lane = importlib.util.module_from_spec(spec)
@@ -71,7 +71,7 @@ def gate(monkeypatch):
     row = ModuleType(package.__name__ + ".row_matmul")
     row.WINDOW_ROWS = 16
     monkeypatch.setattr(package, "row_matmul", row, raising=False)
-    family = ModuleType("tensorfold.families.qwen3_5.family")
+    family = ModuleType("pli.families.qwen3_5.family")
     family.Qwen35Family = Family
     monkeypatch.setitem(sys.modules, family.__name__, family)
     calls = {"loaded": [], "lanes": [], "rows": []}
@@ -97,7 +97,7 @@ def gate(monkeypatch):
 def test_native_lane_formats_keep_tensor_unit_routing(gate, top, widths):
     run, calls = gate
     family, _ = run(top, widths)
-    assert family.inner._tensorfold_lanes is True and not family.rows
+    assert family.inner._pli_lanes is True and not family.rows
     assert calls["lanes"] == [family.inner] and calls["rows"] == []
 
 
@@ -107,7 +107,7 @@ def test_packed_row_decoder_accepts_every_affine_format(gate, top, units, lane_k
     monkeypatch.delenv("PLI_COPY_ROWS", raising=False)
     run, calls = gate
     family, _ = run(top, (top, top), units=units, lane_kernels=lane_kernels)
-    assert family.rows and not family.inner._tensorfold_lanes
+    assert family.rows and not family.inner._pli_lanes
     assert calls["rows"] == [family.inner] and calls["lanes"] == []
     assert (family.exact_width, family.first_copy_rows) == (128, 16)
 

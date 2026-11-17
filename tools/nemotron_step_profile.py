@@ -125,11 +125,11 @@ def main() -> int:
         os.environ.setdefault(key, value)                      # the server's command-buffer settings
     import mlx.core as mx
 
-    from tensorfold.engine.family_common import cache_arrays
-    from tensorfold.engine.lane_engine import LaneEngine
-    from tensorfold.families import nemotron_h
-    from tensorfold.kernels.nemotron.lightning.v1 import kernels as K
-    from tensorfold.kernels.nemotron.lightning.v1 import rows as R
+    from pli.engine.family_common import cache_arrays
+    from pli.engine.lane_engine import LaneEngine
+    from pli.families import nemotron_h
+    from pli.kernels.nemotron.lightning.v1 import kernels as K
+    from pli.kernels.nemotron.lightning.v1 import rows as R
 
     model, tokenizer = nemotron_h.load(Path(args.model))
     fused = model.fused

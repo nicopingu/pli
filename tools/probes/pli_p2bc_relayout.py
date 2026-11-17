@@ -7,8 +7,8 @@ import time
 
 import mlx.core as mx
 
-from tensorfold.kernels.qwen.dense.v1 import simd_qmm as Q
-from tensorfold.pli import unpack, relayout as R
+from pli.kernels.qwen.dense.v1 import simd_qmm as Q
+from pli.additions import unpack, relayout as R
 
 SHAPES = [(34816, 5120), (5120, 17408), (16480, 5120), (14336, 5120), (5120, 6144), (64, 5120)]
 

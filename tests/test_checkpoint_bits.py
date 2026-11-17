@@ -6,11 +6,11 @@ import mlx.core as mx
 import pytest
 from mlx_lm.models.cache import KVCache
 
-from tensorfold.engine.prefix_snapshots import load_snapshot, save_snapshot
-from tensorfold.pli import checkpoint_bits as _cb
-from tensorfold.pli import kv_sharing as _kvs
-from tensorfold.server.checkpoints import CheckpointStore
-from tensorfold.server.memory_budget import cache_nbytes
+from pli.engine.prefix_snapshots import load_snapshot, save_snapshot
+from pli.additions import checkpoint_bits as _cb
+from pli.additions import kv_sharing as _kvs
+from pli.server.checkpoints import CheckpointStore
+from pli.server.memory_budget import cache_nbytes
 
 
 class State:                                  # a DeltaNet-like state for the shape: never reduced
@@ -34,7 +34,7 @@ def kv(n: int, heads: int = 4, d: int = 256, seed: int = 0) -> KVCache:
 
 
 def copier(cache):
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     return LaneEngine.copy_single_cache(cache)
 

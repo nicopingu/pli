@@ -7,9 +7,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.kernels.qwen.dense.v1 import lane_fuse, lane_glue, lane_qmm  # noqa: E402
+from pli.kernels.qwen.dense.v1 import lane_fuse, lane_glue, lane_qmm  # noqa: E402
 
-from tensorfold.kernels.qwen.dense.v1 import (  # noqa: E402
+from pli.kernels.qwen.dense.v1 import (  # noqa: E402
     lane_attention, lane_multi, lane_tree, stream_attention, stream_gdn)
 from tests.kernel_signatures import changed, recording  # noqa: E402
 
@@ -243,7 +243,7 @@ def test_rotated_projections_stack_under_their_shared_rotation(kind):
     """Projections that rotate their rows first (Bonsai) stack their inner matmuls, rotating x once, same bits."""
 
     _needs_tensor_units()
-    from tensorfold.families.bonsai.modules import RotatedLinear
+    from pli.families.bonsai.modules import RotatedLinear
 
     mx.random.seed(21)
     signs = mx.where(mx.random.uniform(shape=(K,)) < 0.5, -1.0, 1.0).astype(mx.float32)

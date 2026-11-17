@@ -9,9 +9,9 @@ Video, audio and image generation are not supported by this adapter.
 Install the optional image dependencies (from a checkout, `python -m pip install '.[vision]'`):
 
 ```bash
-python -m pip install 'tensorfold[vision] @ git+https://github.com/ashhart/TensorFold.git'
-tensorfold serve TensorFold/Qwen3.8-27B-MLX-4bit --vision
-tensorfold serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --vision
+python -m pip install 'pli[vision] @ git+https://github.com/ashhart/TensorFold.git'
+pli serve TensorFold/Qwen3.8-27B-MLX-4bit --vision
+pli serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --vision
 ```
 
 MLX reads per-module quantized tower weights when the checkpoint declares their format.
@@ -67,7 +67,7 @@ Requests accept up to four JPEG, PNG or WebP images by default. `--vision-max-im
 image-count limit when serving with `--vision`:
 
 ```bash
-tensorfold serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --vision --vision-max-images 8
+pli serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --vision --vision-max-images 8
 ```
 
 The count includes **all images in the submitted message history**, including images from earlier turns

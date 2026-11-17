@@ -7,8 +7,8 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 
 from glm5_fakes import write_checkpoint  # noqa: E402
-from tensorfold.families import glm5_next  # noqa: E402
-from tensorfold.families.glm5_next import linear, weights  # noqa: E402
+from pli.families import glm5_next  # noqa: E402
+from pli.families.glm5_next import linear, weights  # noqa: E402
 
 DOWN = "model.language_model.layers.0.mlp.down_proj"
 
@@ -61,7 +61,7 @@ def test_projections_of_one_input_at_two_formats_stay_separate_calls(tmp_path):
 def test_a_mixed_checkpoints_entries_are_read_by_the_layouts_names(tmp_path):
     from glm5_fakes import TEXT
 
-    from tensorfold.families.glm5_next.config import quant_formats
+    from pli.families.glm5_next.config import quant_formats
 
     # mlx-lm's keys: a stated entry without bits takes MLX's default for its mode (to_quantized), as the 27B reads it
     config = {"text_config": TEXT, "quantization": {"bits": 4, "group_size": 64, "language_model.lm_head": {"bits": 8},

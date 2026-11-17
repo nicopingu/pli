@@ -8,10 +8,10 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 
 from glm5_fakes import TEXT, write_checkpoint  # noqa: E402
-from tensorfold.families.glm5_next import caches, config, weights  # noqa: E402
-from tensorfold.families.glm5_next.runtime import GLMFlash  # noqa: E402
-from tensorfold.kernels.glm.flash.v1 import kda as KDA_K  # noqa: E402
-from tensorfold.kernels.glm.flash.v1 import sparse_attention as SA  # noqa: E402
+from pli.families.glm5_next import caches, config, weights  # noqa: E402
+from pli.families.glm5_next.runtime import GLMFlash  # noqa: E402
+from pli.kernels.glm.flash.v1 import kda as KDA_K  # noqa: E402
+from pli.kernels.glm.flash.v1 import sparse_attention as SA  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -79,7 +79,7 @@ def test_fused_kda_rows_are_one_row_steps(gpu, checkpoint, rows):
 
 
 def test_fused_kda_keep_replays_a_prefix_exactly(gpu, checkpoint):
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     model = weights.load_backbone(checkpoint)
     base = model.make_cache()
@@ -127,7 +127,7 @@ def test_indexed_attention_rows_are_independent_and_close(gpu):
 def test_long_context_windows_are_exact(checkpoint, monkeypatch, sparse):
     """Past index_topk every decode row reads its chosen blocks: 2-8-row windows keep one-row bits, kernel on or off."""
 
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     monkeypatch.setattr(config, "SPARSE_KERNEL", sparse)
     model = weights.load_backbone(checkpoint)

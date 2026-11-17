@@ -13,7 +13,7 @@ if not mx.metal.is_available():
 
 from test_qwen4_exp_family import TEXT, _flat  # noqa: E402
 
-from tensorfold.families.qwen4_exp import model as q4  # noqa: E402
+from pli.families.qwen4_exp import model as q4  # noqa: E402
 
 
 def gpu_tiny(seed: int = 0) -> q4.Qwen4Exp:
@@ -68,9 +68,9 @@ def test_selected_keys_match_the_reference_attention(monkeypatch):
 def test_resumed_prompt_equals_fresh_through_the_kernels(monkeypatch, dense_keys):
     """Resumed equals fresh with the dense-or-kernels switch inside the prompt (DENSE_KEYS 20) and without."""
 
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     monkeypatch.setattr(q4.prefill, "DENSE_KEYS", dense_keys)
     model = gpu_tiny(1)

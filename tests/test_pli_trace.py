@@ -11,7 +11,7 @@ def _reload(monkeypatch, force: str = "", folder: str = "", events_path: str = "
     monkeypatch.setenv("PLI_TRACE", force)
     monkeypatch.setenv("PLI_TRACE_DIR", folder)
     monkeypatch.setenv("PLI_EVENTS", events_path)
-    from tensorfold.pli import events, trace
+    from pli.additions import events, trace
 
     trace = importlib.reload(trace)
     events = importlib.reload(events)
@@ -53,7 +53,7 @@ def test_forced_lines_and_log(monkeypatch, tmp_path):
 
 
 def test_on_demand(monkeypatch, tmp_path):
-    monkeypatch.setattr(sys, "argv", ["tensorfold", "serve", "/models/X", "--name", "trial"])
+    monkeypatch.setattr(sys, "argv", ["pli", "serve", "/models/X", "--name", "trial"])
     trace, _ = _reload(monkeypatch, folder=str(tmp_path))
     out = tmp_path / "trace-trial.jsonl"
     assert not trace.active()                       # ready, off
@@ -93,14 +93,14 @@ def test_analysis_on_trace(monkeypatch, tmp_path):
                  build_ms=9.0, gpu_wait_ms=80.0, after_ms=11.0, gap_ms=2.0)
     trace.pt("request", "req-1", prompt=1536, cache=0, output=9, prefill_ms=6000.0, decode_ms=306.0, total_ms=6400.0)
     trace.flush()
-    from tensorfold.pli import trace_analysis
+    from pli.additions import trace_analysis
 
     report = trace_analysis.analyze(trace_analysis.read([str(path)], None, None))
     assert "## 6. Where to gain" in report and "prefill: chunks" in report
 
 
 def test_analysis_reads_a_trace_written_before_3_7_0(tmp_path):
-    from tensorfold.pli import trace_analysis
+    from pli.additions import trace_analysis
 
     old = tmp_path / "old.jsonl"
     rows = [{"t": 1.0 + i, "e": "morceau", "req": "r", "jetons": 512, "ms": 2000.0, "flux": 0, "lectures": 1} for i in range(3)]
@@ -124,7 +124,7 @@ def teardown_module(module):
 
     os.environ.pop("PLI_TRACE", None)
     os.environ.pop("PLI_TRACE_DIR", None)
-    from tensorfold.pli import events, trace
+    from pli.additions import events, trace
 
     importlib.reload(trace)
     importlib.reload(events)

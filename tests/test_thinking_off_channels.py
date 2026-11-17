@@ -18,7 +18,7 @@ def _app(pieces: list[str], script: list[int]):
     """A ChatApp whose model writes ``script`` (indexes into ``pieces``) after a three-token prompt, thinking off."""
 
     pytest.importorskip("mlx.core")
-    from tensorfold.server.app import ChatApp
+    from pli.server.app import ChatApp
     from tests.lane_fakes import FakeEngine, FakeFamily
 
     class Tokenizer:
@@ -73,7 +73,7 @@ GEMMA = ["<p>", "<q>", "<a>", "<turn|>", "<|channel>", "thought\n", "<channel|>"
 def test_gemma_thought_channel_with_thinking_off_never_reaches_content():
     app = _app(GEMMA, [4, 5, 6, 7, EOS])
     try:
-        from tensorfold.server.text import CHANNEL_MARKERS
+        from pli.server.text import CHANNEL_MARKERS
 
         assert app.think_markers == CHANNEL_MARKERS
         message, streamed, streamed_reasoning = _reply(app)
@@ -92,7 +92,7 @@ STREAMED_HARMONY = ("Hello there.", "Think it over.")     # what v0.6.0 streams 
 def test_harmony_reply_with_thinking_off_is_unchanged():
     """gpt-oss replies with thinking off come out exactly as before the Gemma change: parse_harmony_output."""
 
-    from tensorfold.server.text import CHANNEL_MARKERS, parse_harmony_output
+    from pli.server.text import CHANNEL_MARKERS, parse_harmony_output
 
     script = [4, 5, 6, 7, 8, 9, 10, 4, 11, 6, 12, EOS]
     app = _app(HARMONY, script)

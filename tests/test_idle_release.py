@@ -6,7 +6,7 @@ import threading
 import time
 from typing import Any
 
-from tensorfold.server.app import ChatApp
+from pli.server.app import ChatApp
 from tests.lane_fakes import FakeEngine
 from tests.test_lane_server import FakeTokenizer
 from tests.test_memory_window import Runtime, SizedFamily
@@ -53,11 +53,11 @@ def test_a_stream_finishing_beside_another_leaves_the_cache_until_the_engine_is_
         assert clears == []
         long.join(timeout=30)
         settle(app, clears, 1)
-        assert clears == [("tensorfold-engine", 0)]      # once, from the engine's thread, with nothing decoding
+        assert clears == [("pli-engine", 0)]      # once, from the engine's thread, with nothing decoding
         checkpoints = len(app.checkpoints)
         ask("short", 2)
         settle(app, clears, 2)
-        assert clears == [("tensorfold-engine", 0)] * 2
+        assert clears == [("pli-engine", 0)] * 2
         assert replies["long"]["content"] and len(app.checkpoints) >= checkpoints     # retained prefixes stay
     finally:
         app.close()

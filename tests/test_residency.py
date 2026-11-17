@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from tensorfold.server import residency
+from pli.server import residency
 
 MIB = 1024**2
 

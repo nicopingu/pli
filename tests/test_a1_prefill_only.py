@@ -6,8 +6,8 @@ import pytest
 
 pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.qwen.dense.v1 import exact_attention as EA  # noqa: E402
-from tensorfold.pli import a1_lsa as A1  # noqa: E402
+from pli.kernels.qwen.dense.v1 import exact_attention as EA  # noqa: E402
+from pli.additions import a1_lsa as A1  # noqa: E402
 
 import importlib.util, os, sys  # noqa: E402,E401
 

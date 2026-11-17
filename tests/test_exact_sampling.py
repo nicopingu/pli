@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from tensorfold.engine.exact_sampling import Sampling, choose, seed_for, uniform
+from pli.engine.exact_sampling import Sampling, choose, seed_for, uniform
 
 
 def test_same_inputs_same_token_and_position_matters():
@@ -56,7 +56,7 @@ def test_uniform_in_open_interval_and_seed_for_is_stable():
 
 def test_sample_rows_matches_choose_on_the_gpu():
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.engine.exact_sampling import sample_rows
+    from pli.engine.exact_sampling import sample_rows
 
     logits = (mx.random.normal((3, 5000)) * 3).astype(mx.bfloat16)
     s = Sampling(seed=11)
@@ -66,7 +66,7 @@ def test_sample_rows_matches_choose_on_the_gpu():
 
 
 def test_choose_rows_matches_choose_row_by_row_alone_or_batched():
-    from tensorfold.engine.exact_sampling import choose_rows
+    from pli.engine.exact_sampling import choose_rows
 
     rng = np.random.default_rng(7)
 
@@ -92,7 +92,7 @@ def test_nucleus_without_top_k_matches_the_whole_vocabulary_draw():
 
     import mlx.core as mx
 
-    from tensorfold.engine import exact_sampling as es
+    from pli.engine import exact_sampling as es
 
     rng = np.random.default_rng(5)
     drawn = 0

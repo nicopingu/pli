@@ -9,7 +9,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import prefill_mm  # noqa: E402
 
 
 def test_long_calls_split_into_balanced_slices_in_order(monkeypatch):

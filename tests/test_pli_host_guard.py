@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server import host_guard
-from tensorfold.server.host_guard import HostGuard
-from tensorfold.server.http import Server, make_handler as mlx_handler
+from pli.server import host_guard
+from pli.server.host_guard import HostGuard
+from pli.server.http import Server, make_handler as mlx_handler
 
 
 def test_off_by_default():

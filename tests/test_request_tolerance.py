@@ -1,6 +1,6 @@
 """Fields that OpenAI clients send as defaults are accepted."""
 
-from tensorfold.server.tool_policy import ToolCallPolicy
+from pli.server.tool_policy import ToolCallPolicy
 from tests.test_request_reasoning import SamplingApp
 from tests.test_server_openai_compat import post_json, serve_fake
 

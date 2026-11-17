@@ -1,7 +1,7 @@
 """Cold prefill against any OpenAI server: chat prompts of fixed token lengths from the Python standard library,
 a unique first line each so no cached prefix resumes; TTFT and prompt tok/s per length.
 
-build (where tensorfold is installed): python3 tools/prefill_cold.py build MODEL_DIR PROMPTS.json
+build (where pli is installed): python3 tools/prefill_cold.py build MODEL_DIR PROMPTS.json
 run (any client):                      python3 tools/prefill_cold.py run URL MODEL PROMPTS.json OUT.json"""
 
 import json
@@ -9,6 +9,21 @@ import statistics
 import sys
 import time
 import urllib.request
+
+
+def _http_only() -> urllib.request.OpenerDirector:
+    """PLI 5.6.3: http:// and https:// only, like pli.net.urlopen (this script runs without PLI installed)."""
+
+    opener = urllib.request.OpenerDirector()
+    for handler in (urllib.request.ProxyHandler, urllib.request.UnknownHandler, urllib.request.HTTPHandler,
+                    urllib.request.HTTPSHandler, urllib.request.HTTPDefaultErrorHandler,
+                    urllib.request.HTTPRedirectHandler, urllib.request.HTTPErrorProcessor):
+        opener.add_handler(handler())
+    return opener
+
+
+_HTTP = _http_only()
+
 
 LENGTHS = (2048, 8192, 16384, 32768, 65536)
 REPS = 3
@@ -30,7 +45,7 @@ def build(model_dir: str, out: str) -> None:
 
     from tokenizers import Tokenizer
 
-    from tensorfold.cuda.server import ChatTemplate
+    from pli.cuda.server import ChatTemplate
 
     tok = Tokenizer.from_file(str(Path(model_dir) / "tokenizer.json"))
     template = ChatTemplate(Path(model_dir))
@@ -66,7 +81,7 @@ def one(url: str, model: str, m) -> dict:
     req = urllib.request.Request(url + "/v1/chat/completions", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     sent, first, usage = time.perf_counter(), None, {}
-    with urllib.request.urlopen(req, timeout=3600) as resp:
+    with _HTTP.open(req, timeout=3600) as resp:
         for raw in resp:
             line = raw.decode().strip()
             if not line.startswith("data:") or line == "data: [DONE]":

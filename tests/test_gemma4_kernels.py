@@ -14,9 +14,9 @@ if not mx.metal.is_available():
 
 from gemma4_tiny import TINY, tiny_text  # noqa: E402
 from kernel_signatures import changed, recording  # noqa: E402
-from tensorfold.kernels.gemma.v1 import attention, glue, moe  # noqa: E402
-from tensorfold.kernels.gemma.v1.decode import RowDecode, inverse_frequencies  # noqa: E402
-from tensorfold.kernels.inputs import ints  # noqa: E402
+from pli.kernels.gemma.v1 import attention, glue, moe  # noqa: E402
+from pli.kernels.gemma.v1.decode import RowDecode, inverse_frequencies  # noqa: E402
+from pli.kernels.inputs import ints  # noqa: E402
 
 EPS = mx.array([1e-6], dtype=mx.float32)
 
@@ -61,7 +61,7 @@ def test_qkv_prep_is_the_head_norms_and_rope_at_each_rows_position(values_are_ke
 @pytest.mark.parametrize("values_are_keys", [False, True])
 @pytest.mark.parametrize("head_dim", [256, 512])
 def test_qkv_rows_is_the_row_matvec_then_qkv_prep(values_are_keys, head_dim):
-    from tensorfold.kernels.nemotron.lightning.v1 import rows as row_kernels
+    from pli.kernels.nemotron.lightning.v1 import rows as row_kernels
 
     heads, kv, dims = 4, 2, 2816
     width = (heads + kv + (0 if values_are_keys else kv)) * head_dim
@@ -185,9 +185,9 @@ def test_attention_is_softmax_over_each_rows_keys_and_rows_are_independent(dims,
 def test_each_kernel_keeps_one_metal_signature_at_every_row_count(monkeypatch):
     """MLX 0.31 recompiles a kernel whose input crosses 8 elements, which can drop a queued dispatch (mlx#3662)."""
 
-    from tensorfold.families.gemma4.cache import make_cache
-    from tensorfold.kernels.gemma.v1.base import Kernel
-    from tensorfold.kernels.nemotron.lightning.v1 import rows
+    from pli.families.gemma4.cache import make_cache
+    from pli.kernels.gemma.v1.base import Kernel
+    from pli.kernels.nemotron.lightning.v1 import rows
 
     for module in (attention, glue, moe):             # kernels built earlier would not pass the recorder
         for value in vars(module).values():

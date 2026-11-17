@@ -7,8 +7,8 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.families.nemotron_h.model import NemotronH  # noqa: E402
-from tensorfold.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
+from pli.families.nemotron_h.model import NemotronH  # noqa: E402
+from pli.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
 
 
 @pytest.mark.parametrize("bits", [4, 3])

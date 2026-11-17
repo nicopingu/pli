@@ -4,7 +4,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.qwen.dense.v1 import lane_tree  # noqa: E402
+from pli.kernels.qwen.dense.v1 import lane_tree  # noqa: E402
 
 
 def _same(a, b):
@@ -13,14 +13,14 @@ def _same(a, b):
 
 def _tree(q, k, v, g, beta, state, parents):
     """One stream's tree recurrence (``stream_gdn.tree`` with one stream)."""
-    from tensorfold.kernels.qwen.dense.v1 import stream_gdn
+    from pli.kernels.qwen.dense.v1 import stream_gdn
 
     return stream_gdn.tree(q, k, v, g, beta, [state], stream_gdn.TreePlan([parents]))
 
 
 def _tree_sdpa(q, kb, vb, start, parents):
     """One stream's tree attention: the window's rows sit at [start, start + len(parents)) of the buffers."""
-    from tensorfold.kernels.qwen.dense.v1 import stream_attention
+    from pli.kernels.qwen.dense.v1 import stream_attention
 
     plan = stream_attention.Plan([parents], [start], int(q.shape[1]), int(kb.shape[1]))
     return stream_attention.tree_sdpa(q, [(kb, vb)], 0.0625, plan)
@@ -68,7 +68,7 @@ def test_gated_delta_tree_matches_serial_steps():
 
 @pytest.mark.parametrize("P", [3, 250, 255, 256, 500, 700, 1020, 2047, 2048, 20000])
 def test_tree_attention_matches_serial_paths(P):
-    from tensorfold.kernels.qwen.dense.v1 import lane_attention
+    from pli.kernels.qwen.dense.v1 import lane_attention
 
     mx.random.seed(P)
     H, HKV, D = 24, 4, 256
@@ -95,7 +95,7 @@ def test_tree_attention_matches_serial_paths(P):
 
 
 def test_chain_through_tree_kernel_equals_chain_kernel():
-    from tensorfold.kernels.qwen.dense.v1 import lane_attention
+    from pli.kernels.qwen.dense.v1 import lane_attention
 
     mx.random.seed(9)
     H, HKV, D, W, P = 24, 4, 256, 8, 1000
@@ -138,7 +138,7 @@ def test_long_chain_recurrence_equals_serial_steps(W):
 
 
 def test_64_row_chain_attention_equals_single_queries():
-    from tensorfold.kernels.qwen.dense.v1 import lane_attention
+    from pli.kernels.qwen.dense.v1 import lane_attention
 
     mx.random.seed(64)
     H, HKV, D, W, P = 24, 4, 256, 64, 1000          # the window crosses a chunk boundary
@@ -172,7 +172,7 @@ def test_streams_in_one_launch_equal_one_stream_calls(case):
     """Every row of a multi-stream call has the bits of the same row from its own stream's call."""
     import random
 
-    from tensorfold.kernels.qwen.dense.v1 import stream_attention
+    from pli.kernels.qwen.dense.v1 import stream_attention
 
     starts, widths = case
     rng = random.Random(len(starts))
@@ -200,7 +200,7 @@ def test_streams_replay_and_conv_tails_equal_serial_steps():
     each stream's next conv tail from its own conv state and kept rows."""
     from mlx_lm.models.gated_delta import compute_g, gated_delta_update
 
-    from tensorfold.kernels.qwen.dense.v1 import stream_gdn
+    from pli.kernels.qwen.dense.v1 import stream_gdn
 
     mx.random.seed(21)
     Hk, Hv, Dk, Dv, C, n_keep = 16, 48, 128, 128, 64, 3
@@ -241,7 +241,7 @@ def test_streams_tree_recurrence_in_one_launch_equals_one_stream_calls():
     """Every row of a multi-stream recurrence launch has the bits of the same row from its own stream's launch."""
     from mlx_lm.models.gated_delta import compute_g
 
-    from tensorfold.kernels.qwen.dense.v1 import stream_gdn
+    from pli.kernels.qwen.dense.v1 import stream_gdn
 
     mx.random.seed(33)
     Hk, Hv, Dk, Dv = 16, 48, 128, 128

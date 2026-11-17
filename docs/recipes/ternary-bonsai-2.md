@@ -7,8 +7,8 @@ each projection's input needs: fixed ±1 signs, then a normalized Walsh-Hadamard
 blocks. The embedding stores its rows in the same basis and turns them back on lookup.
 
 ```bash
-tensorfold pull prism-ml/Ternary-Bonsai-2-27B-mlx-2bit z-lab/Qwen3.8-27B-DFlash2
-tensorfold serve prism-ml/Ternary-Bonsai-2-27B-mlx-2bit
+pli pull prism-ml/Ternary-Bonsai-2-27B-mlx-2bit z-lab/Qwen3.8-27B-DFlash2
+pli serve prism-ml/Ternary-Bonsai-2-27B-mlx-2bit
 ```
 
 The `bonsai` family runs the pack on the Qwen3.8-27B lane engine:

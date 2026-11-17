@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from glm5_fakes import TEXT, write_checkpoint  # noqa: E402
 
-from tensorfold.families.glm5_next import weights  # noqa: E402
+from pli.families.glm5_next import weights  # noqa: E402
 
 
 @pytest.fixture(scope="module")

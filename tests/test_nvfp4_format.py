@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tensorfold.formats import nvfp4 as fmt
+from pli.formats import nvfp4 as fmt
 
 E2M1_VALUES = [0, 0.5, 1, 1.5, 2, 3, 4, 6]
 

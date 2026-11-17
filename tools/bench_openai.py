@@ -14,6 +14,21 @@ import sys
 import time
 import urllib.request
 
+
+def _http_only() -> urllib.request.OpenerDirector:
+    """PLI 5.6.3: http:// and https:// only, like pli.net.urlopen (this script runs without PLI installed)."""
+
+    opener = urllib.request.OpenerDirector()
+    for handler in (urllib.request.ProxyHandler, urllib.request.UnknownHandler, urllib.request.HTTPHandler,
+                    urllib.request.HTTPSHandler, urllib.request.HTTPDefaultErrorHandler,
+                    urllib.request.HTTPRedirectHandler, urllib.request.HTTPErrorProcessor):
+        opener.add_handler(handler())
+    return opener
+
+
+_HTTP = _http_only()
+
+
 if sys.version_info < (3, 11):
     sys.exit(f"Python 3.11+ is required (this is {sys.version.split()[0]}); "
              "TensorFold's tools use PEP 604 unions. Try: python3.12 tools/bench_openai.py ...")
@@ -45,7 +60,7 @@ def stream(base: str, model: str, item: dict, tokens: int, temperature: float, s
     first = last = None
     usage = None
     text = []
-    with urllib.request.urlopen(req, timeout=600) as resp:
+    with _HTTP.open(req, timeout=600) as resp:
         for raw in resp:
             line = raw.decode().strip()
             if not line.startswith("data:") or line == "data: [DONE]":

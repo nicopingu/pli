@@ -11,7 +11,7 @@ import pytest
 
 pytest.importorskip("mlx.core")
 
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream, SuffixLookupProposer  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream, SuffixLookupProposer  # noqa: E402
 from tests.lane_fakes import FakeEngine, PatternProposer, fake_serial  # noqa: E402
 
 
@@ -234,7 +234,7 @@ def test_only_a_family_model_runs_on_the_engine() -> None:
 
 
 def test_sanitize_tree_truncates_and_drops_orphans() -> None:
-    from tensorfold.engine.lane_engine import sanitize_tree
+    from pli.engine.lane_engine import sanitize_tree
 
     assert sanitize_tree([9, 8, 7], [-1, 0, 1], budget=2) == ([9, 8], [-1, 0])
     tokens, parents = sanitize_tree([9, 8, 7, 6], [-1, 2, 0, 1], budget=4)   # node 1's parent comes after it
@@ -275,7 +275,7 @@ def test_serving_never_releases_round_state_and_idle_release_waits_for_no_live_s
 
 
 def test_a_prompt_chunks_host_reads_start_one_chunk_ahead() -> None:
-    from tensorfold.engine.prefill_plan import PrefillPlan
+    from pli.engine.prefill_plan import PrefillPlan
     from tests.lane_fakes import FakeFamily
 
     calls: list[tuple] = []

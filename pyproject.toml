@@ -43,23 +43,25 @@ Source = "https://github.com/nicopingu/pli"
 Issues = "https://github.com/nicopingu/pli/issues"
 
 [project.scripts]
-pli = "tensorfold.cli:main"
+pli = "pli.cli:main"
 # former name, kept for existing scripts
-tensorfold = "tensorfold.cli:main"
+tensorfold = "pli.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"tensorfold.control.assets" = ["*.json"]
-"tensorfold.bench.data" = ["*.json", "*.txt"]
-"tensorfold.drafters.vendor.z_lab_dflash" = ["README.md"]
-"tensorfold.pli" = ["profiles/*/*.env", "extended-list-*.txt"]
-"tensorfold.pli.ane" = ["build.sh", "native/*.c", "native/*.mm", "native/*.hpp", "native/*/*.mm", "native/*/*.hpp", "native/LICENSE-splash"]
-"tensorfold.families.qwen3_5" = ["*.json"]
-"tensorfold.families.nemotron_h" = ["*.txt"]
-"tensorfold.families.qwen4_exp" = ["*.txt"]
-"tensorfold.streaming.hostsync" = ["*.cpp", "CMakeLists.txt"]
+"pli.control.assets" = ["*.json"]
+"pli.bench.data" = ["*.json", "*.txt"]
+"pli.drafters.vendor.z_lab_dflash" = ["README.md"]
+"pli.additions" = ["profiles/*/*.env", "extended-list-*.txt"]
+"pli.config" = ["table.json"]
+"pli.additions.ane" = ["build.sh", "native/*.c", "native/*.mm", "native/*.hpp", "native/*/*.mm", "native/*/*.hpp", "native/LICENSE-splash"]
+"pli.families.qwen3_5" = ["*.json"]
+"pli.gen" = ["*.json"]
+"pli.families.nemotron_h" = ["*.txt"]
+"pli.families.qwen4_exp" = ["*.txt"]
+"pli.streaming.hostsync" = ["*.cpp", "CMakeLists.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -67,7 +69,7 @@ pythonpath = ["src", "tests"]
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["src/tensorfold/families/deepseek_v4/vendor"]   # third-party code kept unmodified
+extend-exclude = ["src/pli/families/deepseek_v4/vendor"]   # third-party code kept unmodified
 
 [tool.setuptools.dynamic]
-version = { attr = "tensorfold.__version__" }
+version = { attr = "pli.__version__" }

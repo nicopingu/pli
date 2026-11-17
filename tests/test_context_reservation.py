@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from tensorfold.server.http import RequestError
+from pli.server.http import RequestError
 from tests.test_lane_server import FakeTokenizer, make_app
 from tests.test_server_openai_compat import post_json, serve_fake
 

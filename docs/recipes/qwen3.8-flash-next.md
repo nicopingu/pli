@@ -4,8 +4,8 @@ The `qwen4_exp` family has Gated DeltaNet, sparse attention, MoE, hyper-connecti
 embeddings. The supported checkpoint uses MLX affine 4-bit weights in groups of 32 and includes an MTP head.
 
 ```bash
-tensorfold pull TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP
-tensorfold serve TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP --name bench
+pli pull TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP
+pli serve TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP --name bench
 ```
 
 On MLX, a supported conversion without the head runs without MTP drafting. On CUDA, pass `--no-drafts`
@@ -57,7 +57,7 @@ to one stream, while successful checks allow the lane engine to combine requests
 ## CUDA
 
 On CUDA Flash Next serves NVFP4 and EXL3 checkpoints, and the MLX 4-bit checkpoint as the portable option: the same
-files a Mac serves, and the only format two ranks and `--ple-on-ssd` read. `tensorfold serve` loads the checkpoint
+files a Mac serves, and the only format two ranks and `--ple-on-ssd` read. `pli serve` loads the checkpoint
 you name; it picks none by itself. Use the [container setup](../../RUNBOOK.md#nvidia-gpus) for any of them. Prompts
 take bf16 activations by default; what that costs against the FP8 prompt path (`--prefill-fp8`) depends on the
 format ([prompt precision](cuda.md#prompt-precision)):
@@ -78,7 +78,7 @@ local-inference-lab's.
 The CUDA engine reads published ModelOpt NVFP4 exports as they ship, MTP head included, on one GPU:
 
 ```bash
-tensorfold serve local-inference-lab/Qwen3.8-Flash-Next-NVFP4 --host 0.0.0.0 --port 8080
+pli serve local-inference-lab/Qwen3.8-Flash-Next-NVFP4 --host 0.0.0.0 --port 8080
 ```
 
 | Checkpoint (revision) | Routed experts | DeltaNet, attention, shared expert | n-gram table |
@@ -94,7 +94,7 @@ scale in block order and applies the tensor's scale once; the K split depends on
 windows keep serial decoding's bits. Prompts run the MXFP8 linears on bf16 rows and the stored bytes, each byte
 times its power of two exact in bf16 and one fp32 sum over the inputs (`--prefill-fp8`: the FP8 prompt matmul).
 Tests check the kernels against an fp64 reference built by an independent numpy dequantizer
-(`tensorfold/cuda/nvfp4/format.py`). Both exports store their RMSNorm weights centred (gamma - 1), and the loader
+(`pli/cuda/nvfp4/format.py`). Both exports store their RMSNorm weights centred (gamma - 1), and the loader
 tells centred from uncentred norms by their stored values. An n-gram table's shards must share one layout, or the
 load stops.
 
@@ -119,7 +119,7 @@ captured for one step's experts replays another step's. A test decodes a checkpo
 step with graphs on and off and compares the tokens; on local-inference-lab's and RadixArk's exports, replies with
 the decode graphs equal replies without them.
 
-local-inference-lab's and RadixArk's exports were served with `tensorfold serve` and checked: drafted replies equal
+local-inference-lab's and RadixArk's exports were served with `pli serve` and checked: drafted replies equal
 `"draft": false` ones (nine pairs, 2k-16k-token prompts, greedy and sampled), resumed prompts equal fresh ones, and
 each reply of concurrent requests (`--parallel 4`) equals the same request alone. Mia-AiLab's mirror loads and serves
 through the same code; its replies have not been checked on their own.
@@ -140,8 +140,8 @@ Download that branch, then serve the folder:
 
 ```bash
 python -c "from huggingface_hub import snapshot_download as d; d('turboderp/Qwen3.8-Flash-Next-exl3', revision='3.05bpw_h5_ng5', local_dir='flashnext-exl3-3.05bpw')"
-python -m tensorfold.cuda.exl3.inspect flashnext-exl3-3.05bpw   # bits per tensor, from the headers
-tensorfold serve flashnext-exl3-3.05bpw --host 0.0.0.0 --port 8080
+python -m pli.cuda.exl3.inspect flashnext-exl3-3.05bpw   # bits per tensor, from the headers
+pli serve flashnext-exl3-3.05bpw --host 0.0.0.0 --port 8080
 ```
 
 A pack maps its n-gram table from its own file and runs on one GPU: `--tp 2` and `--ple-on-ssd` are for the MLX
@@ -169,8 +169,8 @@ checkpoint, and an EXL3 pack refuses both.
 - Prompt chunks decode each dense projection's weights once a chunk and multiply with a fixed-tile GEMM, so a
   prompt's rows do not depend on its chunking; routed experts run the grouped kernel in 1,024-row windows.
 
-Measured on one DGX Spark (GB10) through `tensorfold serve`: the 3.05 bpw pack against the MLX 4-bit checkpoint
-on the same engine and box, the [public benchmark command](README.md#measurements), medians of 10 runs a cell
+Measured on one DGX Spark (GB10) through `pli serve`: the 3.05 bpw pack against the MLX 4-bit checkpoint
+on the same engine and box, the [public benchmark command](../benchmark.md#measurements), medians of 10 runs a cell
 (two sessions of each, alternated):
 
 | Cell | EXL3 3.05 bpw | MLX 4-bit | vLLM MTP=3 |
@@ -217,7 +217,7 @@ On TensorFold's side, `tests/cuda/test_qwen4_exp_exl3.py` checks the following a
 - MTP-drafted decoding gives serial decoding's tokens, eager and in CUDA graphs, greedy and sampled;
 - a real layer's experts match an fp64 reference and are row-invariant.
 
-Through `tensorfold serve` on the full packs, each reply was requested with `"draft": false` and again with
+Through `pli serve` on the full packs, each reply was requested with `"draft": false` and again with
 drafts. The prompts were the benchmark's two, the raw prompt as chat, and two 256-token chats, each greedy and
 with seeds 1234 to 1238. On both packs, 30 of 30 replies had identical token-id SHA-256s. A drafted round
 emitted 2.93 tokens on average on SAGE and 3.16 on 3.05.
@@ -254,8 +254,8 @@ With drafts on the current engine (the table above), the 3.05 bpw pack decodes 1
 For two ranks, pull the checkpoint on both and start rank 1 first:
 
 ```bash
-tensorfold serve TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP --tp 2 --rank 1 --master 192.0.2.1
-tensorfold serve TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
+pli serve TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP --tp 2 --rank 1 --master 192.0.2.1
+pli serve TensorFold/Qwen3.8-Flash-Next-MLX-4bit-MTP --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
 ```
 
 ### Serving
@@ -302,7 +302,7 @@ decode was 3.5-8% slower across the four cells, prefill was unchanged, the peak 
 
 `--ssd-experts GIB` also leaves the routed experts (70.3 GiB) in the checkpoint and streams them into a GPU pool
 of that many GiB; with `--ple-on-ssd` as well, a 64 GB Mac can hold Flash Next (`python -m pip install
-"tensorfold[ssd]"` first: the pool's host side is a small MLX extension built on first use). The GPU hands each
+"pli[ssd]"` first: the pool's host side is a small MLX extension built on first use). The GPU hands each
 MoE layer's picks to the host and waits while missing experts are read into the pool; the expert kernels are the
 resident ones with only the weight address changed, so replies are the resident model's tokens.
 
@@ -340,7 +340,7 @@ default is 0.70, for one stream and for concurrent rounds. Only Flash Next's CUD
 
 ## Draft vocabulary provenance
 
-Both backends read the public list in `src/tensorfold/families/qwen4_exp/cuda/draft_vocab.txt`.
+Both backends read the public list in `src/pli/families/qwen4_exp/cuda/draft_vocab.txt`.
 It contains 79,591 sorted IDs; MLX pads it with the lowest unused IDs to a multiple of 64 at load.
 The target sampler still reads the full vocabulary, so the list affects proposals only.
 
@@ -375,7 +375,7 @@ The current list replaces the older list whose PyPI corpus was not reproducible.
 
 ## Measurements
 
-Use the [public benchmark command](README.md#measurements) with the server above; omit tensor-parallel
+Use the [public benchmark command](../benchmark.md#measurements) with the server above; omit tensor-parallel
 flags for one rank. The client supplies fixed public prompts, 64-token replies and seeds 1234 through
 1238. Historical rates measured with the earlier draft list do not qualify the current list.
 

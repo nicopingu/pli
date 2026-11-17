@@ -1,6 +1,6 @@
 import pytest
 
-from tensorfold.server.app import CheckpointStore
+from pli.server.app import CheckpointStore
 
 
 @pytest.mark.parametrize("pinned", [False, True])

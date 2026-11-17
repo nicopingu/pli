@@ -10,7 +10,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels import threads  # noqa: E402
+from pli.kernels import threads  # noqa: E402
 
 HERE = Path(__file__).parent
 

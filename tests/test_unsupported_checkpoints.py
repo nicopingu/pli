@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold import cli, families
+from pli import cli, families
 
 MLX4 = {"model_type": "glm5_next", "quantization": {"group_size": 64, "bits": 4},
         "quantization_config": {"group_size": 64, "bits": 4}}
@@ -53,7 +53,7 @@ def test_a_family_can_declare_more_formats():
 
 
 def test_glm_reads_mias_exl3_checkpoint_as_an_experiment(tmp_path, capsys):
-    from tensorfold.families import glm5_next
+    from pli.families import glm5_next
 
     (tmp_path / "config.json").write_text(json.dumps(EXL3))
     glm5_next.check(tmp_path)
@@ -77,7 +77,7 @@ def test_unknown_model_types_point_to_the_recipe_book(tmp_path):
 def test_flash_next_is_found_by_either_model_type_its_exports_carry(tmp_path, kind):
     config = {"model_type": kind, "text_config": {"model_type": kind + "_text"}}
     (tmp_path / "config.json").write_text(json.dumps(config))
-    assert families.detect(tmp_path).module == "tensorfold.families.qwen4_exp"
+    assert families.detect(tmp_path).module == "pli.families.qwen4_exp"
 
 
 def test_serve_refuses_an_unreadable_checkpoint_before_downloading(tmp_path, capsys, monkeypatch):
@@ -104,7 +104,7 @@ def test_qwen_dense_refuses_nvfp4_on_the_mac():
 ])
 def test_serve_refuses_what_the_mac_decoders_cannot_read_before_downloading(tmp_path, capsys, monkeypatch, config,
                                                                             named):
-    from tensorfold import hub
+    from pli import hub
 
     (tmp_path / "config.json").write_text(json.dumps(config))
     monkeypatch.setattr(cli.sys, "platform", "darwin")

@@ -10,15 +10,15 @@ Kimi delta attention, sparse MLA and MoE blocks mix four residual streams.
 On CUDA GLM-5.3-Flash runs on two ranks from Brandon M. Music's EXL3/TR3 checkpoint
 (`brandonmusic/GLM-5.3-Flash-tr3-4bpw`, re-hosted as `Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw`; experimental;
 [EXL3](#exl3)) or from the MLX 4-bit checkpoint, the portable option that a 256 GB Mac serves too.
-No NVFP4 checkpoint of it is read. `tensorfold serve` loads the checkpoint you name; it picks none by itself. Prompt
+No NVFP4 checkpoint of it is read. `pli serve` loads the checkpoint you name; it picks none by itself. Prompt
 precision does not change here: neither checkpoint has an FP8 prompt kernel, so `--prefill-fp8` is refused.
 
 Use the [two-rank container setup](../../RUNBOOK.md#nvidia-gpus) and pull the same checkpoint on both ranks:
 
 ```bash
-tensorfold pull TensorFold/GLM-5.3-Flash-MLX-4bit-MTP
-tensorfold serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --tp 2 --rank 1 --master 192.0.2.1
-tensorfold serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
+pli pull TensorFold/GLM-5.3-Flash-MLX-4bit-MTP
+pli serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --tp 2 --rank 1 --master 192.0.2.1
+pli serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
 ```
 
 Rank 1 starts first and rank 0 serves HTTP. Use the same context and drafting settings on both ranks.
@@ -129,8 +129,8 @@ speeds); `TF_GLM_LATENT=0` gives 0.3.6's replies exactly.
 On a Mac with 256 GB and MLX 0.32.2 or later (`serve` refuses an older MLX):
 
 ```bash
-tensorfold pull TensorFold/GLM-5.3-Flash-MLX-4bit-MTP
-tensorfold serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP
+pli pull TensorFold/GLM-5.3-Flash-MLX-4bit-MTP
+pli serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP
 ```
 
 The chat template names `low`, `high` and `max`. GLM's default is Max, and `high` suits agent and coding work.
@@ -159,8 +159,8 @@ streams them into a GPU pool of that many GiB. Everything else stays resident, t
 a 128 GB Mac can serve GLM-5.3-Flash:
 
 ```bash
-python -m pip install "tensorfold[ssd]"       # cmake and nanobind, to build a small MLX extension on first use
-tensorfold serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --ssd-experts 64
+python -m pip install "pli[ssd]"       # cmake and nanobind, to build a small MLX extension on first use
+pli serve TensorFold/GLM-5.3-Flash-MLX-4bit-MTP --ssd-experts 64
 ```
 
 - After each layer's router, the GPU signals the host through a shared Metal event and waits.
@@ -227,7 +227,7 @@ every projection returns its input's dtype.
 ```bash
 python tools/glm5_q8_0_gguf_to_mlx.py --gguf 'GLM-5.3-Flash-Q8_0-*.gguf' \
     --config zai-org-GLM-5.3-Flash/config.json --tokenizer-dir zai-org-GLM-5.3-Flash --out GLM-5.3-Flash-q8_0 --verify
-tensorfold serve GLM-5.3-Flash-q8_0
+pli serve GLM-5.3-Flash-q8_0
 ```
 
 On a 512 GB M3 Ultra, a 310 GiB Q8_0 GGUF became 328.5 GiB in 85 shards in about six minutes; `--verify` found every
@@ -242,7 +242,7 @@ and memory stay flat with context. The contributor measured 336 / 334 / 309 tok/
 
 ### Scripts that load the backbone directly
 
-`tensorfold serve` wires the weights (`mx.set_wired_limit`, `server/residency.py`) and caps MLX's cache of freed
+`pli serve` wires the weights (`mx.set_wired_limit`, `server/residency.py`) and caps MLX's cache of freed
 buffers. A script that calls `families.glm5_next.weights.load_backbone` directly, such as a scorer reading logits
 or a profiler, should do the same: without wiring, macOS pages parts of a 170-365 GiB checkpoint out between steps, and
 on a 512 GB M3 Ultra each MoE layer then took about 0.1 s per call (4.3 s per decode step instead of 0.1 s); with the
@@ -251,8 +251,8 @@ past 440 GiB. Wire what is resident after loading, cap the cache, and clear it b
 
 ```python
 import mlx.core as mx
-from tensorfold.families.glm5_next.weights import load_backbone
-from tensorfold.server.residency import wire_resident
+from pli.families.glm5_next.weights import load_backbone
+from pli.server.residency import wire_resident
 
 info = mx.device_info()
 mx.set_wired_limit(int(info["max_recommended_working_set_size"]))   # as the family's load() does
@@ -276,6 +276,6 @@ Use a separate fp32 reference for quality checks, with TF32 disabled on that ref
 
 ## Measurements
 
-Use the [public benchmark command](README.md#measurements) with the server above. Retain model and
+Use the [public benchmark command](../benchmark.md#measurements) with the server above. Retain model and
 runtime revisions with every run. Decode rate, cold/resumed first-token latency and peak memory are
 TBD [release-0.3.5]. Record the selected drafter policy with the result.

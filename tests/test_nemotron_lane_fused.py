@@ -5,13 +5,13 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not K.tensor_units(), reason="lane matmuls run on M5 tensor units")
 
 
 def _xsum(x):
-    from tensorfold.kernels.qwen.dense.v1 import lane_qmm
+    from pli.kernels.qwen.dense.v1 import lane_qmm
 
     rows, k = int(x.shape[0]), int(x.shape[1])
     mp = 16 * ((rows + 15) // 16)
@@ -26,8 +26,8 @@ def _same(a, b):
 
 @pytest.mark.parametrize("rows", [1, 3, 17, 40])
 def test_up_relu2_writes_the_unfused_activation_and_its_sums(rows):
-    from tensorfold.kernels.nemotron.lightning.v1 import lane_fused
-    from tensorfold.kernels.qwen.dense.v1 import lane_qmm
+    from pli.kernels.nemotron.lightning.v1 import lane_fused
+    from pli.kernels.qwen.dense.v1 import lane_qmm
 
     holder = nn.Module()
     holder.up = nn.QuantizedLinear(256, 192, bias=False, group_size=64, bits=4)
@@ -48,7 +48,7 @@ def test_up_relu2_writes_the_unfused_activation_and_its_sums(rows):
 
 @pytest.mark.parametrize("rows", [1, 3, 17, 40])
 def test_group_norm_sums_match_group_norm_then_xsum(rows):
-    from tensorfold.kernels.nemotron.lightning.v1 import lane_fused
+    from pli.kernels.nemotron.lightning.v1 import lane_fused
 
     y = (mx.random.normal((rows, 1024), key=mx.random.key(50 + rows)) * 0.7).astype(mx.bfloat16)
     weight = (mx.random.normal((1024,), key=mx.random.key(7)) * 0.1 + 1).astype(mx.bfloat16)

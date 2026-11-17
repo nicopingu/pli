@@ -12,5 +12,13 @@ venv/
 *.swp
 *.log
 # PLI SP1: Neural Engine libraries compiled on the machine (build.sh), not tracked
+src/pli/additions/ane/native/libpli_ane.dylib
+src/pli/additions/ane/native/libpli_rq.dylib
+# PLI (05/11/2026): the former place of these libraries (natif/, until 4.0.0), still on machines that served it
+src/pli/additions/ane/natif/libpli_ane.dylib
+src/pli/additions/ane/natif/libpli_rq.dylib
+# PLI 5.5 (renommage tensorfold -> pli) : leur place avant le renommage, sur les machines qui servaient PLI 5.4
 src/tensorfold/pli/ane/native/libpli_ane.dylib
 src/tensorfold/pli/ane/native/libpli_rq.dylib
+src/tensorfold/pli/ane/natif/libpli_ane.dylib
+src/tensorfold/pli/ane/natif/libpli_rq.dylib

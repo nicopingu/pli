@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream
+from pli.engine.lane_engine import LaneEngine, LaneStream
 
 
 @pytest.mark.parametrize("width", [1, 2, 8])
@@ -63,7 +63,7 @@ def test_stream_check_controls_rounds_without_changing_outputs(checked):
 
 def test_flash_without_fused_decode_serves_streams_separately(monkeypatch):
     from tests.test_qwen4_exp_family import tiny
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     monkeypatch.setenv("PLI_FLASH_FUSED", "0")
     model = FlashNext(tiny(), None, drafts=0)

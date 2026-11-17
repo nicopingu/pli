@@ -3,9 +3,9 @@ it is given the role the chat template accepts (late_system), as on the OpenAI r
 
 import inspect
 
-from tensorfold.server import anthropic
-from tensorfold.server.anthropic_translate import translate
-from tensorfold.server.messages import normalize_messages
+from pli.server import anthropic
+from pli.server.anthropic_translate import translate
+from pli.server.messages import normalize_messages
 
 
 def _body():

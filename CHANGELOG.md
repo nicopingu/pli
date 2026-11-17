@@ -4,6 +4,207 @@ Each release's section below lists its changes and the measurements behind them.
 fork: update with `git pull` and `pip install` (see [RUNBOOK.md](RUNBOOK.md)).
 
 
+## 5.6.5 (2026-11-17)
+
+First public release of PLI 5: 5.6.2 and 5.6.3 (below) were prepared but not published, and their content ships
+here with 5.6.4 and 5.6.5. Measurements are from the validated machine (Mac Studio M1 Ultra, 64 GB).
+
+### Video LoRA applied in memory, several at once
+
+- **What**: a video LoRA no longer needs a fused copy of the MiniMax-H3 transformer (33 to 62 GB per LoRA). It is
+  converted once to h3's native layout (`tools/pli-lora-natif`, a few seconds, 73 MB to 1.9 GB per LoRA), and h3 adds
+  it to each block's BF16 weights as it loads them (`tools/h3c-lora.patch` for h3.c, option `--lora FILE@FORCE`).
+  The product is computed in F32 and rounded once to BF16, as a fusion is.
+- **Several LoRA in one video**: up to 4, for instance a speed LoRA with a style one:
+  `"lora": [{"nom": "turbo"}, {"nom": "style", "force": 0.7}]`. Their matrices are concatenated along the rank, so
+  h3 computes one product per matrix whatever their number.
+- **Measured**: same prompt and seed, 512², 22 frames, 8 steps with the Turbo LoRA: the MP4 rendered with the LoRA in
+  memory is **byte-for-byte identical** to the one rendered from the fused copy; 148 s against 195 s for the fused copy,
+  143 s with two LoRA, while images were computed next to it (no measurable cost; the figures are indicative). In
+  production, a video with two LoRA: 141 s of rendering.
+- **Catalog**: mode `en_memoire` next to `sauvegardee` and `a_la_demande`, key `lora_natif` (`dossier`; `python` and
+  `script` default to the fusion's). A fused LoRA stays one at a time; a LoRA that touches anything other than the
+  blocks' four BF16 matrices is refused by the converter and stays in a fusion mode. Memory needed by a job: the
+  model, plus the converted files and a 0.6 GB buffer.
+
+### Room asked of an outside scheduler (5.6.4)
+
+- When a generation child lacks memory and stopping idle families and emptying the LLM's cache are not enough, the
+  supervisor can write a request file (`place_fichier` in `PLI_GEN_CONFIG`: family, missing bytes, since when) and
+  wait up to `place_attente_s` (default 120 s) for the memory to come back. A scheduler on the same Mac (on the
+  validated machine, the queue of benchmark jobs) reads it and pauses its own jobs that can resume. The file stays,
+  touched every turn, while a child launched this way is alive, so the scheduler resumes its jobs after it is gone.
+- Without the key nothing changes; otherwise the request ends in 503 « memoire » as before.
+- **Measured**: a test job paused a few seconds after the request (with its reason in the scheduler's log), resumed
+  5 minutes after the image child stopped, and finished without error; in production, an image and a video then got
+  their room in 7 to 8 s instead of being refused.
+
+### `/health` shows every model served (5.6.4)
+
+- `gen` gives, per family (voice, image, video), the model named by the last request while the child is alive
+  (`modele`) and the requests in progress (`actifs`), next to its state and declared memory.
+
+### Upgrade
+
+- Video LoRA in memory: apply `tools/h3c-lora.patch` to h3.c (`git apply`, then `make`), point the catalog's `h3` key
+  to that binary, add `"lora_natif": {"dossier": ...}` and set `"mode": "en_memoire"` on the LoRA. The fused copies
+  can then be deleted.
+- The startup cache key holds PLI's version: the first start after the upgrade measures again (about 70 s), the next
+  ones read the cache.
+
+
+## 5.6.3 (2026-11-17, not published)
+
+5.6.2 (below) was prepared but not published either; both ship in 5.6.5.
+Measurements are from the validated machine (Mac Studio M1 Ultra, 64 GB).
+
+### The LLM is capped while a generation child runs
+
+- **Cap**: when an image, video or voice child starts and memory was enough without freeing anything, the LLM is now
+  capped anyway: its MLX cache is emptied and limited, its memory limit is frozen at what it holds, and its prompt
+  budget shrinks by the same amount, so new conversations push the oldest ones to disk instead of growing. The limits
+  are given back when the last child stops; a limit that is already lower is never raised; a cap that fails does not
+  stop the child from starting.
+- **Why**: with memory enough at launch, nothing capped the LLM. On the validated machine the 27B grew from 30.7 to
+  42 GB (7.7 GB of MLX cache) while an image computed; the image child stalled and its requests ended in 504.
+- **Waiting for the LLM**: freeing memory for a child now waits up to 60 s for the LLM to be idle, instead of 5 s
+  (`PLI_GEN_ENGINE_WAIT_S`).
+- **Measured in production**: one Qwen-Image 2.1 768x1344 image requested while six conversations of 8,300 tokens
+  ran two at a time: 200 in 543 s (the image waits for the conversations, the LLM comes first, then about 5 minutes
+  to load and compute), all six conversations answered, no error in the log.
+
+### Startup measurements kept on disk (`pli serve --startup-cache on`, off by default)
+
+- **What**: 60 of the 68 s of a 27B start were checks and measurements redone at every start: the decoder's window
+  check (about 16 s), the stream memory probes (20 s), the prompt memory probe (19 s) and the image encoder's
+  workspace (4 s). With `--startup-cache on` their results are written once, under a key made of the weights (size
+  and date of each file), the draft, the serve options, the settings that can change a computation, PLI's sources,
+  the versions of PLI, MLX and mlx-lm and the machine, and read back at the next start with the same key.
+- **Measured**: a start of the 27B in production goes from 71.1 s to 9.0 s. On 3 starts in a row, the model's memory
+  figures were the same and the answers identical word for word (temperature 0). The first request after a start from
+  the cache pays about 0.6 s more, for the kernels the probes used to compile.
+- **The memory budget is still measured at every start**; only what belongs to the model is kept.
+  `--startup-cache remeasure` measures again and rewrites the file: do it once on a quiet machine, since the window
+  costs are timings. Files: one JSON per key in `PLI_STARTUP_CACHE_DIR` (default `~/.cache/pli/startup`).
+- **Saved conversations are kept**: an option rather than a `PLI_*` variable, and a module outside `pli/additions`,
+  so turning it on changes neither the settings fingerprint nor the code part of the checkpoint key.
+
+### Security review before publication
+
+Secrets (gitleaks, whole history and files): none. Static analysis (semgrep, `p/default` rules): the 25 findings are
+fixed or, where the code was already safe, marked with the reason.
+
+- **HTTP(S) only**: PLI's own requests (update check, `pli setup`, the bench and the tools) go through `pli.net.urlopen`,
+  which opens `http://` and `https://` URLs only; `file://`, `ftp://` and `data:` are refused.
+- **Imports by name limited to known packages** (`pli.safe_import`): model families and their kernels (`pli.*`), and the
+  cache classes named in a checkpoint file (`mlx_lm.models.*`, `pli.*`, `tensorfold.*`): a checkpoint file can no
+  longer make PLI import any other module.
+- **No pickle written by PLI**: the tree trace (`PLI_TREE_TRACE`, a research setting, off by default) is now one JSON
+  line per record (arrays as `{"ndarray", "dtype", "shape"}`). The LSA map reader keeps its restricted unpickler
+  (four allowed names, file checked by SHA-256).
+- **SHA-256 instead of SHA-1** for two non-cryptographic fingerprints: the event log's message fingerprint and the
+  name of a merged video LoRA in the merge cache (merges made before are made once more).
+- Owner-only folders written with `stat.S_IRWXU` (same mode, 0o700); the terminal view reads its logo from its own
+  folder.
+
+### Upgrade
+
+- Add `--startup-cache on` to the serve command (the example in the README has it).
+- The code part of the checkpoint key changes (the import check in `pli/engine/prefix_snapshots.py`), without changing
+  a checkpoint's bits: give saved conversations the new key with
+  `python -m pli.additions.rekey move --old OLD_KEY --new NEW_KEY DIR...` (`plan-code DIR...` prints both keys),
+  otherwise they are computed again on first use.
+
+
+## 5.6.2 (2026-11-16, not published)
+
+Prepared as the first public release of PLI 5 (5.0 to 5.6.1 were deployed on the validated machine between 13 and 16 November 2026;
+5.6.2 is 5.6.1 with its comments, messages and documentation in English).
+Measurements are from that machine (Mac Studio M1 Ultra, 64 GB).
+
+### One server for text, voice, images and video (`PLI_GEN=1`, off by default)
+
+- **Generation families in child processes**, started on demand next to the LLM and unloaded when idle (voice after
+  10 min, images after 5 min): voice (`POST /v1/audio/speech`: Kokoro, Drama 3, Qwen3-TTS), transcription
+  (`POST /v1/audio/transcriptions`: Qwen3-ASR 0.6B 8-bit), images (`POST /v1/images/generations`: Qwen-Image 2.1,
+  Qwen-Image 2512, FLUX 3 Klein, Krea 2 Turbo, with LoRA), video with sound (`POST /v1/videos`, then
+  `GET /v1/videos/{id}` and `/content`: MiniMax H3 through h3.c with `--ssd-streaming`, about 11 GB next to the 27B).
+  Families, ports and catalogues: `PLI_GEN_CONFIG` (examples in `docs/gen/`).
+- **The LLM keeps priority**: during a request to the LLM, images pause between steps, voices between chunks, videos
+  by stopping h3 (SIGSTOP); the 27B keeps 97.7 % of its writing speed. While a video runs, the LLM serves one
+  generation at a time (the others wait, none is refused), and the video pauses during a voice or a transcription.
+- **Memory**: each model declares its need (`memoire_go` in its catalogue: Krea 2 29 GB, Qwen-Image 2.1 23 GB,
+  Qwen-Image 2512 32 GB, FLUX 3 Klein 12 GB); idle families are stopped before a new one starts, the LLM gives back
+  its cache, and the request is retried once; otherwise 503 with type `memoire`. A swap guard stops a child when swap
+  grows by more than 4 GB while free memory is below 4 GB.
+- **Cancellation**: when the client disconnects or the relay times out, the child gets `POST /annuler` and the
+  request ends with 499 (a voice stops within 0.2 s, an image before the end of its current step); a video is
+  cancelled with `DELETE /v1/videos/{id}`.
+- **Prompt guard for images and video**: local rules refuse a prompt that names a real person or involves minors
+  (400, type `garde`); an optional second opinion asks the LLM (`PLI_GEN_GARDE_LLM=1`, 0.7 s); the log
+  (`PLI_GEN_GARDE_JOURNAL`) keeps the date, the family, the reason and a SHA-256, never the text. Voice is not
+  filtered.
+- **LoRA**: public LoRA in the catalogues; private LoRA in a TOML file outside git (`catalogue_prive`), each with its
+  default steps, size or duration; a name that is already public, or an error in the file, stops the start.
+  Video LoRA are merged once (`tools/pli-lora-fusion`, about 75 s) and the merge is kept in a cache (70 GB at most).
+- **Launch profiles** (`templates/launch-profiles/`, `tools/pli-profil NAME [--dry-run]`): ready-made sets of model,
+  `pli serve` options and generation families, with the memory and disk each one needs; checked before launch.
+- Images are kept with their request (`--sorties`, `PLI_GEN_SORTIES`).
+
+### PLI looks after itself (`PLI_TASKS=prune,drafter,falcon`, 5.6, off by default)
+
+Background tasks run in the gaps of service, after 30 s without a request, and never cut it:
+
+- **prune**: conversation snapshots pruned once a day (fresh files kept, partial files after a day, unused files after
+  `PLI_TASKS_PRUNE_DAYS`), optionally capped at a share of the free disk plus the folder (`PLI_TASKS_PRUNE_CAP_PERCENT`).
+- **drafter**: serves the drafter named in a file (`PLI_TASKS_DRAFTER_FILE`), swapped hot between two requests;
+  watches the share of tokens that come from the drafter per request size for 3 days (50 requests at least) and goes
+  back to the previous drafter on a drop of more than 3 %.
+- **falcon**: tunes the drafter on the conversations served, with the served 27B (no second model in memory); with
+  `PLI_TASKS_FALCON_SHADOW=1` the result is kept aside instead of served; it runs inside a window of hours.
+
+`PLI_TASKS*` stay out of the checkpoint key's settings fingerprint. Journal: `PLI_TASKS_LOG`; state: `PLI_TASKS_STATE`.
+
+### Settings
+
+- **`pli.toml` and `pli config`** (`list`, `get`, `set`, `check`, `explain`, `import-env`), with a status per setting
+  (recommended, experimental, obsolete); `.env` files keep working.
+- Every `PLI_*` setting is listed with its default and status in `src/pli/config/table.json`
+  (`tools/pli-reglages-inventaire`).
+
+### The Python package is named `pli` (5.5)
+
+- **The Python package is named `pli`** (it was `tensorfold`); `tensorfold.pli` is now `pli.additions`, the code PLI
+  added to TensorFold. The rename is mechanical (`tools/pli-renommage-tensorfold`, `--verifier` replays it). A
+  compatibility package `tensorfold` stays for at least one release: `import tensorfold.X` gives the module `pli.X`
+  itself, `python -m tensorfold.pli.rekey` still runs, with one `FutureWarning`; the `tensorfold` command remains.
+  Not renamed, because they are interfaces or data: the `[tensorfold]` log prefix, the `tensorfold` field of HTTP
+  replies, `~/.cache/tensorfold`, `~/.config/tensorfold`, the launchd labels `dev.tensorfold.*`, and the
+  `|tensorfold=` part of old checkpoint keys. TensorFold's license and notices are unchanged.
+- **Checkpoint keys**: the code digest (`|code=`) and the kernels part (`kernels=`) of the key change with the file
+  texts, not with the computation. `tools/pli-renommage-cles` proves that every hashed file is its old version
+  through the mechanical rename, then gives the saved checkpoints their new key (`pli.additions.rekey move`), so
+  conversations are kept. See RUNBOOK.md, "Updating across the rename".
+
+### Fixes and smaller changes
+
+- The version number follows the releases: `/health` (`checkpoint.engine.version`) reported 4.2.1 from 5.0 to 5.6.
+- Comments, log and error messages, launch profiles and documentation of PLI 5 in English (5.6.2); the error
+  `type` values, JSON field names and file names do not change.
+- The 27B waits up to 90 s for memory to come back before refusing to start (before, right after an unload, it
+  refused).
+- **The draft no longer changes the text**: `PLI_TREE_EXACT=1` in the `m1-ultra` profile (DFlash2 trees computed at the
+  chains' bits). In a check of 10 answers at temperature 0, 2 or 3 changed a word late in the answer without it, none
+  with it, in two runs each; the 10 answers took 47.1 and 46.8 s with it, 49.7 and 47.2 s without.
+- Drama 3 encodes its reference voice before loading its weights and frees the codec's copies: 30.5 GB in service
+  instead of 37.5.
+
+### Known issues
+
+- Right after a restart, Drama 3 can be short of memory for 30 to 60 s (503 `memoire`); clients should retry.
+- The generation modules (`pli.gen`) keep French identifiers and JSON field names (`memoire`, `garde`, `nom`,
+  `force`, `etat`...): they are part of the API.
+
 ## 4.2.1 (2026-11-12)
 
 - **Copy log for head rounds too** (`PLI_COPY_LOG=<file>`, off by default): a round where a copy was offered but the

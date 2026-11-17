@@ -1,0 +1,13 @@
+{
+  "h3": "${PLI_H3}",
+  "defaut": "h3",
+  "ssd_streaming": true,
+  "modeles": {
+    "h3": {
+      "chemin": "${PLI_MODELE_VIDEO}",
+      "memoire_go": 12,
+      "memoire_go_resident": 43
+    }
+  },
+  "lora": {}
+}

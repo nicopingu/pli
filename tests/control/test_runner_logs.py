@@ -7,9 +7,9 @@ import time
 
 import pytest
 
-from tensorfold.control.logs import Tail
-from tensorfold.control.runner import logger_for, supervise
-from tensorfold.control.safety import ControlError
+from pli.control.logs import Tail
+from pli.control.runner import logger_for, supervise
+from pli.control.safety import ControlError
 
 
 def test_tail_partial_append_rotation_and_truncation(tmp_path):

@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from tensorfold.families.qwen4_exp import check
-from tensorfold.vision.qwen_checkpoint import PREFIXES
+from pli.families.qwen4_exp import check
+from pli.vision.qwen_checkpoint import PREFIXES
 
 
 def write_config(path, name, algo):

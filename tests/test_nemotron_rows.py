@@ -12,7 +12,7 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.kernels.nemotron.lightning.v1 import rows  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import rows  # noqa: E402
 
 U = 2.0 ** -8          # bf16 unit roundoff
 SLACK = 1e-5           # fp32 summation, relative to sum |x w|
@@ -227,7 +227,7 @@ def test_route_group_equals_route_then_group(experts, count):
 
     import numpy as np
 
-    from tensorfold.kernels.nemotron.lightning.v1 import kernels as K
+    from pli.kernels.nemotron.lightning.v1 import kernels as K
 
     logits = (mx.random.normal((count, experts), key=mx.random.key(70 + count)) * 2).astype(mx.bfloat16)
     bias = (mx.random.normal((experts,), key=mx.random.key(71)) * 0.1).astype(mx.float32)

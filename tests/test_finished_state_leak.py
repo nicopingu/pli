@@ -8,7 +8,7 @@ mx = pytest.importorskip("mlx.core")
 
 from test_family_streams import SPECS, StreamsModel, _stream  # noqa: E402
 
-from tensorfold.engine.lane_engine import LaneEngine  # noqa: E402
+from pli.engine.lane_engine import LaneEngine  # noqa: E402
 
 
 def test_finished_streams_leave_no_per_stream_state():

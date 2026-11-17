@@ -8,7 +8,7 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.families.qwen4_exp import model as q4
+from pli.families.qwen4_exp import model as q4
 
 pytestmark = pytest.mark.skipif(not mx.metal.is_available(), reason="needs a Metal GPU")
 
@@ -60,7 +60,7 @@ def rel(a, b) -> float:
 def test_matmul_is_mlx_bit_for_bit(m, n, k):
     """The tuned tile where MLX runs qmm, MLX itself where it splits K ((96, 64, 512))."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     mx.random.seed(0)
     x = (mx.random.normal((m, k)) * 0.5).astype(mx.bfloat16)
@@ -74,7 +74,7 @@ def test_matmul_is_mlx_bit_for_bit(m, n, k):
 
 
 def test_linear_falls_back_off_the_fast_path(monkeypatch):
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     layer = q4bits(nn.Linear(256, 64, bias=False))
     small = mx.random.normal((1, 8, 256)).astype(mx.bfloat16)           # under 64 rows: layer(x)
@@ -88,7 +88,7 @@ def test_linear_falls_back_off_the_fast_path(monkeypatch):
 def test_tiles_serve_only_where_they_give_mlx_bits():
     """Tensor-unit GPUs keep MLX's matmuls; elsewhere the tiles pass their check against MLX."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     if prefill_mm._tensor_units():
         assert not prefill_mm.tiles()
@@ -100,7 +100,7 @@ def test_tiles_serve_only_where_they_give_mlx_bits():
 def test_mlx_matmuls_serve_when_the_tiles_step_aside(monkeypatch, why):
     """With tensor units, a failed check or a kernel that does not build, every matmul is MLX's."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     def broken():
         raise RuntimeError("no such kernel")
@@ -128,7 +128,7 @@ def test_mlx_matmuls_serve_when_the_tiles_step_aside(monkeypatch, why):
 def test_gather_sorted_is_mlx_bit_for_bit(group):
     """Every tile shape, skewed routes with empty experts and a part tile: MLX's sorted gather_qmm's bits."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     if prefill_mm._tensor_units():
         pytest.skip("MLX's sorted expert matmul uses the tensor units here: the tiles do not serve")
@@ -152,7 +152,7 @@ def test_gather_sorted_is_mlx_bit_for_bit(group):
 def test_moe_is_the_reference_bit_for_bit(monkeypatch, experts, rows):
     """4+ routes an expert take MLX's sorted QMM, fewer its QMV, as MLX dispatches; the sum is the reference's."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     mx.random.seed(3)
     moe = q4bits(q4.SparseMoE(config(num_experts=experts)), keep=("gate",))  # the router stays bf16
@@ -165,8 +165,8 @@ def test_moe_is_the_reference_bit_for_bit(monkeypatch, experts, rows):
 
 
 def test_fused_hyper_connection_matches_the_reference():
-    from tensorfold.families.qwen4_exp.decode import _HC
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_hc
+    from pli.families.qwen4_exp.decode import _HC
+    from pli.kernels.qwen.flash_next.v1 import prefill_hc
 
     mx.random.seed(4)
     cfg = config()
@@ -227,8 +227,8 @@ def _reference_block_scores(indexer, query, pooled, past):
 def test_prompt_attention_reads_a_top_k_of_blocks_and_matches_masked_attention(monkeypatch, gqa):
     """Rows past the budget read a top-k of the reference's blocks and, so selected, match its masked attention."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import attention as K
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill as P
+    from pli.kernels.qwen.flash_next.v1 import attention as K
+    from pli.kernels.qwen.flash_next.v1 import prefill as P
 
     mx.random.seed(5)
     attn = q4bits(q4.SparseAttention(config()))
@@ -271,8 +271,8 @@ def test_prompt_attention_reads_a_top_k_of_blocks_and_matches_masked_attention(m
 def test_chunks_up_to_dense_keys_attend_densely(monkeypatch):
     """A chunk ending by DENSE_KEYS keys attends densely, a later one through the kernels: by its place alone."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import attention as K
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill as P
+    from pli.kernels.qwen.flash_next.v1 import attention as K
+    from pli.kernels.qwen.flash_next.v1 import prefill as P
 
     mx.random.seed(6)
     attn = q4bits(q4.SparseAttention(config()))
@@ -291,7 +291,7 @@ def test_chunks_up_to_dense_keys_attend_densely(monkeypatch):
 def test_index_selection_is_a_top_k_of_the_reference_scores():
     """index_select picks a top-``top`` of the reference's fp32 block scores for each row (ties either way)."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import attention as K
+    from pli.kernels.qwen.flash_next.v1 import attention as K
 
     mx.random.seed(9)
     rng = np.random.default_rng(9)
@@ -307,8 +307,8 @@ def test_index_selection_is_a_top_k_of_the_reference_scores():
 
 
 def test_attention_rows_gqa_matches_attention_rows():
-    from tensorfold.kernels.qwen.flash_next.v1 import attention as K
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill as P
+    from pli.kernels.qwen.flash_next.v1 import attention as K
+    from pli.kernels.qwen.flash_next.v1 import prefill as P
 
     rng = np.random.default_rng(6)
     rows, heads, kv, dims, cap = 48, 24, 2, 256, 2048
@@ -329,7 +329,7 @@ def test_attention_rows_gqa_matches_attention_rows():
 
 
 def test_ngram_lookup_through_the_fused_tables_is_bit_identical():
-    from tensorfold.kernels.qwen.flash_next.v1 import embed as K
+    from pli.kernels.qwen.flash_next.v1 import embed as K
 
     mx.random.seed(7)
     emb = q4bits(q4.NGramEmbedding(config(), 0))
@@ -347,7 +347,7 @@ def tiny_model(seed: int = 0, **overrides) -> q4.Qwen4Exp:
 
     from mlx.utils import tree_flatten
 
-    from tensorfold.families.qwen4_exp.decode import FusedDecode
+    from pli.families.qwen4_exp.decode import FusedDecode
 
     mx.random.seed(seed)
     model = q4.Qwen4Exp(config(**{"hidden_size": 512, "num_experts": 32, **overrides}))
@@ -403,7 +403,7 @@ def test_releasing_probe_rounds_frees_buffers_and_preserves_the_next_forward(mon
     import gc
     import weakref
 
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     monkeypatch.setattr(FlashNext, "check_windows", lambda self: (4, {1: 1.0, 4: 2.0}))
     model = tiny_model(vocab_size=128, moe_intermediate_size=512, shared_expert_intermediate_size=512)
@@ -431,8 +431,8 @@ def test_releasing_probe_rounds_frees_buffers_and_preserves_the_next_forward(mon
 def test_snapshot_keys_name_the_prefill_path(monkeypatch):
     from types import SimpleNamespace
 
-    from tensorfold import families
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
+    from pli import families
+    from pli.families.qwen4_exp.runtime import FlashNext
 
     runtime = FlashNext.__new__(FlashNext)                              # the key reads ``fused`` alone
     runtime.fused = object()
@@ -442,7 +442,7 @@ def test_snapshot_keys_name_the_prefill_path(monkeypatch):
     monkeypatch.setenv("PLI_FLASH_PREFILL", "1")
     runtime.fused = None                                                # no fused decode: MLX's forward
     assert fast != reference == runtime.prefill_key
-    family = SimpleNamespace(package=SimpleNamespace(KERNEL_VERSION="v1"), module="tensorfold.families.qwen4_exp",
+    family = SimpleNamespace(package=SimpleNamespace(KERNEL_VERSION="v1"), module="pli.families.qwen4_exp",
                              model_type="qwen4_exp")
     keys = {families.kernel_version(family, SimpleNamespace(prefill_key=k)) for k in (fast, reference)}
     keys.add(families.kernel_version(family, object()))                # a model without one: the kernels alone
@@ -452,8 +452,8 @@ def test_snapshot_keys_name_the_prefill_path(monkeypatch):
 def test_prefill_identity_is_fixed_before_snapshot_keys(monkeypatch):
     """The key names the matmul route; once resolved, a changed prefill mode is refused, not keyed as before."""
 
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill_mm
+    from pli.families.qwen4_exp.runtime import FlashNext
+    from pli.kernels.qwen.flash_next.v1 import prefill_mm
 
     runtime = FlashNext.__new__(FlashNext)
     runtime.fused = object()
@@ -471,7 +471,7 @@ def test_prefill_identity_is_fixed_before_snapshot_keys(monkeypatch):
 def test_the_block_scores_kernel_matches_the_indexer(rows, past):
     """One kernel's block scores equal Indexer.block_scores' up to fp32 summation order, at both tiles' edges."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill as P
+    from pli.kernels.qwen.flash_next.v1 import prefill as P
 
     mx.random.seed(rows + past)
     attn = q4.SparseAttention(config())
@@ -489,7 +489,7 @@ def test_the_block_scores_kernel_matches_the_indexer(rows, past):
 def test_the_block_scores_keep_the_indexers_bits_where_they_pick_blocks(rows, past):
     """Past 2,048 keys the scores choose the top 512 blocks: there the batched scores equal the indexer's bit for bit."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill as P
+    from pli.kernels.qwen.flash_next.v1 import prefill as P
 
     mx.random.seed(rows + past)
     attn = q4.SparseAttention(config(indexer_n_heads=4, indexer_head_dim=128, indexer_budget=2048))
@@ -506,8 +506,8 @@ def test_the_block_scores_keep_the_indexers_bits_where_they_pick_blocks(rows, pa
 def test_the_gqa_prompt_kernel_gives_each_head_the_same_bits_however_many_share_a_simdgroup(monkeypatch, keys):
     """Two query heads a simdgroup run each head's sums as one head a simdgroup does: the same bits."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import attention as K
-    from tensorfold.kernels.qwen.flash_next.v1 import prefill as P
+    from pli.kernels.qwen.flash_next.v1 import attention as K
+    from pli.kernels.qwen.flash_next.v1 import prefill as P
 
     mx.random.seed(keys)
     rows, heads, kv_heads, top, ratio = 40, 8, 2, 64, 4

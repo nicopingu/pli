@@ -9,10 +9,10 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("Metal kernels", allow_module_level=True)
 
-from tensorfold.families.deepseek_v4.moe import FP4, swiglu  # noqa: E402
-from tensorfold.families.glm5_next.linear import Q  # noqa: E402
-from tensorfold.kernels.deepseek.v4 import rows as RK  # noqa: E402
-from tensorfold.kernels.glm.flash.v1 import kernels as GK  # noqa: E402
+from pli.families.deepseek_v4.moe import FP4, swiglu  # noqa: E402
+from pli.families.glm5_next.linear import Q  # noqa: E402
+from pli.kernels.deepseek.v4 import rows as RK  # noqa: E402
+from pli.kernels.glm.flash.v1 import kernels as GK  # noqa: E402
 
 
 def affine(outs: int, ins: int) -> Q:
@@ -60,8 +60,8 @@ def test_fp4_expert_rows_equal_one_row_gathers(rows):
 @pytest.mark.parametrize("ratio,dims,first,count", [(4, 512, 0, 3), (4, 512, 5, 4), (4, 128, 0, 1), (4, 128, 9, 2),
                                                      (128, 512, 0, 1), (128, 512, 3, 2)])
 def test_pool_kernel_equals_the_ops_path(ratio, dims, first, count):
-    from tensorfold.families.deepseek_v4 import compressor as C
-    from tensorfold.families.deepseek_v4.caches import LayerCache
+    from pli.families.deepseek_v4 import compressor as C
+    from pli.families.deepseek_v4.caches import LayerCache
 
     mx.random.seed(ratio + dims + first)
     width = (2 if ratio == 4 else 1) * dims
@@ -89,7 +89,7 @@ def test_pool_kernel_equals_the_ops_path(ratio, dims, first, count):
 def test_bf16_inputs_read_as_fp32(rows):
     from types import SimpleNamespace
 
-    from tensorfold.kernels.glm.flash.v1 import moe as MK
+    from pli.kernels.glm.flash.v1 import moe as MK
 
     mx.random.seed(10 + rows)
     q = affine(1024, 4096)
@@ -104,8 +104,8 @@ def test_bf16_inputs_read_as_fp32(rows):
 
 @pytest.mark.parametrize("rows,base", [(1, 0), (4, 0), (6, 120)])
 def test_attention_rotates_back_as_norm_rope(rows, base):
-    from tensorfold.kernels.deepseek.v4 import attention as ATT
-    from tensorfold.kernels.deepseek.v4 import rope as NR
+    from pli.kernels.deepseek.v4 import attention as ATT
+    from pli.kernels.deepseek.v4 import rope as NR
 
     mx.random.seed(20 + rows)
     q = mx.random.normal((rows, 64, 512)).astype(mx.bfloat16)
@@ -125,7 +125,7 @@ def test_attention_rotates_back_as_norm_rope(rows, base):
 @pytest.mark.parametrize("splits", [0, 4])
 @pytest.mark.parametrize("rows,chosen", [(1, False), (5, False), (5, True)])
 def test_attention_rows_are_one_row_calls_and_near_fp32(splits, rows, chosen):
-    from tensorfold.kernels.deepseek.v4 import attention as ATT
+    from pli.kernels.deepseek.v4 import attention as ATT
 
     mx.random.seed(30 + rows)
     ring = mx.random.normal((144, 512)).astype(mx.bfloat16)

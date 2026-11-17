@@ -7,7 +7,7 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 
 from glm5_fakes import write_checkpoint  # noqa: E402
-from tensorfold.families.glm5_next import config, model, weights  # noqa: E402
+from pli.families.glm5_next import config, model, weights  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -36,8 +36,8 @@ def _same(a, b) -> bool:
 
 def test_fused_model_drafts_exact(checkpoint, monkeypatch, device):
     from test_glm5_next_family import _run_engine, tokens
-    from tensorfold.families.glm5_next import mtp as glm_mtp
-    from tensorfold.families.glm5_next.runtime import GLMFlash
+    from pli.families.glm5_next import mtp as glm_mtp
+    from pli.families.glm5_next.runtime import GLMFlash
 
     monkeypatch.setattr(config, "FUSED", frozenset(config.FUSED_KERNELS))
     model = weights.load_backbone(checkpoint)
@@ -51,7 +51,7 @@ def test_fused_model_drafts_exact(checkpoint, monkeypatch, device):
 
 @pytest.fixture(params=[1, 0], ids=["shared-split", "shared-in-slot"])
 def split_shared(request, monkeypatch):
-    from tensorfold.kernels.glm.flash.v1 import moe as F
+    from pli.kernels.glm.flash.v1 import moe as F
 
     monkeypatch.setattr(F, "SPLIT_SHARED", request.param)
     return request.param
@@ -92,7 +92,7 @@ def test_fused_hc_boundary_is_the_row_by_row_path(monkeypatch):
 
     if not mx.metal.is_available():
         pytest.skip("needs Metal")
-    from tensorfold.kernels.glm.flash.v1 import hc as F
+    from pli.kernels.glm.flash.v1 import hc as F
 
     previous = mx.default_device()
     mx.set_default_device(mx.gpu)
@@ -141,7 +141,7 @@ def test_router_kernel_gives_mlx_one_row_bits():
         pytest.skip("needs Metal")
     import types
 
-    from tensorfold.kernels.glm.flash.v1 import moe as F
+    from pli.kernels.glm.flash.v1 import moe as F
 
     previous = mx.default_device()
     mx.set_default_device(mx.gpu)

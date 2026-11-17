@@ -1,8 +1,8 @@
 # Control room
 
-`tensorfold service` installs a per-user macOS LaunchAgent that runs
-`python -m tensorfold serve` with a literal argument list.
-`tensorfold tui` is the keyboard dashboard for those jobs and for read-only HTTP endpoints.
+`pli service` installs a per-user macOS LaunchAgent that runs
+`python -m pli serve` with a literal argument list.
+`pli tui` is the keyboard dashboard for those jobs and for read-only HTTP endpoints.
 A profile plus telemetry is the whole input. No model forward, kernel, sampler, or cache changes.
 
 ## Install a service
@@ -10,7 +10,7 @@ A profile plus telemetry is the whole input. No model forward, kernel, sampler, 
 The model is already cached. `install` writes the profile and an enabled login job.
 The name `control-smoke` is reserved. `service install` and the new-service key refuse it.
 Pass `--start` when the server should come up immediately. Pull an uncached model with
-`tensorfold pull` first. `--allow-download` is the opt-in for a download at service start.
+`pli pull` first. `--allow-download` is the opt-in for a download at service start.
 A Hugging Face id works once its files are on disk.
 
 The job lives in the logged-in user's `gui/<uid>` domain. It starts at that user's login
@@ -18,21 +18,21 @@ and stops at logout. Root and `sudo` are refused. An SSH session still needs tha
 GUI login domain.
 
 ```bash
-tensorfold service install "/absolute/path/to/cached-model" \
+pli service install "/absolute/path/to/cached-model" \
   --name default --context 32768 --parallel auto
-tensorfold service start default
-tensorfold service status default
-tensorfold service doctor default
-tensorfold tui --profile default
+pli service start default
+pli service status default
+pli service doctor default
+pli tui --profile default
 ```
 
 ```bash
-tensorfold service list
-tensorfold service status default --json
-tensorfold service logs default --lines 100 --follow
-tensorfold service stop default
-tensorfold service restart default
-tensorfold service uninstall default --yes
+pli service list
+pli service status default --json
+pli service logs default --lines 100 --follow
+pli service stop default
+pli service restart default
+pli service uninstall default --yes
 ```
 
 `stop` disables the job before unloading it, so login leaves it stopped until `start`.
@@ -45,10 +45,10 @@ The profile is the source of truth for the plist. The manager refuses a plist th
 Replace a profile only while it is stopped.
 
 ```bash
-tensorfold service stop default
-tensorfold service install "/absolute/path/to/cached-model" \
+pli service stop default
+pli service install "/absolute/path/to/cached-model" \
   --name default --context 65536 --replace
-tensorfold service start default
+pli service start default
 ```
 
 ## Configuration
@@ -57,7 +57,7 @@ The serving interpreter is an absolute path. A virtualenv symlink stays as writt
 No field is evaluated as a shell command.
 
 ```bash
-tensorfold service install "/cached/model with spaces" --name code \
+pli service install "/cached/model with spaces" --name code \
   --port 8081 --parallel auto --python "$HOME/.venvs/tensorfold-control/bin/python" \
   --env PLI_MEMORY_LIMIT_GB=48 \
   --arg=--vision --arg=--spill-gib --arg=20
@@ -74,7 +74,7 @@ The plist and the profile store the path. The values stay in the file.
 
 ```bash
 chmod 600 "$HOME/.config/tensorfold/service-env.json"
-tensorfold service install Org/Already-Cached-Model --name private \
+pli service install Org/Already-Cached-Model --name private \
   --env-file "$HOME/.config/tensorfold/service-env.json"
 ```
 
@@ -104,15 +104,15 @@ Service commands use the standard library. The dashboard needs `prompt_toolkit` 
 python -m pip install 'prompt-toolkit>=3.0.51,<4'
 ```
 
-The error from `tensorfold tui` prints that command with the venv's Python. `rich` uses the same form.
+The error from `pli tui` prints that command with the venv's Python. `rich` uses the same form.
 
 ```bash
-tensorfold tui
-tensorfold tui --profile code
-tensorfold tui --url http://127.0.0.1:8080/v1
-tensorfold tui --url https://spark.example.invalid --token-env PLI_API_KEY
-tensorfold tui --demo
-tensorfold tui --demo --snapshot preview.svg
+pli tui
+pli tui --profile code
+pli tui --url http://127.0.0.1:8080/v1
+pli tui --url https://spark.example.invalid --token-env PLI_API_KEY
+pli tui --demo
+pli tui --demo --snapshot preview.svg
 ```
 
 Local service changes are macOS-only. A remote URL is monitor-only on every platform.

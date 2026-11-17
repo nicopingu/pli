@@ -1,0 +1,8 @@
+{"reserve_go": 6,
+ "familles": {
+  "image": {"argv": ["{python}", "-m", "pli.gen.fils_simule", "--port", "{port}"],
+            "port": 18101, "memoire_go": 8, "delai_decharge_s": 300, "sante_delai_s": 60},
+  "video": {"argv": ["{python}", "-m", "pli.gen.fils_video", "--port", "{port}",
+                     "--catalogue", "/chemin/pli/source/docs/gen/catalogue-video.exemple.json",
+                     "--sorties", "/chemin/pli/sorties/videos"],
+            "port": 18103, "memoire_go": 12, "delai_decharge_s": 0, "sante_delai_s": 60}}}

@@ -97,7 +97,7 @@ def handler(headers, body):
 
 
 def test_absent_and_identical_content_lengths():
-    from tensorfold.server.request_body import read_body
+    from pli.server.request_body import read_body
 
     assert read_body(handler([], b"next request")) == b""
     request = handler([("Content-Length", "2, 02"), ("Content-Length", "2")], b"{}next request")
@@ -106,7 +106,7 @@ def test_absent_and_identical_content_lengths():
 
 
 def test_body_reader_preserves_fields_and_exact_limit():
-    from tensorfold.server.request_body import read_body
+    from pli.server.request_body import read_body
 
     payload = json.dumps({"messages": [], "reasoning_effort": "max", "tools": [],
                           "max_tokens": 262144, "stream": True}).encode()
@@ -122,8 +122,8 @@ def test_body_reader_preserves_fields_and_exact_limit():
     ([("Transfer-Encoding", "chunked")], b"5\r\n12345\r\n4\r\n6789\r\n0\r\n\r\n"),
 ])
 def test_body_reader_limits_total_decoded_bytes(headers, wire):
-    from tensorfold.server.errors import RequestError
-    from tensorfold.server.request_body import read_body
+    from pli.server.errors import RequestError
+    from pli.server.request_body import read_body
 
     request = handler(headers, wire)
     with pytest.raises(RequestError, match="limit"):
@@ -137,8 +137,8 @@ def test_body_reader_limits_total_decoded_bytes(headers, wire):
     b"0\r\n" + b"X-Test: x\r\n" * 10000 + b"\r\n",
 ])
 def test_chunk_metadata_is_bounded(wire):
-    from tensorfold.server.errors import RequestError
-    from tensorfold.server.request_body import read_body
+    from pli.server.errors import RequestError
+    from pli.server.request_body import read_body
 
     request = handler([("Transfer-Encoding", "chunked")], wire)
     with pytest.raises(RequestError):

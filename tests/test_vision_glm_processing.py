@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tensorfold.vision.glm_processing import GLMImageProcessor
+from pli.vision.glm_processing import GLMImageProcessor
 
 
 class Tokenizer:

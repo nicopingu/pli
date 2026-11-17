@@ -10,8 +10,8 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.families.qwen4_exp.mtp_cache import MTPCache  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1 import attention  # noqa: E402
+from pli.families.qwen4_exp.mtp_cache import MTPCache  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import attention  # noqa: E402
 
 HEADS, KVH, DIMS = 24, 2, 256
 

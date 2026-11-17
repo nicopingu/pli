@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tensorfold.engine.lane_engine import LaneStream
+from pli.engine.lane_engine import LaneStream
 
 
 def _stream(prompt, max_new=64, eos=()):

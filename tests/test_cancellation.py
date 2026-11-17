@@ -6,7 +6,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from tensorfold.server.http import make_handler
+from pli.server.http import make_handler
 from tests.lane_fakes import FakeEngine
 from tests.test_lane_server import make_app
 

@@ -9,7 +9,7 @@ mx = pytest.importorskip("mlx.core")
 
 from types import SimpleNamespace  # noqa: E402
 
-from tensorfold.kernels.qwen.flash_next.v1 import experts, stream_experts  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import experts, stream_experts  # noqa: E402
 
 
 def metal():

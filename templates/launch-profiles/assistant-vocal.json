@@ -1,0 +1,146 @@
+{
+  "nom": "assistant-vocal",
+  "titre": "Assistant vocal",
+  "pour": "voice chat: transcription (Qwen3-ASR), 27B response, voice synthesis (Kokoro, French voice)",
+  "machine_profile": "auto",
+  "modele": "${PLI_MODELE}",
+  "arguments": [
+    "--name",
+    "qwen3.8-27b",
+    "--drafter",
+    "${PLI_BROUILLON}",
+    "--no-thinking",
+    "--decode-share",
+    "1",
+    "--snapshot-dir",
+    "${PLI_DONNEES}/instantanes/27b",
+    "--spill-gib",
+    "40"
+  ],
+  "environnement": {
+    "PLI_EVENTS": "${PLI_DONNEES}/logs/events.jsonl"
+  },
+  "conditions": [
+    {
+      "si_profil_machine": "m1-ultra",
+      "arguments": [
+        "--context",
+        "229376",
+        "--parallel",
+        "4"
+      ],
+      "environnement": {
+        "MLX_MAX_MB_PER_BUFFER": "500",
+        "MLX_MAX_OPS_PER_BUFFER": "100",
+        "PLI_ADMIT_BY_WORK": "1",
+        "PLI_ADMIT_SMALL": "0",
+        "PLI_SPILL_BACKGROUND": "1",
+        "PLI_DISK_REPLY_END": "1"
+      },
+      "effet": "m1-ultra machine profile: 229,376 token window, 4 conversations at a time (validated machine settings)",
+      "sinon": "no m1-ultra machine profile: PLI default settings, window adjusted to memory at startup"
+    },
+    {
+      "si_fichier": "${PLI_TETE_MTP}",
+      "environnement": {
+        "PLI_HYBRID": "1",
+        "PLI_MTP_HEAD": "${PLI_TETE_MTP}"
+      },
+      "effet": "MTP head present: hybrid DFlash2 drafter and MTP head (faster, same text)",
+      "sinon": "MTP head absent (pli setup writes it): DFlash2 drafter only"
+    },
+    {
+      "si_profil_machine": "m1-ultra",
+      "si_fichier": "${PLI_CARTE_A1}",
+      "environnement": {
+        "PLI_A1_LSA_MAP": "${PLI_CARTE_A1}",
+        "PLI_S3B_THRESHOLD": "16384",
+        "PLI_S3B_ROWS": "4096"
+      },
+      "effet": "A1 card present: long prompts read faster (text may change)",
+      "sinon": "A1 card absent or no m1-ultra machine profile: long prompts read without A1"
+    }
+  ],
+  "memoire": {
+    "ram_min_go": 48,
+    "statut": "estimated by calculation; validated on 64 GB (validated machine)",
+    "detail": "calculation: 27B 36 GB + Kokoro 3 GB + transcription 1 to 1.6 GB + reserve 6 GB = 46.6 GB (Kokoro and transcription measured, fils_audio.py:80 and commit b4ee4a8); Drama 3 (24 GB measured) is not in this profile: with it 36 + 24 + 1.6 + 6 = 67.6 GB, 64 GB is required and the 27B frees up memory",
+    "si_trop_petit": "Under 48 GB, nothing is measured or estimated for voice: petite-machine profile without voice."
+  },
+  "disque": [
+    {
+      "quoi": "${PLI_MODELE} model",
+      "go": 16,
+      "chemin": "hf:${PLI_MODELE}",
+      "statut": "measured: 15 GB on the validated machine, 16.1 GB announced by Hugging Face"
+    },
+    {
+      "quoi": "brouillon DFlash2 (z-lab/Qwen3.8-27B-DFlash2)",
+      "go": 4,
+      "chemin": "hf:z-lab/Qwen3.8-27B-DFlash2",
+      "statut": "measured: 3.6 GB"
+    },
+    {
+      "quoi": "MTP head (source bf16 0.85 GB and 4 bits 0.23 GB)",
+      "go": 1.1,
+      "chemin": "${PLI_TETE_MTP}",
+      "statut": "measured"
+    },
+    {
+      "quoi": "programme PLI (environnement Python)",
+      "go": 1.6,
+      "chemin": "${PLI_BIN}",
+      "statut": "measured: 1.6 GB"
+    },
+    {
+      "quoi": "conversation snapshots (ceiling --spill-gib 40)",
+      "go": 40,
+      "statut": "ceiling set"
+    },
+    {
+      "quoi": "environnement mlx-audio",
+      "go": 0.7,
+      "chemin": "${PLI_VENV_AUDIO}/bin/python",
+      "statut": "measured: 0.7 GB"
+    },
+    {
+      "quoi": "voix Kokoro (mlx-community/Kokoro-82M-bf16)",
+      "go": 0.4,
+      "chemin": "hf:mlx-community/Kokoro-82M-bf16",
+      "statut": "measured: 0.34 GB"
+    },
+    {
+      "quoi": "transcription Qwen3-ASR 0.6B (mlx-community/Qwen3-ASR-0.6B-8bit)",
+      "go": 1,
+      "chemin": "hf:mlx-community/Qwen3-ASR-0.6B-8bit",
+      "statut": "measured: 0.96 GB"
+    }
+  ],
+  "generation": {
+    "config": {
+      "reserve_go": 6,
+      "seuil_echange_mo": 4096,
+      "echange_dispo_min_go": 4,
+      "familles": {
+        "audio": {
+          "argv": [
+            "${PLI_VENV_AUDIO}/bin/python",
+            "-I",
+            "${PLI_DEPOT}/src/pli/gen/fils_audio.py",
+            "--port",
+            "{port}",
+            "--voix",
+            "${CATALOGUE_VOIX}"
+          ],
+          "port": 18102,
+          "memoire_go": 3,
+          "delai_decharge_s": 600,
+          "sante_delai_s": 60
+        }
+      }
+    },
+    "catalogues": {
+      "CATALOGUE_VOIX": "catalogues/voix.json"
+    }
+  }
+}

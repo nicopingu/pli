@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tensorfold.server.checkpoints import CheckpointStore
+from pli.server.checkpoints import CheckpointStore
 from tests.lane_fakes import FakeBatchItem, FakeEngine
 from tests.test_lane_server import make_app
 
@@ -18,14 +18,14 @@ class MessageEngine(FakeEngine):
     """Chunks start at message openers at least 3 tokens apart, and every 8 tokens."""
 
     def __init__(self, model: Any = None, **kwargs: Any) -> None:
-        from tensorfold.engine.prefill_plan import PrefillPlan
+        from pli.engine.prefill_plan import PrefillPlan
 
         super().__init__(model, **kwargs)
         self.prefill_plan = PrefillPlan(8, (OPEN,), 3, (OPEN, ASSIST))
 
 
 def _message_scheduler() -> tuple[Any, CheckpointStore, MessageEngine]:
-    from tensorfold.server.scheduler import Scheduler
+    from pli.server.scheduler import Scheduler
 
     store = CheckpointStore(4, copier=lambda c: c)
     engine = MessageEngine()
@@ -36,8 +36,8 @@ def test_a_saved_block_ending_at_a_message_is_warmed_to_its_end(tmp_path) -> Non
     mx = pytest.importorskip("mlx.core")
     from mlx_lm.models.cache import KVCache
 
-    from tensorfold.engine.prefix_snapshots import save_snapshot
-    from tensorfold.server.scheduler import Scheduler
+    from pli.engine.prefix_snapshots import save_snapshot
+    from pli.server.scheduler import Scheduler
 
     block = [OPEN, *range(20, 30)]                           # a system message; the next message began at 11
     kv = KVCache()
@@ -65,7 +65,7 @@ def test_a_saved_block_ending_at_a_message_is_warmed_to_its_end(tmp_path) -> Non
 
 
 def test_a_follow_up_resumes_at_its_latest_reply_start() -> None:
-    from tensorfold.server.scheduler import ChatJob
+    from pli.server.scheduler import ChatJob
 
     scheduler, store, engine = _message_scheduler()
     turn1 = [OPEN, 5, 6, 7, OPEN, 8, 9, OPEN, ASSIST]       # system, user, then the generation prompt at 7
@@ -79,7 +79,7 @@ def test_a_follow_up_resumes_at_its_latest_reply_start() -> None:
 
 
 def test_a_start_too_close_to_the_last_is_merged_and_the_checkpoint_falls_back() -> None:
-    from tensorfold.server.scheduler import ChatJob
+    from pli.server.scheduler import ChatJob
 
     scheduler, store, engine = _message_scheduler()
     turn1 = [OPEN, 5, 6, 7, OPEN, 8, OPEN, ASSIST]          # the generation prompt 2 tokens after the user's start
@@ -91,7 +91,7 @@ def test_a_start_too_close_to_the_last_is_merged_and_the_checkpoint_falls_back()
 
 
 def test_a_stored_prefix_resumes_only_a_prompt_with_a_chunk_start_there() -> None:
-    from tensorfold.server.scheduler import ChatJob
+    from pli.server.scheduler import ChatJob
 
     scheduler, store, engine = _message_scheduler()
     stored = [OPEN, 5, 6, 7, OPEN, 8, 9]
@@ -104,7 +104,7 @@ def test_a_stored_prefix_resumes_only_a_prompt_with_a_chunk_start_there() -> Non
 
 
 def test_a_shared_system_block_is_kept_at_the_first_message_after_it() -> None:
-    from tensorfold.server.scheduler import ChatJob
+    from pli.server.scheduler import ChatJob
 
     scheduler, store, engine = _message_scheduler()
     system = [OPEN, *range(20, 30)]                         # 11 tokens: a grid start at 8, the user's opener at 11

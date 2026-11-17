@@ -8,9 +8,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 
 from glm5_fakes import TEXT, write_checkpoint  # noqa: E402
-from tensorfold.families.glm5_next import caches, linear, mlp, weights  # noqa: E402
-from tensorfold.families.glm5_next import mtp as glm_mtp  # noqa: E402
-from tensorfold.families.glm5_next.runtime import GLMFlash  # noqa: E402
+from pli.families.glm5_next import caches, linear, mlp, weights  # noqa: E402
+from pli.families.glm5_next import mtp as glm_mtp  # noqa: E402
+from pli.families.glm5_next.runtime import GLMFlash  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -40,10 +40,10 @@ def tokens(n: int, seed: int = 1) -> list[int]:
 
 
 def test_family_is_detected_and_checked(checkpoint):
-    from tensorfold import families
-    from tensorfold.families import glm5_next
+    from pli import families
+    from pli.families import glm5_next
 
-    assert families.detect(checkpoint).module == "tensorfold.families.glm5_next"
+    assert families.detect(checkpoint).module == "pli.families.glm5_next"
     glm5_next.check(checkpoint)
     assert glm5_next.has_mtp(checkpoint)
 
@@ -56,11 +56,11 @@ def test_check_reads_json_only_and_names_the_mlx_it_needs(tmp_path, monkeypatch)
     import sys
     from importlib import metadata
 
-    from tensorfold.families import glm5_next
+    from pli.families import glm5_next
 
     (tmp_path / "config.json").write_text(json.dumps({"model_type": "glm5_next", "text_config": TEXT,
                                                       "quantization": {"bits": 4, "group_size": 64}}))
-    code = ("import sys; from tensorfold.families import glm5_next; glm5_next.check(sys.argv[1]); "
+    code = ("import sys; from pli.families import glm5_next; glm5_next.check(sys.argv[1]); "
             "print('mlx.core' in sys.modules)")
     out = subprocess.run([sys.executable, "-c", code, str(tmp_path)], capture_output=True, text=True, check=True,
                          env={**__import__("os").environ, "PYTHONPATH": ":".join(sys.path)})
@@ -141,7 +141,7 @@ def test_decode_rows_give_one_row_bits(checkpoint):
 
 
 def test_keep_rows_rolls_every_cache_back(checkpoint):
-    from tensorfold.engine.lane_engine import LaneEngine
+    from pli.engine.lane_engine import LaneEngine
 
     model = backbone(checkpoint)
     base = model.make_cache()
@@ -166,8 +166,8 @@ def test_keep_rows_rolls_every_cache_back(checkpoint):
 
 
 def _run_engine(runtime, prompt, n, drafts=True):
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.families.glm5_next import engine_settings
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.families.glm5_next import engine_settings
 
     engine = LaneEngine(runtime, **engine_settings(runtime))
     assert engine.family
@@ -201,11 +201,11 @@ def test_image_prefill_across_chunks_and_mtp_matches_the_equivalent_embeddings(c
     """An image crosses a chunk boundary; serial and MTP decode agree with a token-embedding reference."""
     from types import SimpleNamespace
 
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.families.glm5_next import engine_settings
-    from tensorfold.vision.glm_mlx import GLMVisionFrontend
-    from tensorfold.vision.glm_processing import PreparedGLMVisionPrompt
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.families.glm5_next import engine_settings
+    from pli.vision.glm_mlx import GLMVisionFrontend
+    from pli.vision.glm_processing import PreparedGLMVisionPrompt
 
     if device == "gpu":
         if not mx.metal.is_available():
@@ -288,9 +288,9 @@ def test_draft_head_absorbs_vision_rows_instead_of_placeholder_ids(checkpoint):
 def test_lane_engine_resumes_from_a_chunk_start(checkpoint, tmp_path, grid, length, cut, kept):
     """A checkpoint at a chunk start, in memory or read back from disk, resumes exactly like a fresh prefill."""
 
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.engine.prefix_snapshots import load_snapshot, save_snapshot
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.engine.prefix_snapshots import load_snapshot, save_snapshot
 
     model = backbone(checkpoint)
     runtime = GLMFlash(model, glm_mtp.load(model), drafts=2)
@@ -321,8 +321,8 @@ def test_lane_engine_resumes_from_a_chunk_start(checkpoint, tmp_path, grid, leng
 def test_prefill_resumed_at_every_grid_point_has_a_fresh_prefills_bits(checkpoint, monkeypatch, device, length):
     """Chunks on a 32-row grid (sub-chunks of 12 queries): a prompt resumed at any grid point gets fresh bits."""
 
-    from tensorfold.engine.lane_engine import LaneEngine
-    from tensorfold.families.glm5_next import mla
+    from pli.engine.lane_engine import LaneEngine
+    from pli.families.glm5_next import mla
 
     if device == "gpu":
         if not mx.metal.is_available():
@@ -349,8 +349,8 @@ def test_dense_prompt_chunks_attend_their_causal_prefix_as_decode_does(checkpoin
 
     from dataclasses import replace
 
-    from tensorfold.families.glm5_next import config as C
-    from tensorfold.families.glm5_next.mla import MLA
+    from pli.families.glm5_next import config as C
+    from pli.families.glm5_next.mla import MLA
 
     model = backbone(checkpoint)
     attn = next(layer.attn for layer in model.layers if isinstance(layer.attn, MLA))
@@ -372,8 +372,8 @@ def test_dense_prompt_chunks_attend_their_causal_prefix_as_decode_does(checkpoin
 def test_prompt_attention_matches_the_decode_path(checkpoint):
     """Prompt chunks attend over the keys each query's decode step would choose (bits aside: the paths differ)."""
 
-    from tensorfold.families.glm5_next import config as C
-    from tensorfold.families.glm5_next.mla import MLA
+    from pli.families.glm5_next import config as C
+    from pli.families.glm5_next.mla import MLA
 
     model = backbone(checkpoint)
     attn = next(layer.attn for layer in model.layers if isinstance(layer.attn, MLA))
@@ -405,8 +405,8 @@ def test_shared_forward_gives_each_stream_its_own_bits(checkpoint, device):
 
 
 def _run_streams(runtime, specs, together):
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-    from tensorfold.families.glm5_next import engine_settings
+    from pli.engine.lane_engine import LaneEngine, LaneStream
+    from pli.families.glm5_next import engine_settings
 
     def stream(i, spec):
         prompt, n, sampling, drafts = spec
@@ -436,7 +436,7 @@ def _run_streams(runtime, specs, together):
 def test_concurrent_streams_emit_what_they_emit_alone(checkpoint, device):
     """Streams sharing rounds (drafted and serial, greedy and sampled) each emit exactly their tokens alone."""
 
-    from tensorfold.engine.exact_sampling import Sampling
+    from pli.engine.exact_sampling import Sampling
 
     if device == "gpu":
         if not mx.metal.is_available():
@@ -464,7 +464,7 @@ def test_concurrent_streams_emit_what_they_emit_alone(checkpoint, device):
 def test_qmv_rows_gives_mlx_one_row_bits():
     """On Metal: every row of a qmv_rows call equals MLX's one-row quantized matmul."""
 
-    from tensorfold.kernels.glm.flash.v1 import kernels
+    from pli.kernels.glm.flash.v1 import kernels
 
     if not mx.metal.is_available():
         pytest.skip("needs Metal")
@@ -518,7 +518,7 @@ def test_real_weights_first_layers_rows_are_exact():
 def test_bf16_abliterated_output_projections_keep_prefill_and_mtp_working(tmp_path):
     """A TensorFold derivative keeps quantized inputs/experts but stores attention outputs, including MTP, in BF16."""
     import json
-    from tensorfold.families import glm5_next
+    from pli.families import glm5_next
 
     folder = write_checkpoint(tmp_path / 'bf16-output')
     index = json.loads((folder / 'model.safetensors.index.json').read_text())['weight_map']
@@ -567,7 +567,7 @@ def test_bf16_abliterated_output_projections_keep_prefill_and_mtp_working(tmp_pa
 
 
 def test_unquantized_inputs_still_rejected(tmp_path):
-    from tensorfold.families import glm5_next
+    from pli.families import glm5_next
     folder = write_checkpoint(tmp_path / 'unsupported', stated={
         'model.language_model.layers.0.self_attn.q_proj': False})
     with pytest.raises(ValueError, match='module'):

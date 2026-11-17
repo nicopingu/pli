@@ -7,9 +7,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 pytest.importorskip("mlx_lm")
 
-from tensorfold.engine.lane_engine import LaneEngine  # noqa: E402
-from tensorfold.engine.prefix_snapshots import load_snapshot, save_snapshot  # noqa: E402
-from tensorfold.families.nemotron_h.state_cache import RowStateCache  # noqa: E402
+from pli.engine.lane_engine import LaneEngine  # noqa: E402
+from pli.engine.prefix_snapshots import load_snapshot, save_snapshot  # noqa: E402
+from pli.families.nemotron_h.state_cache import RowStateCache  # noqa: E402
 
 
 def _rows():

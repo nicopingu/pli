@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-import tensorfold.server.http as http
+import pli.server.http as http
 
 from tests.test_lane_server import make_app
 from tests.test_server_openai_compat import FakeApp, post_json, serve_fake
@@ -169,7 +169,7 @@ def test_a_template_that_names_an_effort_is_given_that_effort(names, effort, wan
 
 def test_glm_omitted_effort_stays_the_template_default_and_a_medium_default_is_high():
     jinja2 = pytest.importorskip("jinja2")
-    from tensorfold.server.request_options import coerce_effort, effort_levels
+    from pli.server.request_options import coerce_effort, effort_levels
 
     source = ("{%- set effective_reasoning_effort = reasoning_effort if reasoning_effort is defined "
               "and reasoning_effort in ['low', 'high'] else 'max' -%}{{ effective_reasoning_effort }}")
@@ -287,7 +287,7 @@ def test_glm_and_qwen_templates_hear_the_nearest_named_level():
     """GLM-5.3's effort line and Qwen3.8's effort line, the text in those checkpoints."""
 
     jinja2 = pytest.importorskip("jinja2")
-    from tensorfold.server.request_options import coerce_effort, effort_levels, heard_effort
+    from pli.server.request_options import coerce_effort, effort_levels, heard_effort
 
     glm = ("{%- set effective_reasoning_effort = reasoning_effort if reasoning_effort is defined "
            "and reasoning_effort in ['low', 'high'] else 'max' -%}{{ effective_reasoning_effort }}")
@@ -313,7 +313,7 @@ def test_glm_and_qwen_templates_hear_the_nearest_named_level():
 
 
 def test_nearest_named_effort_direct():
-    from tensorfold.server.request_options import nearest_named_effort
+    from pli.server.request_options import nearest_named_effort
 
     nearest = nearest_named_effort
     assert nearest("medium", frozenset({"xhigh", "low"})) == "low"      # non-tie, downward

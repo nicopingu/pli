@@ -9,8 +9,8 @@ import time
 
 import pytest
 
-from tensorfold.control.config import Paths, Profile
-from tensorfold.control.launchd import Manager
+from pli.control.config import Paths, Profile
+from pli.control.launchd import Manager
 
 SMOKE_NAME = "control-smoke"
 
@@ -20,7 +20,7 @@ SMOKE_NAME = "control-smoke"
                     reason="requires explicit PLI_TEST_LAUNCHD=1 in a logged-in macOS session")
 def test_real_launchd_lifecycle_without_model_load():
     # Files stay in a temp home. The label is the one reserved name.
-    with tempfile.TemporaryDirectory(prefix=".tensorfold-control-smoke-", dir=Path.home()) as directory:
+    with tempfile.TemporaryDirectory(prefix=".pli-control-smoke-", dir=Path.home()) as directory:
         manager = Manager(Paths(Path(directory)))
         name = SMOKE_NAME
         profile = Profile(name, "NO_MODEL_IS_LOADED", python=sys.executable, args=("--help",))

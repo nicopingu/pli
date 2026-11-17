@@ -1,0 +1,549 @@
+From b73b71f84ce7b6fb7c3889a73c63d6ea0d4c4a60 Mon Sep 17 00:00:00 2001
+From: Nicolas <199779756+nicopingu@users.noreply.github.com>
+Date: Tue, 17 Nov 2026 19:56:16 +0100
+Subject: [PATCH] In-memory LoRA, applied as each DiT block is loaded (--lora
+ FILE@FORCE, repeatable)
+
+W += force * up @ down_t^T on qkv, out, fc1 and fc2 of the 50 blocks and the token refiner, computed in F32
+(MPSGraph) then rounded once to BF16, as a fusion on disk does: on a 22-frame Turbo video the MP4 is byte-for-byte
+identical to the one rendered from the fused transformer. Several LoRA are concatenated along the rank. With
+--ssd-streaming the update is applied at each read of the block; resident, once at load. Files in the
+h3-lora-natif format, written by PLI's tools/pli-lora-natif.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ h3_dit.c         | 260 ++++++++++++++++++++++++++++++++++++++++++++++-
+ h3_dit.h         |   5 +
+ h3_gpu.h         |   6 ++
+ h3_gpu.m         |  80 ++++++++++++++-
+ h3_shaders.metal |  10 ++
+ main.c           |  13 ++-
+ 6 files changed, 370 insertions(+), 4 deletions(-)
+
+diff --git a/h3_dit.c b/h3_dit.c
+index 667e49b..d4fc2d0 100644
+--- a/h3_dit.c
++++ b/h3_dit.c
+@@ -2,6 +2,7 @@
+ 
+ #include "h3_dit_schedule.h"
+ #include "h3_weights.h"
++#include "h3_safetensors.h"
+ 
+ #include <math.h>
+ #include <pthread.h>
+@@ -67,6 +68,21 @@ typedef struct {
+     h3_dit_stream_source sources[STREAM_MATRICES];
+ } h3_dit_stream_layer;
+ 
++/* In-memory LoRA: for one matrix, the requested LoRA concatenated along the rank (up already multiplied by the
++ * force), added to the BF16 weight each time the block is loaded. */
++typedef struct {
++    h3_gpu_tensor *up;
++    h3_gpu_tensor *down_t;
++    uint32_t rank;
++} h3_dit_lora;
++
++enum { H3_LORA_MAX = 8 };
++static struct {
++    char *path;
++    float force;
++} h3_lora_specs[H3_LORA_MAX];
++static unsigned h3_lora_spec_count;
++
+ struct h3_dit {
+     h3_gpu *gpu;
+     h3_weight_store *weights;
+@@ -140,6 +156,10 @@ struct h3_dit {
+     h3_dit_block blocks[H3_DIT_BLOCKS];
+     h3_dit_block stream_slots[2];
+     h3_dit_stream_layer stream_layers[H3_DIT_BLOCKS];
++    h3_dit_lora lora_blocks[H3_DIT_BLOCKS][STREAM_MATRICES];
++    h3_dit_lora lora_refiner[2][STREAM_MATRICES];
++    h3_gpu_tensor *lora_delta;
++    int lora_active;
+     unsigned stream_ready_layer;
+     unsigned stream_ready_slot;
+     uint64_t stream_bytes;
+@@ -499,6 +519,231 @@ static uint32_t token_reduced_parent(const h3_dit *dit, uint32_t full_row) {
+            (local % spatial_width) / 2;
+ }
+ 
++int h3_dit_add_lora(const char *spec, char *error, size_t error_size) {
++    if (!spec || !*spec) {
++        fail(error, error_size, "--lora: empty value");
++        return 0;
++    }
++    if (h3_lora_spec_count >= H3_LORA_MAX) {
++        fail(error, error_size, "--lora: at most %d LoRA", H3_LORA_MAX);
++        return 0;
++    }
++    char *path = strdup(spec);
++    if (!path) {
++        fail(error, error_size, "--lora: out of memory");
++        return 0;
++    }
++    float force = 1.0f;
++    char *at = strrchr(path, '@');
++    if (at) {
++        char *end = NULL;
++        double value = strtod(at + 1, &end);
++        if (end && end != at + 1 && *end == '\0') {
++            if (!(value >= -10.0 && value <= 10.0)) {
++                fail(error, error_size, "--lora %s: force outside [-10, 10]", spec);
++                free(path);
++                return 0;
++            }
++            force = (float)value;
++            *at = '\0';
++        }
++    }
++    h3_lora_specs[h3_lora_spec_count].path = path;
++    h3_lora_specs[h3_lora_spec_count].force = force;
++    h3_lora_spec_count++;
++    return 1;
++}
++
++unsigned h3_dit_lora_count(void) { return h3_lora_spec_count; }
++
++static uint16_t lora_scale_bf16(uint16_t value, float force) {
++    uint32_t bits = (uint32_t)value << 16;
++    float f;
++    memcpy(&f, &bits, sizeof(f));
++    f *= force;
++    memcpy(&bits, &f, sizeof(bits));
++    bits += 0x7fffu + ((bits >> 16) & 1u);
++    return (uint16_t)(bits >> 16);
++}
++
++/* One matrix: finds NAME.lora_up [rows x r] and NAME.lora_down_t [columns x r] in each LoRA, concatenates them
++ * (up multiplied by the force) and uploads them to the GPU. *used counts the tensors read per LoRA. */
++static int lora_load_matrix(h3_dit *dit, h3_dit_lora *target,
++                            h3_st_header *headers, unsigned *used,
++                            const char *name, uint32_t rows, uint32_t columns,
++                            uint64_t *bytes, char *error, size_t error_size) {
++    char up_name[200], down_name[200];
++    snprintf(up_name, sizeof(up_name), "%s.lora_up", name);
++    snprintf(down_name, sizeof(down_name), "%s.lora_down_t", name);
++    uint64_t total = 0;
++    const h3_st_tensor *ups[H3_LORA_MAX], *downs[H3_LORA_MAX];
++    for (unsigned l = 0; l < h3_lora_spec_count; l++) {
++        ups[l] = h3_st_find(&headers[l], up_name);
++        downs[l] = h3_st_find(&headers[l], down_name);
++        if (!ups[l] && !downs[l]) continue;
++        if (!ups[l] || !downs[l] || ups[l]->dtype != H3_DTYPE_BF16 ||
++            downs[l]->dtype != H3_DTYPE_BF16 || ups[l]->ndim != 2 ||
++            downs[l]->ndim != 2 || ups[l]->shape[0] != rows ||
++            downs[l]->shape[0] != columns ||
++            ups[l]->shape[1] != downs[l]->shape[1] || ups[l]->shape[1] == 0) {
++            fail(error, error_size, "LoRA %s: %s has the wrong schema",
++                 h3_lora_specs[l].path, name);
++            return 0;
++        }
++        total += ups[l]->shape[1];
++    }
++    if (!total) return 1;
++    if (total > 4096) {
++        fail(error, error_size, "LoRA on %s: total rank %llu above 4096", name,
++             (unsigned long long)total);
++        return 0;
++    }
++    size_t rank = (size_t)total;
++    uint16_t *up = calloc((size_t)rows * rank, sizeof(uint16_t));
++    uint16_t *down = calloc((size_t)columns * rank, sizeof(uint16_t));
++    uint16_t *scratch = malloc((size_t)(rows > columns ? rows : columns) * rank *
++                               sizeof(uint16_t));
++    int ok = up && down && scratch;
++    if (!ok) fail(error, error_size, "LoRA on %s: out of memory", name);
++    size_t column = 0;
++    for (unsigned l = 0; ok && l < h3_lora_spec_count; l++) {
++        if (!ups[l]) continue;
++        size_t r = (size_t)ups[l]->shape[1];
++        ok = h3_st_read_data(&headers[l], ups[l], scratch,
++                             (size_t)rows * r * sizeof(uint16_t),
++                             error, error_size);
++        for (size_t i = 0; ok && i < rows; i++)
++            for (size_t j = 0; j < r; j++)
++                up[i * rank + column + j] =
++                    lora_scale_bf16(scratch[i * r + j], h3_lora_specs[l].force);
++        ok = ok && h3_st_read_data(&headers[l], downs[l], scratch,
++                                   (size_t)columns * r * sizeof(uint16_t),
++                                   error, error_size);
++        for (size_t i = 0; ok && i < columns; i++)
++            memcpy(&down[i * rank + column], &scratch[i * r], r * sizeof(uint16_t));
++        used[l] += 2;
++        column += r;
++    }
++    if (ok) {
++        target->up = h3_gpu_tensor_from_bf16(dit->gpu, up, (size_t)rows * rank);
++        target->down_t = h3_gpu_tensor_from_bf16(dit->gpu, down,
++                                                 (size_t)columns * rank);
++        target->rank = (uint32_t)rank;
++        ok = target->up && target->down_t;
++        if (!ok) fail(error, error_size, "LoRA on %s: cannot allocate GPU tensors", name);
++        *bytes += ((uint64_t)rows + columns) * rank * sizeof(uint16_t);
++    }
++    free(up);
++    free(down);
++    free(scratch);
++    return ok;
++}
++
++static const struct {
++    const char *suffix;
++    uint32_t rows, columns;
++} lora_matrices[STREAM_MATRICES] = {
++    [STREAM_QKV] = {"attn.qkv_proj", INNER * 3, HIDDEN},
++    [STREAM_OUT] = {"attn.out_proj", HIDDEN, INNER},
++    [STREAM_FC1] = {"mlp.fc1", FFN * 2, HIDDEN},
++    [STREAM_FC2] = {"mlp.fc2", HIDDEN, FFN},
++};
++
++static int lora_load_all(h3_dit *dit, char *error, size_t error_size) {
++    if (!h3_lora_spec_count) return 1;
++    h3_st_header headers[H3_LORA_MAX];
++    unsigned used[H3_LORA_MAX] = {0};
++    memset(headers, 0, sizeof(headers));
++    int ok = 1;
++    for (unsigned l = 0; ok && l < h3_lora_spec_count; l++)
++        ok = h3_st_read_header(h3_lora_specs[l].path, &headers[l], error,
++                               error_size);
++    uint64_t bytes = 0;
++    unsigned matrices = 0;
++    char name[160];
++    for (unsigned b = 0; ok && b < H3_DIT_BLOCKS + 2; b++) {
++        for (unsigned m = 0; ok && m < STREAM_MATRICES; m++) {
++            if (b < H3_DIT_BLOCKS)
++                snprintf(name, sizeof(name), "blocks.%u.%s", b, lora_matrices[m].suffix);
++            else
++                snprintf(name, sizeof(name), "token_refiner.blocks.%u.%s",
++                         b - H3_DIT_BLOCKS, lora_matrices[m].suffix);
++            h3_dit_lora *target = b < H3_DIT_BLOCKS ? &dit->lora_blocks[b][m]
++                                                    : &dit->lora_refiner[b - H3_DIT_BLOCKS][m];
++            ok = lora_load_matrix(dit, target, headers, used, name,
++                                  lora_matrices[m].rows, lora_matrices[m].columns,
++                                  &bytes, error, error_size);
++            if (ok && target->up) matrices++;
++        }
++    }
++    for (unsigned l = 0; ok && l < h3_lora_spec_count; l++) {
++        if (used[l] != headers[l].tensor_count || !used[l]) {
++            fail(error, error_size,
++                 "LoRA %s: %zu tensors, %u applied (h3-lora-natif file expected, "
++                 "made by pli-lora-natif)",
++                 h3_lora_specs[l].path, headers[l].tensor_count, used[l]);
++            ok = 0;
++        }
++    }
++    for (unsigned l = 0; l < h3_lora_spec_count; l++) h3_st_free_header(&headers[l]);
++    if (!ok) return 0;
++    dit->lora_delta = h3_gpu_tensor_new_f32(dit->gpu, (size_t)FFN * 2 * HIDDEN);
++    if (!dit->lora_delta) {
++        fail(error, error_size, "cannot allocate the LoRA delta buffer");
++        return 0;
++    }
++    dit->lora_active = 1;
++    fprintf(stderr, "h3: in-memory LoRA: %u file(s), %u matrices, %.2f GiB\n",
++            h3_lora_spec_count, matrices, (double)bytes / (1024.0 * 1024.0 * 1024.0));
++    for (unsigned l = 0; l < h3_lora_spec_count; l++)
++        fprintf(stderr, "h3:   %s force %g\n", h3_lora_specs[l].path,
++                (double)h3_lora_specs[l].force);
++    return 1;
++}
++
++/* Encodes, in the open GPU command, the LoRA update of a block's four matrices. */
++static int lora_apply_block(h3_dit *dit, const h3_dit_lora *mats,
++                            h3_dit_block *block, char *error, size_t error_size) {
++    if (!dit->lora_active) return 1;
++    h3_gpu_tensor *weights[STREAM_MATRICES];
++    weights[STREAM_QKV] = block->qkv;
++    weights[STREAM_OUT] = block->out;
++    weights[STREAM_FC1] = block->fc1;
++    weights[STREAM_FC2] = block->fc2;
++    for (unsigned m = 0; m < STREAM_MATRICES; m++) {
++        if (!mats[m].up) continue;
++        if (!gpu_op(dit, h3_gpu_lora_merge_bf16(
++                        dit->gpu, weights[m], mats[m].up, mats[m].down_t,
++                        dit->lora_delta, lora_matrices[m].rows, mats[m].rank,
++                        lora_matrices[m].columns),
++                    error, error_size, "apply LoRA")) return 0;
++    }
++    return 1;
++}
++
++/* Outside the compute stream (resident load, refiner): a separate command, waited for. */
++static int lora_apply_block_now(h3_dit *dit, const h3_dit_lora *mats,
++                                h3_dit_block *block, char *error, size_t error_size) {
++    if (!dit->lora_active) return 1;
++    return gpu_op(dit, h3_gpu_begin(dit->gpu), error, error_size, "begin LoRA") &&
++           lora_apply_block(dit, mats, block, error, error_size) &&
++           gpu_op(dit, h3_gpu_submit(dit->gpu), error, error_size, "submit LoRA");
++}
++
++static void lora_free(h3_dit *dit) {
++    for (unsigned b = 0; b < H3_DIT_BLOCKS; b++)
++        for (unsigned m = 0; m < STREAM_MATRICES; m++) {
++            h3_gpu_tensor_free(dit->lora_blocks[b][m].up);
++            h3_gpu_tensor_free(dit->lora_blocks[b][m].down_t);
++        }
++    for (unsigned b = 0; b < 2; b++)
++        for (unsigned m = 0; m < STREAM_MATRICES; m++) {
++            h3_gpu_tensor_free(dit->lora_refiner[b][m].up);
++            h3_gpu_tensor_free(dit->lora_refiner[b][m].down_t);
++        }
++    h3_gpu_tensor_free(dit->lora_delta);
++}
++
+ static int load_block(h3_dit *dit, h3_dit_block *block, const char *prefix,
+                       char *error, size_t error_size) {
+     char name[160];
+@@ -819,7 +1064,11 @@ static int refine_text(h3_dit *dit, const h3_text_embedding *text,
+         load_block(dit, &refiner[0], "token_refiner.blocks.0.",
+                    error, error_size) &&
+         load_block(dit, &refiner[1], "token_refiner.blocks.1.",
+-                   error, error_size);
++                   error, error_size) &&
++        lora_apply_block_now(dit, dit->lora_refiner[0], &refiner[0],
++                             error, error_size) &&
++        lora_apply_block_now(dit, dit->lora_refiner[1], &refiner[1],
++                             error, error_size);
+     if (ok) final_norm = bf1(dit, "token_refiner.final_norm.weight", HIDDEN,
+                              error, error_size);
+     size_t rows = dit->text_rows;
+@@ -1255,7 +1504,10 @@ static int load_core(h3_dit *dit, h3_dit_progress progress, void *opaque,
+                 return 0;
+         } else {
+             if (!load_block(dit, &dit->blocks[index], prefix,
+-                            error, error_size)) return 0;
++                            error, error_size) ||
++                !lora_apply_block_now(dit, dit->lora_blocks[index],
++                                      &dit->blocks[index], error, error_size))
++                return 0;
+             if (dit->int8_mlp &&
+                 !quantize_block_mlp(dit, &dit->blocks[index],
+                                     error, error_size)) return 0;
+@@ -1663,6 +1915,7 @@ static h3_dit *load_dit(const char *weight_directory,
+          getenv("H3_BENCH_INT8_MLP_AB") ||
+          getenv("H3_INT8_MLP_STAGE"));
+     h3_gpu_profile_set_label(dit->gpu, "H3 DiT");
++    if (!lora_load_all(dit, error, error_size)) goto failed;
+     report(progress, progress_opaque, "refine text", 0, 1);
+     if (!refine_text(dit, text, error, error_size)) goto failed;
+     report(progress, progress_opaque, "refine text", 1, 1);
+@@ -2236,6 +2489,8 @@ static int encode_forward(h3_dit *dit, int step, int begin, int submit,
+                 streamed_weight.fc1 = slot->fc1;
+                 streamed_weight.fc2 = slot->fc2;
+                 weight = &streamed_weight;
++                if (!lora_apply_block(dit, dit->lora_blocks[block], slot,
++                                      error, error_size)) return 0;
+ 
+                 unsigned future = next_active_block(dit, block);
+                 if (future == H3_DIT_BLOCKS)
+@@ -2994,6 +3249,7 @@ int h3_dit_denoise_euler(h3_dit *dit, float *video_latent,
+ 
+ void h3_dit_free(h3_dit *dit) {
+     if (!dit) return;
++    lora_free(dit);
+     int steps = h3_dit_schedule_steps(dit->schedule);
+     if (dit->row_maps) for (int step = 0; step < steps; step++)
+         h3_gpu_tensor_free(dit->row_maps[step]);
+diff --git a/h3_dit.h b/h3_dit.h
+index b38d826..bd938d5 100644
+--- a/h3_dit.h
++++ b/h3_dit.h
+@@ -17,6 +17,11 @@ typedef int (*h3_dit_preview)(int completed_steps, int total_steps,
+                               const float *video_latent,
+                               size_t video_elements, void *opaque);
+ 
++/* In-memory LoRA: FILE[@FORCE] in the h3-lora-natif format (tool pli-lora-natif). Call before loading; several
++ * LoRA add up. Returns 0 and fills error if the specification is invalid. */
++int h3_dit_add_lora(const char *spec, char *error, size_t error_size);
++unsigned h3_dit_lora_count(void);
++
+ /* Load a text-only FL2VA transformer. Text refinement and AdaLN precomputation
+  * happen before the persistent core is loaded. SSD streaming retains only the
+  * small block norms and two alternating BF16 matrix slots. */
+diff --git a/h3_gpu.h b/h3_gpu.h
+index 3a47cc3..35eda4b 100644
+--- a/h3_gpu.h
++++ b/h3_gpu.h
+@@ -537,6 +537,12 @@ int h3_gpu_gqa_causal_bf16(h3_gpu *gpu, h3_gpu_tensor *output,
+                            uint32_t sequence, uint32_t query_heads,
+                            uint32_t kv_heads, uint32_t head_dim,
+                            float scale);
++/* In-memory LoRA: weight[out x in] (BF16) += up[out x rank] @ down_t[in x rank]^T, computed in F32 (MPSGraph)
++ * into delta (F32, at least out * in elements), then a single BF16 rounding. */
++int h3_gpu_lora_merge_bf16(h3_gpu *gpu, h3_gpu_tensor *weight,
++                           const h3_gpu_tensor *up, const h3_gpu_tensor *down_t,
++                           h3_gpu_tensor *delta, uint32_t out_dim,
++                           uint32_t rank, uint32_t in_dim);
+ int h3_gpu_add_bf16(h3_gpu *gpu, h3_gpu_tensor *output,
+                     const h3_gpu_tensor *left, const h3_gpu_tensor *right,
+                     uint32_t elements);
+diff --git a/h3_gpu.m b/h3_gpu.m
+index c61d04c..958829e 100644
+--- a/h3_gpu.m
++++ b/h3_gpu.m
+@@ -422,7 +422,7 @@ static int h3_gpu_dispatch_rows(H3GPU *gpu, NSString *name, uint32_t rows,
+             @"h3_vision_qkv_rope_bf16",
+             @"h3_embedding_bf16", @"h3_text_qk_rope_bf16",
+             @"h3_head_rms_norm_bf16", @"h3_rope_text_bf16",
+-            @"h3_gqa_causal_bf16", @"h3_add_bf16", @"h3_sub_bf16",
++            @"h3_gqa_causal_bf16", @"h3_add_bf16", @"h3_sub_bf16", @"h3_lora_add_bf16",
+             @"h3_token_pool_bf16", @"h3_token_pool_adaln_bf16",
+             @"h3_token_expand_delta_bf16",
+             @"h3_token_expand_adaln_bf16",
+@@ -4709,3 +4709,81 @@ int h3_gpu_silu_mul_bf16(h3_gpu *opaque, h3_gpu_tensor *output,
+             [encoder setBytes:&elements length:sizeof(elements) atIndex:3];
+         });
+ }
++
++/* In-memory LoRA. Graph: up and down_t BF16 cast to F32, delta = up @ down_t^T in F32. */
++static H3Linear *h3_gpu_lora_graph(H3GPU *gpu, uint32_t out_dim, uint32_t rank,
++                                   uint32_t in_dim) {
++    @autoreleasepool {
++        NSString *key = [NSString stringWithFormat:@"lora:%u:%u:%u", out_dim,
++                         rank, in_dim];
++        H3Linear *cached = gpu.linearCache[key];
++        if (cached) return cached;
++        H3Linear *lora = [[H3Linear alloc] init];
++        lora.graph = [[MPSGraph alloc] init];
++        lora.inputShape = @[@1, @(out_dim), @(rank)];
++        lora.weightShape = @[@1, @(in_dim), @(rank)];
++        lora.outputShape = @[@1, @(out_dim), @(in_dim)];
++        lora.input = [lora.graph placeholderWithShape:lora.inputShape
++                                             dataType:MPSDataTypeBFloat16 name:nil];
++        lora.weight = [lora.graph placeholderWithShape:lora.weightShape
++                                              dataType:MPSDataTypeBFloat16 name:nil];
++        MPSGraphTensor *up = [lora.graph castTensor:lora.input
++                                             toType:MPSDataTypeFloat32 name:nil];
++        MPSGraphTensor *down = [lora.graph castTensor:lora.weight
++                                               toType:MPSDataTypeFloat32 name:nil];
++        MPSGraphTensor *transposed = [lora.graph transposeTensor:down dimension:1
++                                                   withDimension:2 name:nil];
++        lora.output = [lora.graph matrixMultiplicationWithPrimaryTensor:up
++                                                       secondaryTensor:transposed
++                                                                  name:nil];
++        gpu.linearCache[key] = lora;
++        return lora;
++    }
++}
++
++int h3_gpu_lora_merge_bf16(h3_gpu *opaque, h3_gpu_tensor *weight,
++                           const h3_gpu_tensor *up, const h3_gpu_tensor *down_t,
++                           h3_gpu_tensor *delta, uint32_t out_dim,
++                           uint32_t rank, uint32_t in_dim) {
++    H3GPU *gpu = GPU(opaque);
++    size_t count = (size_t)out_dim * in_dim;
++    if (count > UINT32_MAX) {
++        h3_gpu_set_error(gpu, @"LoRA weight too large");
++        return 0;
++    }
++    if (!h3_gpu_require_bf16(gpu, weight, count, @"LoRA weight") ||
++        !h3_gpu_require_bf16(gpu, up, (size_t)out_dim * rank, @"LoRA up") ||
++        !h3_gpu_require_bf16(gpu, down_t, (size_t)in_dim * rank, @"LoRA down") ||
++        !h3_gpu_require_elements(gpu, delta, count, @"LoRA delta") ||
++        TENSOR(delta).dtype != H3_GPU_F32) return 0;
++    if (!h3_gpu_require_command(gpu)) return 0;
++    H3Linear *lora = h3_gpu_lora_graph(gpu, out_dim, rank, in_dim);
++    if (!lora) return 0;
++    @autoreleasepool {
++        MPSCommandBuffer *command = h3_gpu_mps_command(gpu);
++        MPSGraphTensorData *up_data = h3_gpu_graph_data(
++            up, lora.inputShape, MPSDataTypeBFloat16, 1);
++        MPSGraphTensorData *down_data = h3_gpu_graph_data(
++            down_t, lora.weightShape, MPSDataTypeBFloat16, 1);
++        MPSGraphTensorData *delta_data = h3_gpu_graph_data(
++            delta, lora.outputShape, MPSDataTypeFloat32, 0);
++        @try {
++            [lora.graph encodeToCommandBuffer:command
++                                        feeds:@{lora.input: up_data, lora.weight: down_data}
++                             targetOperations:nil
++                            resultsDictionary:@{lora.output: delta_data}
++                          executionDescriptor:nil];
++        } @catch (NSException *exception) {
++            h3_gpu_set_error(gpu, @"MPSGraph LoRA failed: %@", exception.reason);
++            return 0;
++        }
++        gpu.command = command.rootCommandBuffer;
++    }
++    uint32_t elements = (uint32_t)count;
++    return h3_gpu_dispatch_1d(gpu, @"h3_lora_add_bf16", elements,
++        ^(id<MTLComputeCommandEncoder> encoder) {
++            [encoder setBuffer:TENSOR(weight).buffer offset:0 atIndex:0];
++            [encoder setBuffer:TENSOR(delta).buffer offset:0 atIndex:1];
++            [encoder setBytes:&elements length:sizeof(elements) atIndex:2];
++        });
++}
+diff --git a/h3_shaders.metal b/h3_shaders.metal
+index 36316f5..53d7f79 100644
+--- a/h3_shaders.metal
++++ b/h3_shaders.metal
+@@ -4330,3 +4330,13 @@ kernel void h3_silu_mul_bf16(device const ushort *gate [[buffer(0)]],
+     float other = h3_bf16_to_f32(up[gid]);
+     output[gid] = h3_f32_to_bf16(value / (1.0f + exp(-value)) * other);
+ }
++
++/* In-memory LoRA: BF16 weight += F32 delta (force * up @ down_t^T), a single round-to-nearest-even, as a fusion
++ * on disk does. */
++kernel void h3_lora_add_bf16(device ushort *weight [[buffer(0)]],
++                             device const float *delta [[buffer(1)]],
++                             constant uint &count [[buffer(2)]],
++                             uint gid [[thread_position_in_grid]]) {
++    if (gid >= count) return;
++    weight[gid] = h3_f32_to_bf16(h3_bf16_to_f32(weight[gid]) + delta[gid]);
++}
+diff --git a/main.c b/main.c
+index 7f11e47..d0996a7 100644
+--- a/main.c
++++ b/main.c
+@@ -1,5 +1,6 @@
+ #include "h3.h"
+ #include "h3_cli.h"
++#include "h3_dit.h"
+ #include "h3_host.h"
+ #include "h3_terminal.h"
+ 
+@@ -33,6 +34,7 @@ static void usage(const char *program) {
+         "      --core-reuse N     Core refresh: 1 exact, 4 fast, 6 aggressive\n"
+         "      --token-reduction  Pair video tokens in middle DiT blocks\n"
+         "      --ssd-streaming    Stream original BF16 DiT layers from SSD\n"
++        "      --lora FILE[@FORCE]  LoRA applied in memory (h3-lora-natif file), repeatable\n"
+         "      --use-int8-row-fc2 Faster one-scale int8 FC2 (M5)\n"
+         "      --use-reference-rope  Disable native 256 RoPE adaptation\n"
+         "      --use-slower-bf16-mlp  Force close-reference BF16/MPS MLP\n"
+@@ -234,7 +236,7 @@ int main(int argc, char **argv) {
+            OPT_LAYERS,
+            OPT_CORE_REUSE,
+            OPT_TOKEN_REDUCTION,
+-           OPT_SSD_STREAMING,
++           OPT_SSD_STREAMING, OPT_LORA,
+            OPT_USE_INT8_ROW_FC2,
+            OPT_USE_REFERENCE_ROPE,
+            OPT_USE_SLOWER_BF16_MLP,
+@@ -268,6 +270,7 @@ int main(int argc, char **argv) {
+         {"core-reuse", required_argument, NULL, OPT_CORE_REUSE},
+         {"token-reduction", no_argument, NULL, OPT_TOKEN_REDUCTION},
+         {"ssd-streaming", no_argument, NULL, OPT_SSD_STREAMING},
++        {"lora", required_argument, NULL, OPT_LORA},
+         {"use-int8-row-fc2", no_argument, NULL, OPT_USE_INT8_ROW_FC2},
+         {"use-reference-rope", no_argument, NULL, OPT_USE_REFERENCE_ROPE},
+         {"use-slower-bf16-mlp", no_argument, NULL,
+@@ -355,6 +358,14 @@ int main(int argc, char **argv) {
+                 break;
+             case OPT_TOKEN_REDUCTION: params.token_reduction = 1; break;
+             case OPT_SSD_STREAMING: params.ssd_streaming = 1; break;
++            case OPT_LORA: {
++                char lora_error[512];
++                if (!h3_dit_add_lora(optarg, lora_error, sizeof(lora_error))) {
++                    fprintf(stderr, "h3: %s\n", lora_error);
++                    return 2;
++                }
++                break;
++            }
+             case OPT_USE_INT8_ROW_FC2:
+                 params.use_int8_row_fc2 = 1;
+                 break;
+-- 
+2.54.0 (Apple Git-157)
+

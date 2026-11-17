@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from tensorfold.quantization import AffineSpec, resolve_affine, validate_shapes
+from pli.quantization import AffineSpec, resolve_affine, validate_shapes
 
 
 @pytest.fixture(autouse=True)

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from tensorfold.families.qwen4_exp import host_table
+from pli.families.qwen4_exp import host_table
 
 
 def test_prefetch_reads_each_mapped_arrays_bytes_once_in_spans(tmp_path, monkeypatch):

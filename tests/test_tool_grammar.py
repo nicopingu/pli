@@ -11,7 +11,7 @@ import pytest
 
 xgr = pytest.importorskip("xgrammar")
 
-from tensorfold.engine import grammar as g   # noqa: E402
+from pli.engine import grammar as g   # noqa: E402
 
 MODEL = Path(os.environ.get("PLI_TEST_QWEN38_MODEL", "~/models/Qwen3.8-27B-MLX-4bit")).expanduser()
 if not (MODEL / "tokenizer.json").is_file():

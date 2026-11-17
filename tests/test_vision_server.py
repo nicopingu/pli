@@ -11,13 +11,13 @@ from types import ModuleType, SimpleNamespace as NS
 import numpy as np
 import pytest
 
-from tensorfold.engine.family_prefill import FamilyPrefill
-from tensorfold.engine.lane_engine import LaneStream
-from tensorfold.engine.prefill_plan import PrefillPlan
-from tensorfold.server.errors import RequestError
-from tensorfold.server.messages import normalize_messages
-from tensorfold.server.prompts import prepare_images, prepare_prompt
-from tensorfold.server.scheduler import ChatJob, Scheduler
+from pli.engine.family_prefill import FamilyPrefill
+from pli.engine.lane_engine import LaneStream
+from pli.engine.prefill_plan import PrefillPlan
+from pli.server.errors import RequestError
+from pli.server.messages import normalize_messages
+from pli.server.prompts import prepare_images, prepare_prompt
+from pli.server.scheduler import ChatJob, Scheduler
 
 
 @pytest.fixture(autouse=True)
@@ -155,7 +155,7 @@ def test_prepare_images_errors_are_request_refusals():
 
 
 def test_an_image_prompt_past_the_window_is_context_length_exceeded():
-    from tensorfold.server.errors import CONTEXT_LIMIT, ContextLengthError
+    from pli.server.errors import CONTEXT_LIMIT, ContextLengthError
 
     class Long(Frontend):
         def prepare(self, rendered, images, *, max_prompt_tokens):
@@ -286,7 +286,7 @@ def numpy_mlx(monkeypatch):
     mlx.core = core
     monkeypatch.setitem(sys.modules, "mlx", mlx)
     monkeypatch.setitem(sys.modules, "mlx.core", core)
-    import tensorfold.engine.family_prefill as family_prefill
+    import pli.engine.family_prefill as family_prefill
     monkeypatch.setattr(family_prefill, "drop_spares", lambda cache: cache)
 
 
@@ -378,7 +378,7 @@ def test_failed_image_prefill_does_not_keep_partial_checkpoint(numpy_mlx):
 
 
 def test_prepare_images_fetches_urls_only_when_the_frontend_allows(monkeypatch):
-    from tensorfold.vision import images
+    from pli.vision import images
 
     messages = image_messages()
     part = messages[0]["content"][1]
@@ -395,8 +395,8 @@ def test_prepare_images_fetches_urls_only_when_the_frontend_allows(monkeypatch):
 def test_image_preparation_is_bounded_and_refuses_with_capacity_errors(monkeypatch):
     import threading
 
-    from tensorfold.server import prompts
-    from tensorfold.server.errors import CapacityError
+    from pli.server import prompts
+    from pli.server.errors import CapacityError
 
     monkeypatch.setattr(prompts, "IMAGE_SLOTS", threading.BoundedSemaphore(1))
     monkeypatch.setattr(prompts, "IMAGE_WAITERS", threading.BoundedSemaphore(1))
@@ -413,7 +413,7 @@ def test_image_preparation_is_bounded_and_refuses_with_capacity_errors(monkeypat
 
 
 def test_request_log_redacts_every_image_part():
-    from tensorfold.server.http import redact_images
+    from pli.server.http import redact_images
 
     body = {"model": "m", "messages": [{"role": "user", "content": [
         {"type": "text", "text": "what is this"},

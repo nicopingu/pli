@@ -7,7 +7,7 @@ import os
 for k, v in (("PLI_ATTENTION_REDUCED", "10"), ("PLI_REDUCED_ANCHOR", "32"), ("PLI_ATTENTION_ATTM", "1"), ("PLI_ATTM_SHORT", "12288")):
     os.environ.setdefault(k, v)
 import mlx.core as mx
-from tensorfold.kernels.qwen.dense.v1 import exact_attention as E
+from pli.kernels.qwen.dense.v1 import exact_attention as E
 H, HKV, D = 24, 4, 256
 mx.random.seed(7)
 class C:  # a layer's cache

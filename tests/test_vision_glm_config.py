@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from tensorfold.vision.config import validate_vision_config
-from tensorfold.vision.qwen_checkpoint import vision_key
+from pli.vision.config import validate_vision_config
+from pli.vision.qwen_checkpoint import vision_key
 
 
 def test_glm_vision_config_accepts_the_native_checkpoint():

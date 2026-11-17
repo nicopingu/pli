@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tensorfold.server import text as T
+from pli.server import text as T
 
 MODEL = Path(os.environ.get("PLI_TEST_QWEN38_MODEL", ""))
 pytestmark = pytest.mark.skipif(not os.environ.get("PLI_TEST_QWEN38_MODEL") or not MODEL.is_dir(),
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(not os.environ.get("PLI_TEST_QWEN38_MODEL") or n
 
 @pytest.fixture(scope="module")
 def tok():
-    from tensorfold.families.tokenizer import load_tokenizer   # the server's (mlx_lm)
+    from pli.families.tokenizer import load_tokenizer   # the server's (mlx_lm)
     return load_tokenizer(MODEL)
 
 

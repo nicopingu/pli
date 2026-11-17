@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from tensorfold.engine.prefill_plan import PrefillPlan
-from tensorfold.server.cancellation import RequestCancelled
-from tensorfold.server.checkpoints import CheckpointStore
-from tensorfold.server.scheduler import ChatJob, Scheduler
+from pli.engine.prefill_plan import PrefillPlan
+from pli.server.cancellation import RequestCancelled
+from pli.server.checkpoints import CheckpointStore
+from pli.server.scheduler import ChatJob, Scheduler
 from tests.lane_fakes import FakeBatchItem, FakeEngine, fake_serial
 
 
@@ -259,7 +259,7 @@ def test_a_waiting_foreground_prompt_stops_a_background_prefill_between_chunks_w
 
 
 def test_a_job_that_fits_only_without_an_open_prompt_waits_for_it_and_is_not_refused():
-    from tensorfold.engine.memory import Admission, StreamMemory
+    from pli.engine.memory import Admission, StreamMemory
 
     # 100 bytes up to 1,000 tokens, then 1 a token; rounds take 50; 1,000 always in use
     memory = StreamMemory(short_tokens=1000, short=100, long_tokens=2000, long=1100, per_token=1.0, prefill_a=0.0,
@@ -282,7 +282,7 @@ def test_a_job_that_fits_only_without_an_open_prompt_waits_for_it_and_is_not_ref
 
 
 def test_an_open_prompt_waits_while_streams_hold_its_memory_and_finishes_after_them_instead_of_failing():
-    from tensorfold.server.prompt_memory import PromptMemory
+    from pli.server.prompt_memory import PromptMemory
     from tests.test_prompt_memory import Runtime
 
     runtime = Runtime(resident=1000)
@@ -345,7 +345,7 @@ def test_decode_share_zero_prefills_each_prompt_whole_before_any_round_as_before
 
 
 def test_the_serve_option_is_refused_where_it_cannot_apply_before_any_download():
-    from tensorfold import cli, serve_options
+    from pli import cli, serve_options
 
     family = SimpleNamespace(title="Qwen3.8 dense", package=SimpleNamespace(), model_type="qwen3_5")
     parse = lambda *flags: cli.build_parser().parse_args(["serve", "owner/model", *flags])      # noqa: E731

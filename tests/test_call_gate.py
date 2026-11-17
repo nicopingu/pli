@@ -9,8 +9,8 @@ mx = pytest.importorskip("mlx.core")
 
 from test_family_streams import END, NL, NLNL, StreamsModel, after  # noqa: E402
 
-from tensorfold.engine.call_gate import CallGate  # noqa: E402
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.engine.call_gate import CallGate  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
 
 OPEN, BLANK = 93, {NLNL, 94}
 QWEN, NO_THINK, GEMMA, NAMED = "qwen", "no-think", "gemma", "named"

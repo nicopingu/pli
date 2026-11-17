@@ -3,8 +3,8 @@ import sys
 
 import pytest
 
-from tensorfold.control.config import Paths, Profile
-from tensorfold.control.launchd import Manager, Result
+from pli.control.config import Paths, Profile
+from pli.control.launchd import Manager, Result
 
 
 class FakeLaunchctl:

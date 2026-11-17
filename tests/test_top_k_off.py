@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server.app import ChatApp
+from pli.server.app import ChatApp
 from tests.http_fakes import post
 from tests.test_server_openai_compat import FakeApp
 from tests.test_lane_server import make_app
@@ -43,7 +43,7 @@ def test_bad_sampling_field_is_a_400_not_a_500():
 def test_numpy_sampler_top_k_minus_one_is_not_greedy():
     import numpy as np
 
-    from tensorfold.engine.exact_sampling import Sampling, choose_rows
+    from pli.engine.exact_sampling import Sampling, choose_rows
 
     values = np.array([[2.0, 1.9, 1.8, 1.7]] * 64, dtype=np.float32)
     ids = np.tile(np.arange(4, dtype=np.int64), (64, 1))
@@ -95,9 +95,9 @@ def test_nonpositive_top_k_resolves_to_no_filter(top_k):
 @pytest.mark.parametrize("backend", ["gpu", "qwen"])
 def test_both_family_samplers_treat_minus_one_as_zero(backend):
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.engine.exact_sampling import Sampling
-    from tensorfold.engine.gpu_sampling import sample
-    from tensorfold.families.qwen3_5.family import Qwen35Family
+    from pli.engine.exact_sampling import Sampling
+    from pli.engine.gpu_sampling import sample
+    from pli.families.qwen3_5.family import Qwen35Family
 
     logits = mx.array([[2.0, 1.9, 1.8, 1.7]] * 64, dtype=mx.bfloat16)
     positions = list(range(64))

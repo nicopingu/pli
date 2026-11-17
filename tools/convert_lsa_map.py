@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert A1's distilled map (Latent Sparse Attention, release d-lsa-weights-v1, Apache-2.0) to NumPy for PLI_A1_LSA_MAP.
 
-The code is src/tensorfold/install/lsa_map.py; `pli setup` downloads and converts the map itself. By hand (no torch
+The code is src/pli/install/lsa_map.py; `pli setup` downloads and converts the map itself. By hand (no torch
 needed; the file of the release for Qwen3.8-27B has the SHA-256
 24cee934f969756db228a8df7f2bc7613979b63ac3b1d5ac3d9aa42e4339bb9b):
 
@@ -16,7 +16,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))     # this clone's code first
-from tensorfold.install.lsa_map import main  # noqa: E402
+from pli.install.lsa_map import main  # noqa: E402
 
 if __name__ == "__main__":
     main()

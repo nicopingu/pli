@@ -3,12 +3,12 @@
 The `deepseek_v4` family serves `mlx-community/DeepSeek-V4-Flash-4bit` on the MLX lane engine, on a Mac with
 256 GB and MLX 0.32.2 or later (`serve` refuses an older MLX). The routed experts keep DeepSeek's mxfp4 bytes and
 everything else is affine 4-bit in groups of 64; about 151 GiB stays resident.
-Packages: `src/tensorfold/families/deepseek_v4/` and `src/tensorfold/kernels/deepseek/v4/`, with GLM-5.3-Flash's
+Packages: `src/pli/families/deepseek_v4/` and `src/pli/kernels/deepseek/v4/`, with GLM-5.3-Flash's
 hyper-connection kernels and row linears.
 
 ```bash
-tensorfold pull mlx-community/DeepSeek-V4-Flash-4bit TensorFold/DeepSeek-V4-Flash-DSpark-MLX
-tensorfold serve mlx-community/DeepSeek-V4-Flash-4bit
+pli pull mlx-community/DeepSeek-V4-Flash-4bit TensorFold/DeepSeek-V4-Flash-DSpark-MLX
+pli serve mlx-community/DeepSeek-V4-Flash-4bit
 ```
 
 ## The model
@@ -39,9 +39,9 @@ with the release's `config.json` beside them, or shard 46 of `deepseek-ai/DeepSe
 `--drafter`.
 
 ```bash
-python -m tensorfold.families.deepseek_v4.convert dspark model-00046-of-00048.safetensors \
+python -m pli.families.deepseek_v4.convert dspark model-00046-of-00048.safetensors \
     model-00047-of-00048.safetensors model-00048-of-00048.safetensors ~/models/DeepSeek-V4-Flash-dspark
-python -m tensorfold.families.deepseek_v4.convert mtp model-00046-of-00046.safetensors ~/models/DeepSeek-V4-Flash-mtp
+python -m pli.families.deepseek_v4.convert mtp model-00046-of-00046.safetensors ~/models/DeepSeek-V4-Flash-mtp
 ```
 
 Without a draft head the engine decodes one row a step. The chat template is DeepSeek's own encoder (vendored,

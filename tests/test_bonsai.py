@@ -7,7 +7,7 @@ import json
 import numpy as np
 import pytest
 
-from tensorfold.families.bonsai import pack
+from pli.families.bonsai import pack
 
 mx = pytest.importorskip("mlx.core")
 
@@ -171,7 +171,7 @@ needs_metal = pytest.mark.skipif(not metal(), reason="needs a Metal GPU")
 @needs_metal
 @pytest.mark.parametrize("k", [1024, 5120, 6144])
 def test_rotation_matches_the_transform_and_every_row_is_its_own(k):
-    from tensorfold.kernels.qwen.prism.v1 import rotate
+    from pli.kernels.qwen.prism.v1 import rotate
 
     rng = np.random.default_rng(k)
     x = mx.array(rng.normal(0, 1, (40, k)).astype(np.float32)).astype(mx.bfloat16)
@@ -190,7 +190,7 @@ def test_rotation_matches_the_transform_and_every_row_is_its_own(k):
 
 @needs_metal
 def test_embedding_rows_rotate_back_and_do_not_depend_on_the_batch():
-    from tensorfold.kernels.qwen.prism.v1 import rotate
+    from pli.kernels.qwen.prism.v1 import rotate
 
     rng = np.random.default_rng(7)
     vocab, k = 64, 2048
@@ -209,7 +209,7 @@ def test_embedding_rows_rotate_back_and_do_not_depend_on_the_batch():
 
 @needs_metal
 def test_dense_rows_are_row_exact():
-    from tensorfold.kernels.qwen.prism.v1 import rotate
+    from pli.kernels.qwen.prism.v1 import rotate
 
     rng = np.random.default_rng(3)
     x = mx.array(rng.normal(0, 1, (33, 5120)).astype(np.float32)).astype(mx.bfloat16)
@@ -225,7 +225,7 @@ def test_dense_rows_are_row_exact():
 def test_a_projection_with_the_packs_fp16_scales_returns_its_input_dtype():
     import mlx.nn as nn
 
-    from tensorfold.families.bonsai.modules import RotatedLinear
+    from pli.families.bonsai.modules import RotatedLinear
 
     inner = nn.QuantizedLinear(1024, 32, bias=False, group_size=128, bits=2)
     inner.scales, inner.biases = inner.scales.astype(mx.float16), inner.biases.astype(mx.float16)
@@ -235,9 +235,9 @@ def test_a_projection_with_the_packs_fp16_scales_returns_its_input_dtype():
 
 @needs_metal
 def test_fp32_gates_keep_row_bits_in_decode_windows_and_batch_prompt_chunks():
-    from tensorfold.families.bonsai.modules import ROW_EXACT_ROWS, RowDense
+    from pli.families.bonsai.modules import ROW_EXACT_ROWS, RowDense
 
-    from tensorfold.kernels.qwen.prism.v1 import rotate
+    from pli.kernels.qwen.prism.v1 import rotate
 
     rng = np.random.default_rng(5)
     x = mx.array(rng.normal(0, 1, (ROW_EXACT_ROWS + 72, 1024)).astype(np.float32)).astype(mx.bfloat16)
@@ -254,7 +254,7 @@ def test_fp32_gates_keep_row_bits_in_decode_windows_and_batch_prompt_chunks():
 def test_the_row_decoder_runs_a_projection_that_brings_its_own_rows():
     from types import SimpleNamespace
 
-    from tensorfold.kernels.qwen.dense.v1 import row_matmul
+    from pli.kernels.qwen.dense.v1 import row_matmul
 
     own = SimpleNamespace(project_rows=lambda x: ("own", x))
     assert row_matmul.project(own, "rows") == ("own", "rows")
@@ -264,8 +264,8 @@ def test_the_row_decoder_runs_a_projection_that_brings_its_own_rows():
 def test_the_draft_head_reads_the_matmul_under_a_rotated_head():
     import mlx.nn as nn
 
-    from tensorfold.drafters.dflash_drafter import DFlashDrafter
-    from tensorfold.families.bonsai.modules import RotatedLinear
+    from pli.drafters.dflash_drafter import DFlashDrafter
+    from pli.families.bonsai.modules import RotatedLinear
 
     inner = nn.QuantizedLinear(64, 32, bias=False, group_size=64, bits=4)
     drafter = DFlashDrafter.__new__(DFlashDrafter)

@@ -30,8 +30,8 @@ class DiskItem:
 def test_a_refused_capture_reaches_the_disk_and_reads_back_byte_identical(tmp_path):
     import mlx.core as mx
 
-    from tensorfold.engine.prefix_snapshots import DiskBlocks, load_snapshot
-    from tensorfold.server.checkpoints import CheckpointStore, spill_conversation
+    from pli.engine.prefix_snapshots import DiskBlocks, load_snapshot
+    from pli.server.checkpoints import CheckpointStore, spill_conversation
 
     model = "fake-model|f32"
     prompt, capture = list(range(22)), list(range(12))
@@ -54,7 +54,7 @@ def test_a_refused_capture_reaches_the_disk_and_reads_back_byte_identical(tmp_pa
 
 
 def test_a_refused_capture_that_disk_cannot_keep_still_leaves_one_log_line(capsys):
-    from tensorfold.server.checkpoints import CheckpointStore
+    from pli.server.checkpoints import CheckpointStore
 
     store = CheckpointStore(1, copier=lambda c: list(c), budget_bytes=8, sizer=lambda c: len(c[0]))
     store.insert(list(range(22)), [[7] * 12], last_prompt=list(range(22)))  # no disk wired: kept nowhere
@@ -65,8 +65,8 @@ def test_a_refused_capture_that_disk_cannot_keep_still_leaves_one_log_line(capsy
 
 def test_a_refused_prompt_stays_correct_and_says_so(tmp_path, capsys):
     from tests.test_prompt_fill import GridEngine, _prompt, _run, _solo
-    from tensorfold.server.checkpoints import CheckpointStore, spill_conversation
-    from tensorfold.server.scheduler import ChatJob, Scheduler
+    from pli.server.checkpoints import CheckpointStore, spill_conversation
+    from pli.server.scheduler import ChatJob, Scheduler
 
     model, prompt = "fake-model|f32", _prompt(3)               # 22 tokens: chunks every 4, boundary at 12
     fired = []

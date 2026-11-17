@@ -5,9 +5,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 from mlx_lm.models.cache import KVCache
 
-from tensorfold.pli import kv_sharing as K
-from tensorfold.server import checkpoints as C
-from tensorfold.server.memory_budget import cache_nbytes
+from pli.additions import kv_sharing as K
+from pli.server import checkpoints as C
+from pli.server.memory_budget import cache_nbytes
 
 
 class State:

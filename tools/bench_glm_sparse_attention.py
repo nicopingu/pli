@@ -11,7 +11,7 @@ import argparse
 import torch
 import triton
 
-from tensorfold.families.glm5_next.cuda import latent, sparse
+from pli.families.glm5_next.cuda import latent, sparse
 
 
 def timed(fn, reps):

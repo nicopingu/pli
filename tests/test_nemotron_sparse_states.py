@@ -9,7 +9,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
 
 H, DH, NG, DS, KC = 4, 8, 2, 32, 4
 XD = H * DH

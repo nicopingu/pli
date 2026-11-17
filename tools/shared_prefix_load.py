@@ -16,6 +16,21 @@ import time
 import urllib.request
 
 
+def _http_only() -> urllib.request.OpenerDirector:
+    """PLI 5.6.3: http:// and https:// only, like pli.net.urlopen (this script runs without PLI installed)."""
+
+    opener = urllib.request.OpenerDirector()
+    for handler in (urllib.request.ProxyHandler, urllib.request.UnknownHandler, urllib.request.HTTPHandler,
+                    urllib.request.HTTPSHandler, urllib.request.HTTPDefaultErrorHandler,
+                    urllib.request.HTTPRedirectHandler, urllib.request.HTTPErrorProcessor):
+        opener.add_handler(handler())
+    return opener
+
+
+_HTTP = _http_only()
+
+
+
 def one(base: str, model: str, item: dict, max_tokens: int, temperature: float, seed: int | None,
         draft: bool) -> dict:
     body = {"model": model, "messages": item["messages"], "max_tokens": max_tokens, "temperature": temperature,
@@ -33,7 +48,7 @@ def one(base: str, model: str, item: dict, max_tokens: int, temperature: float, 
            "text_sha": None, "token_sha": None, "finish": None, "prompt_tokens": None, "error": None, "arrivals": []}
     text = []
     try:
-        with urllib.request.urlopen(req, timeout=3600) as resp:
+        with _HTTP.open(req, timeout=3600) as resp:
             for raw in resp:
                 line = raw.decode().strip()
                 if not line.startswith("data:") or line == "data: [DONE]":

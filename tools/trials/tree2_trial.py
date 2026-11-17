@@ -4,8 +4,8 @@ Time (indicative) of 48 calls that depend on each other (the output y of a call 
 import os, sys, time, statistics
 os.environ["PLI_TREE_DELTANET"] = "1"
 import mlx.core as mx
-from tensorfold.kernels.qwen.dense.v1 import row_glue as RG
-from tensorfold.kernels.qwen.dense.v1 import lane_tree as LT
+from pli.kernels.qwen.dense.v1 import row_glue as RG
+from pli.kernels.qwen.dense.v1 import lane_tree as LT
 Hk, Hv, D = 16, 48, 128
 mx.random.seed(5)
 TREES = [[-1, 0, 1, 2, 3, 4, 1, 2], [-1, 0, 0, 0, 1, 2, 3, 4], [-1, 0, 1, 1, 2, 3, 4, 5], [-1, 0, 1, 2, 3], [-1, 0, 0, 1, 1, 2, 2], [-1, 0, 1, 0, 3, 4, 1, 6]]

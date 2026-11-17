@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tensorfold.server import thinking_notes
+from pli.server import thinking_notes
 from tests.test_think_call import served_post
 
 EOS = 3
@@ -41,7 +41,7 @@ def _app(script: list[int]):
     """A thinking ChatApp whose model writes ``script`` (indexes into PIECES) after a three-token prompt."""
 
     pytest.importorskip("mlx.core")
-    from tensorfold.server.app import ChatApp
+    from pli.server.app import ChatApp
     from tests.lane_fakes import FakeEngine, FakeFamily
 
     class Tokenizer:

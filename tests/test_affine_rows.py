@@ -13,7 +13,7 @@ from types import ModuleType, SimpleNamespace as NS
 
 import pytest
 
-from tensorfold.kernels.qwen.dense.v1 import affine_rows
+from pli.kernels.qwen.dense.v1 import affine_rows
 
 KERNELS = Path(affine_rows.__file__).parent
 
@@ -72,7 +72,7 @@ def mx(monkeypatch):
     monkeypatch.setitem(sys.modules, "mlx", mlx)
     monkeypatch.setitem(sys.modules, "mlx.core", fake)
     monkeypatch.setitem(sys.modules, "mlx.nn", nn)
-    inputs = ModuleType("tensorfold.kernels.inputs")
+    inputs = ModuleType("pli.kernels.inputs")
     inputs.mx, inputs.MIN_ELEMENTS = fake, 8
     load_definitions("../../../inputs.py", inputs.__dict__, {"padded"})
     monkeypatch.setitem(sys.modules, inputs.__name__, inputs)
@@ -202,7 +202,7 @@ def load_definitions(filename, namespace, names):
 @pytest.fixture
 def backend(mx, monkeypatch):
     calls = []
-    simd = ModuleType("tensorfold.kernels.qwen.dense.v1.simd_qmm")
+    simd = ModuleType("pli.kernels.qwen.dense.v1.simd_qmm")
     simd.MAX_ROWS, simd.GROUP, simd.mma_one_row = 65536, 64, set()
     simd.check = lambda w, s, b, group_size: calls.append(("check", group_size)) or False
     simd.fragments = lambda x: x
@@ -210,7 +210,7 @@ def backend(mx, monkeypatch):
     simd.qmm = lambda x, w, s, b, gs: calls.append(("fast", gs)) or Array((*x.shape[:-1], w.shape[0]))
     monkeypatch.setitem(sys.modules, simd.__name__, simd)
     # `from package import simd_qmm` reads the package attribute first, set once the real module was imported
-    monkeypatch.setattr(sys.modules["tensorfold.kernels.qwen.dense.v1"], "simd_qmm", simd, raising=False)
+    monkeypatch.setattr(sys.modules["pli.kernels.qwen.dense.v1"], "simd_qmm", simd, raising=False)
     monkeypatch.setattr(affine_rows, "qmm", lambda x, w, s, b, gs, bits:
                         calls.append(("generic", gs, bits)) or Array((*x.shape[:-1], w.shape[0])))
     namespace = {"mx": mx, "FRAGMENT_ROWS": 8, "_ATTR": "_stacks", "BACKEND": None}
@@ -273,7 +273,7 @@ def test_direct_stack_construction_rejects_mixed_formats(backend):
 
 
 def test_mixed_gdn_projections_are_forwarded_in_convolution_layout(mx, monkeypatch):
-    stub = ModuleType("tensorfold.kernels.qwen.dense.v1.row_streams")
+    stub = ModuleType("pli.kernels.qwen.dense.v1.row_streams")
     monkeypatch.setitem(sys.modules, stub.__name__, stub)
     names = ("in_proj_qkv", "in_proj_z", "in_proj_b", "in_proj_a")
     modules = [Linear(n=width, bits=bits) for width, bits in zip((16, 8, 2, 2), (2, 3, 5, 8))]

@@ -12,8 +12,8 @@ import time
 
 import torch
 
-from tensorfold.cuda.server import App, Server, make_handler
-from tensorfold.families.qwen4_exp import cuda_engine
+from pli.cuda.server import App, Server, make_handler
+from pli.families.qwen4_exp import cuda_engine
 
 PROMPTS = [
     "Answer A or B only: is Paris in France? A yes B no",
@@ -38,7 +38,7 @@ def request(port, body):
         elapsed = time.perf_counter() - start
         if response.status != 200:
             raise RuntimeError(f"HTTP {response.status}: {result}")
-        stats = result.get("tensorfold", {})
+        stats = result.get("pli", {})
         ids = stats.get("token_ids", [])
         if "token_ids" not in stats or len(ids) != result["usage"]["completion_tokens"]:
             raise RuntimeError("qualification requires every emitted token id")
@@ -102,8 +102,8 @@ def main():
             assert probabilities[0] == probabilities[1] == probabilities[2], ("probability mismatch", index)
             exact.append(index)
         if args.supported:
-            from tensorfold.engine.exact_sampling import Sampling
-            from tensorfold.engine.probabilities import Probabilities
+            from pli.engine.exact_sampling import Sampling
+            from pli.engine.probabilities import Probabilities
 
             prompt = app.prepare(body(PROMPTS[2]), True).prompt
 
@@ -121,7 +121,7 @@ def main():
             assert resumed["stats"].get("cached", 0) > 0, "resume check did not reuse a prefix"
             assert resumed["tokens"] == fresh["tokens"] and resumed["probabilities"] == fresh["probabilities"]
             rows.append({"cell": "resumed-vs-fresh", "resumed": resumed, "fresh": fresh})
-            from tensorfold.cuda.logprobs import capture
+            from pli.cuda.logprobs import capture
 
             # Replay a real target row at the largest supported tree width, outside timed requests.
             width = max(16, engine.multi.buf.rows)

@@ -5,7 +5,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.qwen.dense.v1 import simd_qmm_bits  # noqa: E402
+from pli.kernels.qwen.dense.v1 import simd_qmm_bits  # noqa: E402
 
 SHAPES = [(17408, 5120), (5120, 17408), (5120, 6144), (1024, 5120), (48, 5120)]
 

@@ -14,7 +14,7 @@ def load(path: str, max_mb: str | None = None):
         os.environ.pop("PLI_EVENTS_MAX_MB", None)
     else:
         os.environ["PLI_EVENTS_MAX_MB"] = max_mb
-    from tensorfold.pli import events
+    from pli.additions import events
     return importlib.reload(events)
 
 
@@ -22,7 +22,7 @@ class EventLog(unittest.TestCase):
     def tearDown(self) -> None:
         os.environ.pop("PLI_EVENTS", None)
         os.environ.pop("PLI_EVENTS_MAX_MB", None)
-        from tensorfold.pli import events
+        from pli.additions import events
         importlib.reload(events)
 
     def test_off_writes_nothing(self) -> None:

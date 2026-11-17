@@ -9,7 +9,7 @@ from types import ModuleType, SimpleNamespace as NS
 import numpy as np
 import pytest
 
-from tensorfold.vision import rotary
+from pli.vision import rotary
 
 
 @pytest.fixture(autouse=True)

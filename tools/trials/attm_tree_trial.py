@@ -6,7 +6,7 @@ Usage: tools/trials/attm_tree_trial.py OUTPUT.json"""
 import json, sys
 import mlx.core as mx
 import numpy as np
-from tensorfold.pli import attention_attm as A
+from pli.additions import attention_attm as A
 rng = np.random.RandomState(3)
 H, HKV, D = 24, 4, 256
 res = {"A1": [], "A2": [], "A3": None}

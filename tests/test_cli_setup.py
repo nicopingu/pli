@@ -16,8 +16,8 @@ import sys
 
 import pytest
 
-from tensorfold import cli
-from tensorfold.install import commands, downloads, lsa_map, machine
+from pli import cli
+from pli.install import commands, downloads, lsa_map, machine
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL, DRAFTER, MTP = downloads.MODEL, downloads.DRAFTER, downloads.MTP_SOURCE
@@ -218,7 +218,7 @@ def test_setup_yes_lists_every_download_then_installs_as_install_sh(fake, capsys
     assert fake.pulls() == [("pull", MODEL, DRAFTER)]
     assert fake.snapshots == [MTP, MODEL, MODEL]                         # the head, then the check of A1's map
     snap = fake.tmp / "snapshots"
-    assert fake.run == [("-m", "tensorfold.install.mtp_head", "--model", str(snap / MODEL.replace("/", "--")),
+    assert fake.run == [("-m", "pli.install.mtp_head", "--model", str(snap / MODEL.replace("/", "--")),
                          str(snap / MTP.replace("/", "--") / "model.safetensors"),
                          str(prefix / "models" / "mtp-head-4bit.safetensors"))]
     assert (("service", "stop", "pli"), True) in fake.pli
@@ -489,16 +489,16 @@ def test_uninstall_refuses_the_home_folder(fake, capsys):
 # ---------------------------------------------------------------- pli bench
 
 def test_the_bench_suite_is_package_data():
-    from tensorfold.bench import pli_bench
+    from pli.bench import pli_bench
 
     suite = json.loads(pli_bench.SUITE.read_text())
     assert suite["suite"] == "pli-bench-v1" and (pli_bench.SUITE.parent / suite["corpus"]).is_file()
     pyproject = (ROOT / "pyproject.toml").read_text()
-    assert '"tensorfold.bench.data" = ["*.json", "*.txt"]' in pyproject
+    assert '"pli.bench.data" = ["*.json", "*.txt"]' in pyproject
 
 
 def test_pli_bench_runs_the_suite_on_the_local_port_with_thinking_off(fake, monkeypatch):
-    from tensorfold.bench import pli_bench
+    from pli.bench import pli_bench
 
     seen = []
     monkeypatch.setattr(pli_bench, "run_suite", lambda a: seen.append(a))
@@ -525,7 +525,7 @@ def test_tools_pli_bench_still_runs_from_a_clone():
     assert callable(tool.load_suite) and callable(tool.piece) and callable(tool.main)
     help_text = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "pli_bench.py"), "--help"],
                                capture_output=True, text=True, check=True).stdout
-    assert "src/tensorfold/bench/data/suite-v1.json" in help_text
+    assert "src/pli/bench/data/suite-v1.json" in help_text
 
 
 # ---------------------------------------------------------------- install.sh

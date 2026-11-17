@@ -1,6 +1,6 @@
 """Thinking off on a template that always opens a think block (GLM-5.3): the prompt gets the block closed."""
 
-from tensorfold.server.text import _close_open_think
+from pli.server.text import _close_open_think
 
 
 class _Tok:

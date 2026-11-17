@@ -28,7 +28,7 @@ CHECKPOINTS = [                    # each repo and its image frontend's marker
 
 
 def _checkpoint(repo):
-    from tensorfold import hub
+    from pli import hub
 
     try:
         found = hub.cached(repo)

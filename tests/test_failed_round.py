@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream
-from tensorfold.server.scheduler import ChatJob, Scheduler
+from pli.engine.lane_engine import LaneEngine, LaneStream
+from pli.server.scheduler import ChatJob, Scheduler
 from tests.http_fakes import post
 from tests.test_server_openai_compat import FakeApp
 

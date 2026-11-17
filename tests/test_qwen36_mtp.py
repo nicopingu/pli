@@ -9,12 +9,12 @@ nn = pytest.importorskip("mlx.nn")
 
 from mlx.utils import tree_flatten  # noqa: E402
 
-from tensorfold.engine.exact_sampling import Sampling  # noqa: E402
-from tensorfold.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
-from tensorfold.engine.prefill_plan import PrefillPlan  # noqa: E402
-from tensorfold.families.qwen3_5_moe import mtp as qmtp  # noqa: E402
-from tensorfold.families.qwen3_5_moe.family import Qwen36Family  # noqa: E402
-from tensorfold.kernels.qwen.dense.v1 import exact_attention, row_matmul  # noqa: E402
+from pli.engine.exact_sampling import Sampling  # noqa: E402
+from pli.engine.lane_engine import LaneEngine, LaneStream  # noqa: E402
+from pli.engine.prefill_plan import PrefillPlan  # noqa: E402
+from pli.families.qwen3_5_moe import mtp as qmtp  # noqa: E402
+from pli.families.qwen3_5_moe.family import Qwen36Family  # noqa: E402
+from pli.kernels.qwen.dense.v1 import exact_attention, row_matmul  # noqa: E402
 
 VOCAB = 512
 EIGHT = ("gate", "shared_expert_gate")           # the checkpoint's 8-bit router and gate
@@ -195,8 +195,8 @@ def test_without_the_side_file_the_family_runs_plain(tiny):
 
 
 def test_the_family_package_finds_the_side_file(tmp_path, monkeypatch):
-    from tensorfold import hub
-    from tensorfold.families import qwen3_5_moe
+    from pli import hub
+    from pli.families import qwen3_5_moe
 
     monkeypatch.delenv("PLI_QWEN36_MTP", raising=False)
     monkeypatch.setattr(hub, "cached", lambda repo, **kw: None)
@@ -228,7 +228,7 @@ def test_another_models_layer_is_refused_with_its_reason(tiny, tmp_path):
 
 
 def test_the_package_loads_the_mtp_family_unless_a_draft_model_is_named(tmp_path, monkeypatch):
-    from tensorfold.families import qwen3_5, qwen3_5_moe
+    from pli.families import qwen3_5, qwen3_5_moe
 
     made = {}
     monkeypatch.setattr(qwen3_5, "load_lane_model", lambda path: ("model", "tokenizer"))
@@ -245,7 +245,7 @@ def test_the_package_loads_the_mtp_family_unless_a_draft_model_is_named(tmp_path
 
 
 def test_a_snapshot_keeps_the_heads_rows_and_leaves_its_round_state(tiny, tmp_path):
-    from tensorfold.engine.prefix_snapshots import load_snapshot, save_snapshot
+    from pli.engine.prefix_snapshots import load_snapshot, save_snapshot
 
     family = _family(tiny)
     engine = LaneEngine(family, max_rows=family.exact_width, max_draft=family.exact_width - 1)

@@ -4,8 +4,8 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.families.qwen4_exp.model import sanitize  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1.embed import scaled_rows  # noqa: E402
+from pli.families.qwen4_exp.model import sanitize  # noqa: E402
+from pli.kernels.qwen.flash_next.v1.embed import scaled_rows  # noqa: E402
 
 KEY = "language_model.model.layers.3.ple.ple_embedding.ngram_embedding.weight_scale"
 

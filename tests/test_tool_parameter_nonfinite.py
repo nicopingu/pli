@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from tensorfold.engine.tool_draft import ToolCallStreamer
-from tensorfold.server.http import parse_tool_calls_from_content
+from pli.engine.tool_draft import ToolCallStreamer
+from pli.server.http import parse_tool_calls_from_content
 
 
 @pytest.mark.parametrize("kind,value", [

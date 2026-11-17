@@ -5,7 +5,7 @@ import math
 
 import numpy as np
 
-from tensorfold.drafters.draft_ngram import SessionNGram
+from pli.drafters.draft_ngram import SessionNGram
 
 
 class _Reference:

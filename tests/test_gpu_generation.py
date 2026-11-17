@@ -7,11 +7,11 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.families import qwen3_5  # noqa: E402
-from tensorfold.kernels import device, threads  # noqa: E402
-from tensorfold.kernels.gemma.v1 import matmul as gemma  # noqa: E402
-from tensorfold.kernels.nemotron.lightning.v1 import kernels as nemotron  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1 import base, prefill_mm  # noqa: E402
+from pli.families import qwen3_5  # noqa: E402
+from pli.kernels import device, threads  # noqa: E402
+from pli.kernels.gemma.v1 import matmul as gemma  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import kernels as nemotron  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import base, prefill_mm  # noqa: E402
 
 
 def _clear():

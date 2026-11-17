@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.engine.lane_family import FamilyRounds
+from pli.engine.lane_family import FamilyRounds
 
 
 def policy():
@@ -39,8 +39,8 @@ def test_later_slow_rounds_still_train_the_steady_estimator():
 @pytest.fixture
 def timed_engine(monkeypatch):
     mx = pytest.importorskip("mlx.core")
-    from tensorfold.engine import lane_family
-    from tensorfold.engine.lane_engine import LaneEngine, LaneStream
+    from pli.engine import lane_family
+    from pli.engine.lane_engine import LaneEngine, LaneStream
     from test_thinking_budget import ChainModel, after
 
     previous = mx.default_device()

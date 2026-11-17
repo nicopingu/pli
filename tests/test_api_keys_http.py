@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server.http import Server, make_handler as mlx_handler
+from pli.server.http import Server, make_handler as mlx_handler
 
 
 @contextmanager
@@ -61,7 +61,7 @@ def test_gated_health_has_no_model_details(backend):
                                  "/chat/completions", "/decisions", "/messages", "/models",
                                  "/alternative/chat/completions", "/alternative/decisions", "/alternative/models"])
 def test_every_inference_route_refuses_before_parsing(backend, path):
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     with serving(backend, KeyStore(["fixture-key"])) as (_, port):
         code, headers, body = request(port, path, method="POST", body=b"not json")
@@ -73,7 +73,7 @@ def test_every_inference_route_refuses_before_parsing(backend, path):
 @pytest.mark.parametrize("backend", ["mlx"])
 @pytest.mark.parametrize("path", ["/v1/messages", "/v1/messages/count_tokens", "/v1/messages/count_tokens?x=1"])
 def test_message_routes_use_their_authentication_error_shape(backend, path):
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     with serving(backend, KeyStore(["fixture-key"])) as (_, port):
         code, headers, body = request(port, path, {"x-api-key": "fixture-wrong"}, "POST", b"{}")
@@ -85,7 +85,7 @@ def test_message_routes_use_their_authentication_error_shape(backend, path):
 @pytest.mark.parametrize("backend", ["mlx"])
 @pytest.mark.parametrize("header", ["Authorization", "x-api-key"])
 def test_valid_keys_and_labels_reach_the_route(backend, header, tmp_path, capsys):
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     path = tmp_path / "keys"
     path.write_text("client: fixture-key\n")
@@ -101,7 +101,7 @@ def test_valid_keys_and_labels_reach_the_route(backend, header, tmp_path, capsys
 
 @pytest.mark.parametrize("backend", ["mlx"])
 def test_metrics_can_open_and_no_keys_preserve_open_routes(backend):
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     for policy in (None, KeyStore(), KeyStore(["fixture-key"], metrics_open=True)):
         with serving(backend, policy) as (_, port):
@@ -112,7 +112,7 @@ def test_metrics_can_open_and_no_keys_preserve_open_routes(backend):
 
 @pytest.mark.parametrize("backend", ["mlx"])
 def test_options_is_unaffected(backend):
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     with serving(backend) as (_, port):
         before = request(port, "/v1/models", method="OPTIONS")
@@ -127,7 +127,7 @@ def test_options_is_unaffected(backend):
 def test_rotation_changes_access_on_an_existing_server(backend, reload_kind, tmp_path):
     import os
     import signal
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     now = [0.0]
     path = tmp_path / "keys"
@@ -147,7 +147,7 @@ def test_rotation_changes_access_on_an_existing_server(backend, reload_kind, tmp
 
 @pytest.mark.parametrize("backend", ["mlx"])
 def test_a_pooled_connection_does_not_inherit_authentication(backend):
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     with serving(backend, KeyStore(["fixture-key"])) as (_, port):
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
@@ -166,7 +166,7 @@ def test_a_pooled_connection_does_not_inherit_authentication(backend):
 
 @pytest.mark.parametrize("backend", ["mlx"])
 def test_authentication_refuses_before_expect_continue(backend):
-    from tensorfold.server.authentication import KeyStore
+    from pli.server.authentication import KeyStore
 
     with serving(backend, KeyStore(["fixture-key"])) as (_, port):
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)

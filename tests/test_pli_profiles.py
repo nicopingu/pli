@@ -2,7 +2,7 @@
 
 import pytest
 
-from tensorfold.pli import profiles
+from pli.additions import profiles
 
 
 def test_m1_ultra_exists_and_carries_two_blocks_for_the_27b():
@@ -45,6 +45,6 @@ def test_model_type_of(tmp_path):
 
 
 def test_serve_profile_option():
-    from tensorfold import cli
+    from pli import cli
 
     assert cli.build_parser().parse_args(["serve", "x/y", "--profile", "m1-ultra"]).profile == "m1-ultra"

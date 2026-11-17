@@ -11,11 +11,11 @@ mx = pytest.importorskip("mlx.core")
 
 from glm5_fakes import write_checkpoint  # noqa: E402
 from test_glm5_next_family import _run_engine, tokens  # noqa: E402
-from tensorfold.families.glm5_next import config as C  # noqa: E402
-from tensorfold.families.glm5_next import mtp as glm_mtp  # noqa: E402
-from tensorfold.families.glm5_next import weights  # noqa: E402
-from tensorfold.families.glm5_next.runtime import GLMFlash  # noqa: E402
-from tensorfold.kernels.glm.flash.v1 import sparse_attention  # noqa: E402
+from pli.families.glm5_next import config as C  # noqa: E402
+from pli.families.glm5_next import mtp as glm_mtp  # noqa: E402
+from pli.families.glm5_next import weights  # noqa: E402
+from pli.families.glm5_next.runtime import GLMFlash  # noqa: E402
+from pli.kernels.glm.flash.v1 import sparse_attention  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -92,8 +92,8 @@ def test_float32_rows_are_exact_and_drafts_change_speed_only(checkpoint32):
 
 
 def test_float32_cache_bytes_and_prefill_workspace(checkpoint32):
-    from tensorfold.families.glm5_next.caches import MLACache
-    from tensorfold.families.glm5_next.mla import PREFILL_QUERIES
+    from pli.families.glm5_next.caches import MLACache
+    from pli.families.glm5_next.mla import PREFILL_QUERIES
 
     model = weights.load_backbone(checkpoint32)
     cache = MLACache()
@@ -108,7 +108,7 @@ def test_float32_cache_bytes_and_prefill_workspace(checkpoint32):
 
 
 def test_float32_refuses_streamed_experts(checkpoint32):
-    from tensorfold.families.glm5_next import stream
+    from pli.families.glm5_next import stream
 
     model = weights.load_backbone(checkpoint32)
     with pytest.raises(ValueError, match="bf16 kernels"):

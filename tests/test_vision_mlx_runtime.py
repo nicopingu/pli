@@ -7,9 +7,9 @@ import pytest
 mx = pytest.importorskip('mlx.core')
 nn = pytest.importorskip('mlx.nn')
 
-from tensorfold.vision.rotary import frequency_axes, install_rotary, vision_positions
-from tensorfold.vision.qwen_mlx import QwenVisionFrontend
-from tensorfold.vision.qwen_processing import PreparedVisionPrompt
+from pli.vision.rotary import frequency_axes, install_rotary, vision_positions
+from pli.vision.qwen_mlx import QwenVisionFrontend
+from pli.vision.qwen_processing import PreparedVisionPrompt
 
 
 @pytest.fixture(autouse=True)

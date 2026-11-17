@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from tensorfold.engine.tool_draft import ToolCallStreamer
+from pli.engine.tool_draft import ToolCallStreamer
 from tests.test_server_openai_compat import FakeApp, post_json, serve_fake
 
 
@@ -48,7 +48,7 @@ def stream_calls(body):
         if not line.startswith("data:") or line == "data: [DONE]":
             continue
         chunk = json.loads(line[5:])
-        assert "tensorfold_error" not in chunk and "error" not in chunk
+        assert "pli_error" not in chunk and "error" not in chunk
         for choice in chunk.get("choices", []):
             for call in choice["delta"].get("tool_calls", []):
                 target = calls.setdefault(call["index"], {"name": "", "arguments": ""})

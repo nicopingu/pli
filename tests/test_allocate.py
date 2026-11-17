@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from tensorfold.drafters import calibration
-from tensorfold.engine.allocate import allocate, chain_probabilities
+from pli.drafters import calibration
+from pli.engine.allocate import allocate, chain_probabilities
 
 M5 = {w: (36.0 if w <= 16 else 47.0) for w in range(1, 33)}      # the 32-row tensor op's step at 17 rows
 
@@ -62,7 +62,7 @@ def test_the_tool_labels_a_node_by_its_whole_path(tmp_path):
 
 
 def test_costs_run_linear_between_measured_totals_and_per_row_past_them():
-    from tensorfold.engine.family_depth import extend_costs
+    from pli.engine.family_depth import extend_costs
 
     costs = extend_costs({1: 20.0, 16: 29.0, 32: 45.0, 64: 84.0}, 128)
     assert costs[16] == 29.0 and costs[24] == pytest.approx(37.0) and costs[48] == pytest.approx(64.5)

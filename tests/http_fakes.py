@@ -4,7 +4,7 @@ from io import BytesIO
 import json
 import socket
 
-from tensorfold.server.http import make_handler
+from pli.server.http import make_handler
 
 
 def post(app, body, path="/v1/chat/completions"):

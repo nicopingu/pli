@@ -13,9 +13,9 @@ from typing import Any
 
 import pytest
 
-from tensorfold.server.app import ChatApp
-from tensorfold.server.checkpoints import CheckpointStore, choose_checkpoints
-from tensorfold.server.text import eos_ids_of, render_prompt_ids
+from pli.server.app import ChatApp
+from pli.server.checkpoints import CheckpointStore, choose_checkpoints
+from pli.server.text import eos_ids_of, render_prompt_ids
 from tests.lane_fakes import FakeBatchItem, FakeEngine, FakeFamily, fake_serial
 
 EOS = 49
@@ -319,7 +319,7 @@ def test_a_title_request_steps_aside_for_the_turn_and_reruns_exactly() -> None:
 
 
 def test_is_title_request_matches_only_short_tool_free_title_prompts() -> None:
-    from tensorfold.server.text import is_title_request
+    from pli.server.text import is_title_request
 
     title = [{"role": "system", "content": "Write a ~5 word title using only the task."},
              {"role": "user", "content": "<user>hi</user>"}]
@@ -482,8 +482,8 @@ def test_scheduler_reads_a_stored_block_the_store_lacks(tmp_path) -> None:
     mx = pytest.importorskip("mlx.core")
     from mlx_lm.models.cache import KVCache
 
-    from tensorfold.server.scheduler import Scheduler
-    from tensorfold.engine.prefix_snapshots import save_snapshot
+    from pli.server.scheduler import Scheduler
+    from pli.engine.prefix_snapshots import save_snapshot
 
     kv = KVCache()
     kv.update_and_fetch(mx.ones((1, 2, 40, 4)), mx.ones((1, 2, 40, 4)))
@@ -505,8 +505,8 @@ def test_conversations_saved_at_shutdown_are_read_back_on_demand(tmp_path) -> No
     mx = pytest.importorskip("mlx.core")
     from mlx_lm.models.cache import KVCache
 
-    from tensorfold.server.checkpoints import save_conversations
-    from tensorfold.server.scheduler import Scheduler
+    from pli.server.checkpoints import save_conversations
+    from pli.server.scheduler import Scheduler
 
     def cache(n: int) -> list[Any]:
         kv = KVCache()
@@ -535,19 +535,19 @@ def test_conversations_saved_at_shutdown_are_read_back_on_demand(tmp_path) -> No
 
 
 def test_scheduler_runs_its_stop_hook_in_its_own_thread() -> None:
-    from tensorfold.server.scheduler import Scheduler
+    from pli.server.scheduler import Scheduler
 
     scheduler = Scheduler(FakeEngine(), lanes=1, eos_ids=frozenset())
     seen: list[str] = []
     scheduler.on_stop = lambda: seen.append(threading.current_thread().name)
     scheduler.start()
     scheduler.stop(timeout=5.0)
-    assert seen == ["tensorfold-engine"]
+    assert seen == ["pli-engine"]
 
 
 def test_checkpoints_and_shared_prefixes_are_taken_on_the_prefill_grid() -> None:
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.server.scheduler import ChatJob, Scheduler
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.server.scheduler import ChatJob, Scheduler
 
     class GridEngine(FakeEngine):
         prefill_plan = PrefillPlan(4)
@@ -565,9 +565,9 @@ def test_a_saved_block_is_warmed_in_background_jobs_one_grid_chunk_each(tmp_path
     mx = pytest.importorskip("mlx.core")
     from mlx_lm.models.cache import KVCache
 
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.engine.prefix_snapshots import save_snapshot
-    from tensorfold.server.scheduler import Scheduler
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.engine.prefix_snapshots import save_snapshot
+    from pli.server.scheduler import Scheduler
 
     class GridEngine(FakeEngine):
         prefill_plan = PrefillPlan(4)
@@ -597,8 +597,8 @@ def test_a_saved_block_is_warmed_in_background_jobs_one_grid_chunk_each(tmp_path
 
 
 def test_a_stored_state_off_the_grid_is_never_matched() -> None:
-    from tensorfold.engine.prefill_plan import PrefillPlan
-    from tensorfold.server.scheduler import ChatJob, Scheduler
+    from pli.engine.prefill_plan import PrefillPlan
+    from pli.server.scheduler import ChatJob, Scheduler
 
     class GridEngine(FakeEngine):
         prefill_plan = PrefillPlan(4)
@@ -614,8 +614,8 @@ def test_a_stored_state_off_the_grid_is_never_matched() -> None:
 
 
 def test_a_job_that_would_not_fit_waits_for_a_live_stream_to_finish() -> None:
-    from tensorfold.engine.memory import Admission, StreamMemory
-    from tensorfold.server.scheduler import ChatJob, Scheduler
+    from pli.engine.memory import Admission, StreamMemory
+    from pli.server.scheduler import ChatJob, Scheduler
 
     # 100 bytes up to 1,000 tokens, then 1 a token (a stream's footprint by length); rounds take 50
     memory = StreamMemory(short_tokens=1000, short=100, long_tokens=2000, long=1100, per_token=1.0, prefill_a=0.0,
@@ -644,7 +644,7 @@ def test_a_job_that_would_not_fit_waits_for_a_live_stream_to_finish() -> None:
 
 
 def test_admission_projects_growth_prefill_and_rounds() -> None:
-    from tensorfold.engine.memory import Admission, StreamMemory
+    from pli.engine.memory import Admission, StreamMemory
 
     memory = StreamMemory(short_tokens=64, short=1_000, long_tokens=264, long=3_000, per_token=10.0, prefill_a=2.0,
                           prefill_b=0.001, round_bytes=5_000)
@@ -682,8 +682,8 @@ def test_kv_caches_set_the_floor_of_a_streams_per_token_memory() -> None:
     mx = pytest.importorskip("mlx.core")
     from mlx_lm.models.cache import KVCache
 
-    from tensorfold.engine.alternating_kv import AlternatingKVCache
-    from tensorfold.engine.memory import _kv_bytes
+    from pli.engine.alternating_kv import AlternatingKVCache
+    from pli.engine.memory import _kv_bytes
 
     plain, alternating = KVCache(), AlternatingKVCache()
     for cache in (plain, alternating):
@@ -706,7 +706,7 @@ def test_concurrent_admission_never_plans_past_the_prompt_admissions_budget(caps
 
 
 def test_choose_checkpoints_keeps_the_start_of_the_last_message(monkeypatch) -> None:
-    from tensorfold.server import checkpoints
+    from pli.server import checkpoints
 
     # 7 opens every message and the reply: ... 7 history 7 last message, then 7 the reply
     prompt = [1, 2] + [7] + list(range(10, 60)) + [7] + list(range(60, 80)) + [7, 3]

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import torch
 
-from tensorfold.cuda.exl3 import format as fmt
-from tensorfold.cuda.exl3.linear import Exl3Linear
+from pli.cuda.exl3 import format as fmt
+from pli.cuda.exl3.linear import Exl3Linear
 
 DEFAULT_TENSORS = (
     "model.layers.0.self_attn.q_proj",

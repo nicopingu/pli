@@ -5,7 +5,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.engine.topk import topk_rows  # noqa: E402
+from pli.engine.topk import topk_rows  # noqa: E402
 
 
 def _reference(row: np.ndarray, k: int) -> np.ndarray:

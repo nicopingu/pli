@@ -12,8 +12,8 @@ import threading
 import numpy as np
 import pytest
 
-from tensorfold.families.qwen4_exp import host_table
-from tensorfold.families.qwen4_exp.host_table import BF16Table, FP8Table, NVFP4Table, read_header
+from pli.families.qwen4_exp import host_table
+from pli.families.qwen4_exp.host_table import BF16Table, FP8Table, NVFP4Table, read_header
 
 SIZES = (37, 64, 29)          # rows a shard; the last two share a file
 

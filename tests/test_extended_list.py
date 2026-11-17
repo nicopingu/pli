@@ -7,9 +7,9 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
-from tensorfold.drafters.dflash_drafter import DFlashDrafter  # noqa: E402
-from tensorfold.pli import extended_list  # noqa: E402
+from pli.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
+from pli.drafters.dflash_drafter import DFlashDrafter  # noqa: E402
+from pli.additions import extended_list  # noqa: E402
 
 EXTRA = [1500, 1501, 2047, 3000, 3999]          # 3999 is already in the list (3968 to 4096): not added
 
@@ -71,7 +71,7 @@ def test_head_as_views_with_extended_list(extra):
 
 @pytest.mark.parametrize("bits, group", [(4, 64), (4, 32)])
 def test_head_in_tiles_with_extended_list(extra, bits, group):
-    from tensorfold.families.qwen3_5 import tensor_units
+    from pli.families.qwen3_5 import tensor_units
 
     if not tensor_units():                     # tiled kernels: Metal 4 tensor units (M5-generation GPU)
         pytest.skip("needs Metal 4 tensor units (an M5-generation GPU)")
@@ -95,7 +95,7 @@ def test_head_in_tiles_with_extended_list(extra, bits, group):
 
 
 def test_mtp_list_extended(extra, monkeypatch):
-    from tensorfold.families.qwen4_exp import draft_head
+    from pli.families.qwen4_exp import draft_head
 
     base = draft_head.draft_ids()
     assert set(EXTRA) <= set(base.tolist())

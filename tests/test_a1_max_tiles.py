@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("mlx.core")
 
-from tensorfold.pli import a1_lsa as A1  # noqa: E402
+from pli.additions import a1_lsa as A1  # noqa: E402
 
 
 def test_cap(monkeypatch):
@@ -21,7 +21,7 @@ def test_cap_changes_the_prefill(monkeypatch):
     import importlib.util, os, sys
     spec = importlib.util.spec_from_file_location("t_a1cap", os.path.join(os.path.dirname(__file__), "test_a1_lsa.py"))
     T = importlib.util.module_from_spec(spec); sys.modules["t_a1cap"] = T; spec.loader.exec_module(T)
-    from tensorfold.kernels.qwen.dense.v1 import exact_attention as EA
+    from pli.kernels.qwen.dense.v1 import exact_attention as EA
     for k, v in (("REDUCED", 10), ("ANCHOR", 32), ("ATTM", True), ("REDUCED_THRESHOLD", T.THRESHOLD), ("S3B", True), ("S3B_THRESHOLD", 2600)):
         monkeypatch.setattr(EA, k, v)
     monkeypatch.setattr(A1, "ACTIVE", True); monkeypatch.setattr(A1, "SLICE", 512); monkeypatch.setattr(A1, "SMALL_SLICE", 128)

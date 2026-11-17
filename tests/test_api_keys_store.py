@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server.authentication import KeyStore, configure
+from pli.server.authentication import KeyStore, configure
 
 
 def file_at(tmp_path, text="alpha: fixture-first\n"):
@@ -34,7 +34,7 @@ def test_sources_are_additive_and_only_digests_survive(tmp_path):
 
 
 def test_every_digest_is_compared_for_first_last_and_wrong_keys(monkeypatch):
-    import tensorfold.server.authentication as auth
+    import pli.server.authentication as auth
 
     original = auth.hmac.compare_digest
     calls = []

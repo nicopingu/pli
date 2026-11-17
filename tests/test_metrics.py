@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold.server import metrics
-from tensorfold.server.http import make_handler
+from pli.server import metrics
+from pli.server.http import make_handler
 
 NAMES = ("requests_running", "requests_waiting", "prompt_tokens_total", "generation_tokens_total",
          "kv_cache_usage_ratio", "mtp_drafted_total", "mtp_accepted_total",
@@ -188,7 +188,7 @@ def test_a_mac_chat_counts_the_reply_the_http_thread_returns():
 
 
 def test_the_vllm_mirror_names_carry_the_same_readings():
-    # A vLLM dashboard filled by swapping the "tensorfold:" prefix must read identical values.
+    # A vLLM dashboard filled by swapping the "pli:" prefix must read identical values.
     idle = SimpleNamespace()
     body = metrics.render(idle)
     for native, mirror in (("requests_running", "num_requests_running"),

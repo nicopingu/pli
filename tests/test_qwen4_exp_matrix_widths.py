@@ -5,7 +5,7 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from tensorfold.families.qwen4_exp import decode  # noqa: E402
+from pli.families.qwen4_exp import decode  # noqa: E402
 
 
 def _linear(n, k, bits, group, seed):

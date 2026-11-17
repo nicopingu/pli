@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from tensorfold import families, hub
-from tensorfold.cli import _drafter, _generation_config, _model_context, build_parser, main
+from pli import families, hub
+from pli.cli import _drafter, _generation_config, _model_context, build_parser, main
 
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
@@ -41,7 +41,7 @@ def test_cached_repos_resolve_and_missing_ones_say_how_to_pull(tmp_path):
     snapshot = fake_repo(tmp_path, "owner/model", {"config.json": "{}"})
     assert hub.resolve("owner/model", download=False, cache_dir=tmp_path) == snapshot
     assert hub.cached("owner/other", cache_dir=tmp_path) is None
-    with pytest.raises(FileNotFoundError, match="tensorfold pull owner/other"):
+    with pytest.raises(FileNotFoundError, match="pli pull owner/other"):
         hub.resolve("owner/other", download=False, cache_dir=tmp_path)
 
 
@@ -174,7 +174,7 @@ def write_checkpoint(folder: Path, bits: int, group: int, mtp: bool) -> Path:
 
 
 def test_flash_next_reads_affine_widths_and_notes_a_missing_mtp_head(tmp_path, capsys):
-    from tensorfold.families import qwen4_exp
+    from pli.families import qwen4_exp
 
     good = write_checkpoint(tmp_path / "good", 4, 32, mtp=True)
     qwen4_exp.check(good)
@@ -186,7 +186,7 @@ def test_flash_next_reads_affine_widths_and_notes_a_missing_mtp_head(tmp_path, c
 
 
 def test_flash_next_reads_the_nvfp4_checkpoint_and_refuses_other_fp4_blocks(tmp_path):
-    from tensorfold.families import qwen4_exp
+    from pli.families import qwen4_exp
 
     # a ModelOpt NVFP4 export (RadixArk's): the CUDA engine reads its experts in blocks of 16
     nvfp4 = {"model_type": "qwen4_exp",
@@ -272,7 +272,7 @@ def test_every_family_names_an_importable_kernel_version():
         assert kernels.VERSION == package.KERNEL_VERSION == "v1"
         assert family.lanes                 # every family decodes through the lane engine
         if family.model_type == "qwen3_5":
-            model = SimpleNamespace(_tensorfold_lanes=True)
+            model = SimpleNamespace(_pli_lanes=True)
             assert families.kernel_version(family, model).startswith(("qwen-dense-v1-", f"{family.model_type}-v1-"))
         else:                               # an alias model_type (a newer export's name) keeps the package's own
             names = getattr(package, "MODEL_TYPES", (family.model_type,))
@@ -289,7 +289,7 @@ def test_info_reads_a_local_config(tmp_path, capsys):
 
 
 def test_serve_finishes_a_config_only_cache_before_loading(tmp_path, monkeypatch, capfd):
-    from tensorfold.families import qwen4_exp
+    from pli.families import qwen4_exp
 
     snapshot = write_checkpoint(tmp_path / "flash", 4, 32, mtp=True)
     index = snapshot / "model.safetensors.index.json"

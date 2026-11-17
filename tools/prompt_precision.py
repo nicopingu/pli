@@ -237,8 +237,8 @@ def install_fp32_flash() -> None:
 def install_fp32_glm() -> None:
     import mlx.core as mx
 
-    from tensorfold.families.glm5_next import kda, linear, mla, mlp, model, mtp
-    from tensorfold.families.glm5_next.linear import Dense, Q, QSplit
+    from pli.families.glm5_next import kda, linear, mla, mlp, model, mtp
+    from pli.families.glm5_next.linear import Dense, Q, QSplit
 
     def project(x, q, *, rows_exact: bool = False):
         del rows_exact
@@ -255,10 +255,10 @@ def install_fp32_glm() -> None:
 
 def load_family(family: str, model_dir: Path, ple_on_ssd: bool, ssd_experts: float | None):
     if family == "flash":
-        from tensorfold.families.qwen4_exp.runtime import load
+        from pli.families.qwen4_exp.runtime import load
 
         return load(model_dir, drafts=0, ple_on_ssd=ple_on_ssd, ssd_experts=ssd_experts)
-    from tensorfold.families.glm5_next.runtime import load
+    from pli.families.glm5_next.runtime import load
 
     return load(model_dir, drafts=0, ssd_experts=ssd_experts)
 

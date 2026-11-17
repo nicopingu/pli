@@ -10,8 +10,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from tensorfold.server.http import RequestError, make_handler
-from tensorfold.server.prompt_memory import PromptMemory
+from pli.server.http import RequestError, make_handler
+from pli.server.prompt_memory import PromptMemory
 from tests.test_prompt_memory import Runtime, populated
 
 
@@ -134,7 +134,7 @@ def test_health_reports_the_budget_and_the_process_footprint(measured_runtime):
 
 
 def test_health_carries_the_live_lines_numbers_when_a_scheduler_serves(measured_runtime):
-    from tensorfold.server.live import ChunkRate, Meter
+    from pli.server.live import ChunkRate, Meter
 
     decoded, prefilled = Meter(), ChunkRate()
     prefilled.add(2048, 0.5)

@@ -5,7 +5,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.kernels.qwen.dense.v1 import row_attention  # noqa: E402
+from pli.kernels.qwen.dense.v1 import row_attention  # noqa: E402
 
 
 def _same(a, b):

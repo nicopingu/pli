@@ -5,7 +5,7 @@ import json
 import pytest
 
 from http_fakes import post
-from tensorfold.server.tools import parse_tool_calls_from_content
+from pli.server.tools import parse_tool_calls_from_content
 
 TOOLS = [{"type": "function", "function": {"name": "get_weather", "parameters": {
     "type": "object", "properties": {"location": {"type": "string"}}}}}]

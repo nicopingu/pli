@@ -11,8 +11,8 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.kernels import inputs  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1 import attention, base, embed, experts, gdn, hc  # noqa: E402
+from pli.kernels import inputs  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import attention, base, embed, experts, gdn, hc  # noqa: E402
 
 D, S, LOW, NE, TOPK, NI = 2560, 4, 320, 32, 10, 640
 NK, NV, DK, DV, TAPS = 16, 48, 128, 128, 4

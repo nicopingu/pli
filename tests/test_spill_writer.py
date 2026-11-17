@@ -10,8 +10,8 @@ from pathlib import Path
 import mlx.core as mx
 from mlx_lm.models.cache import ArraysCache, KVCache
 
-from tensorfold.engine.prefix_snapshots import PARTIAL, load_snapshot, save_snapshot
-from tensorfold.pli import spill_writer as sw
+from pli.engine.prefix_snapshots import PARTIAL, load_snapshot, save_snapshot
+from pli.additions import spill_writer as sw
 
 MODEL = "model|test"
 

@@ -11,7 +11,7 @@ mx = pytest.importorskip("mlx.core")
 if not mx.metal.is_available():
     pytest.skip("needs a Metal GPU", allow_module_level=True)
 
-from tensorfold.kernels.qwen.flash_next.v1 import attention, base, gdn, hc  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import attention, base, gdn, hc  # noqa: E402
 
 NK, NV, DK, DV, TAPS = 16, 48, 128, 128, 4
 C = 2 * NK * DK + NV * DV
@@ -150,7 +150,7 @@ def test_per_row_projections_do_not_depend_on_the_row_count(nib, half, monkeypat
     """rows.qmv_rows and rows.hc_project: every row of a call equals that row's one-row call, bit for bit, with the
     multi-row calls' dots on the convert (nib 0), or from two rows on nib or on half nibbles."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import rows
+    from pli.kernels.qwen.flash_next.v1 import rows
 
     monkeypatch.setattr(base, "nib_rows", lambda: nib)
     monkeypatch.setattr(base, "half_nibs", lambda: half)
@@ -182,7 +182,7 @@ def test_per_row_projections_do_not_depend_on_the_row_count(nib, half, monkeypat
 def test_hyper_connection_tiles_keep_the_per_row_bits(inject):
     """Before M5 rows.hc_project takes 8-row tiles from HC_MMA_FROM rows: every row keeps the per-row kernels' bits."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import row_tiles, rows
+    from pli.kernels.qwen.flash_next.v1 import row_tiles, rows
 
     S, D, LOW = 4, 2560, 320
     rng = np.random.default_rng(71 + inject)
@@ -211,8 +211,8 @@ def test_windows_are_checked_with_the_tiles_and_timed_without(monkeypatch):
 
     from types import SimpleNamespace
 
-    from tensorfold.families.qwen4_exp.runtime import FlashNext
-    from tensorfold.kernels.qwen.flash_next.v1 import row_tiles, rows
+    from pli.families.qwen4_exp.runtime import FlashNext
+    from pli.kernels.qwen.flash_next.v1 import row_tiles, rows
 
     seen = []
 
@@ -262,7 +262,7 @@ def test_gdn_pipelined_rows_equal_the_row_by_row_kernel(has_state, monkeypatch):
 def test_ple_kernels_are_the_math_and_row_invariant():
     """embed.ple_gate and ple_conv against float64 math, and each row of a 6-row call against its one-row call."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import embed
+    from pli.kernels.qwen.flash_next.v1 import embed
 
     rng = np.random.default_rng(29)
     S, D, R, TAPS, DIL = 4, 2560, 6, 4, 3
@@ -302,7 +302,7 @@ def test_ple_kernels_are_the_math_and_row_invariant():
 def test_split_router_rows_equal_one_row_calls_and_the_math():
     """experts.router(split=True): every row of 1-16-row calls as its one-row call, and float64 math."""
 
-    from tensorfold.kernels.qwen.flash_next.v1 import experts
+    from pli.kernels.qwen.flash_next.v1 import experts
 
     rng = np.random.default_rng(37)
     rows_w = mx.array((0.05 * rng.normal(size=(513, 2560))).astype(np.float32)).astype(mx.bfloat16)

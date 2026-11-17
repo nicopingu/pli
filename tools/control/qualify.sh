@@ -2,12 +2,12 @@
 # Read-only qualification by default. Native launchd smoke requires an explicit second argument.
 set -eu
 PYTHON=${1:-python3}
-"$PYTHON" -m compileall -q src/tensorfold/control
+"$PYTHON" -m compileall -q src/pli/control
 "$PYTHON" -m pytest tests/control -q -m 'not macos' --junitxml=control-results.xml
 umask 077
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/tensorfold-control.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pli-control.XXXXXX")
 trap 'rm -f "$tmp/preview.plist"; rmdir "$tmp"' EXIT
-"$PYTHON" -m tensorfold.control service install Example/Cached-Model --dry-run > "$tmp/preview.plist"
+"$PYTHON" -m pli.control service install Example/Cached-Model --dry-run > "$tmp/preview.plist"
 if [ "$(uname -s)" = Darwin ]; then
   /usr/bin/plutil -lint "$tmp/preview.plist"
 fi

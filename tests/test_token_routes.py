@@ -13,7 +13,7 @@ import pytest
 
 pytest.importorskip("jinja2")
 
-from tensorfold.server.errors import CONTEXT_LIMIT, ContextLengthError, RequestError
+from pli.server.errors import CONTEXT_LIMIT, ContextLengthError, RequestError
 from tests.fake_tokens import EOS, THINK, Tokens
 from tests.test_server_openai_compat import FakeApp, serve_fake
 
@@ -62,7 +62,7 @@ def ids(text):
 
 
 def test_an_error_without_a_code_has_no_param():
-    from tensorfold.server.errors import error_body
+    from pli.server.errors import error_body
 
     assert error_body(RequestError("bad"), "messages") == {"message": "bad", "type": "invalid_request_error"}
     assert error_body(ContextLengthError("long"), "prompt") == {

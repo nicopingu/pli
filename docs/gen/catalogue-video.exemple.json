@@ -1,0 +1,49 @@
+{
+  "_note": "Example: replace /chemin/pli with your directory (absolute paths). tools/pli-profil writes these files with the machine's paths (templates/launch-profiles). Already completed fusions are recognized by their fusion_lora_h3.json (base model, LoRA file, force). taille_go: disk space for a new fusion (transformer rewritten alone). PLI 5.6.5: mode en_memoire = LoRA applied by h3 at load time (--lora, h3.c with tools/h3c-lora.patch), several at once, no fusion on disk; converted once by tools/pli-lora-natif into lora_natif.dossier.",
+  "h3": "/chemin/pli/h3.c/h3",
+  "defaut": "h3",
+  "ssd_streaming": true,
+  "modeles": {
+    "h3": {
+      "chemin": "/chemin/pli/modeles-video/MiniMax-H3",
+      "memoire_go": 12,
+      "memoire_go_resident": 43
+    }
+  },
+  "lora": {
+    "turbo": {
+      "chemin": "/chemin/pli/lora/minimax_h3_fl2v_turbo_8step_v1.1_768p_bf16.safetensors",
+      "force": 1.0,
+      "mode": "en_memoire",
+      "base": [
+        "h3"
+      ],
+      "steps": 8
+    },
+    "style-video": {
+      "chemin": "/chemin/pli/lora/style-video.safetensors",
+      "force": 1.0,
+      "mode": "a_la_demande",
+      "base": [
+        "h3"
+      ]
+    }
+  },
+  "fusions": [
+    "/chemin/pli/video/fusions"
+  ],
+  "dossier_fusions": "/chemin/pli/video/fusions",
+  "cache_fusions": "/chemin/pli/video/cache-fusions",
+  "cache_go": 70,
+  "fusion": {
+    "python": "/chemin/pli/venv/bin/python",
+    "script": "/chemin/pli/source/tools/pli-lora-fusion",
+    "taille_go": 62,
+    "marge_go": 4
+  },
+  "lora_natif": {
+    "python": "/chemin/pli/venv/bin/python",
+    "script": "/chemin/pli/source/tools/pli-lora-natif",
+    "dossier": "/chemin/pli/video/lora-natif"
+  }
+}

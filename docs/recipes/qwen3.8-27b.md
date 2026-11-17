@@ -9,8 +9,8 @@ The `qwen3_5` family combines Gated DeltaNet and full attention. The standard re
 4-bit/group-64 checkpoint; the quantization guide lists the other affine formats it reads.
 
 ```bash
-tensorfold pull TensorFold/Qwen3.8-27B-MLX-4bit z-lab/Qwen3.8-27B-DFlash2
-tensorfold serve TensorFold/Qwen3.8-27B-MLX-4bit --name bench
+pli pull TensorFold/Qwen3.8-27B-MLX-4bit z-lab/Qwen3.8-27B-DFlash2
+pli serve TensorFold/Qwen3.8-27B-MLX-4bit --name bench
 ```
 
 DFlash2 is used automatically once pulled. On MLX, `--drafter none` disables that draft model;
@@ -50,7 +50,7 @@ quality comparisons are TBD [release-0.3.5].
 ## CUDA
 
 On CUDA the 27B serves NVFP4 and EXL3 checkpoints, and the MLX 4-bit checkpoint as the portable option: the same
-files a Mac serves, and the only format two ranks read. `tensorfold serve` loads the checkpoint you name; it picks
+files a Mac serves, and the only format two ranks read. `pli serve` loads the checkpoint you name; it picks
 none by itself. Use the [CUDA container setup](../../RUNBOOK.md#dgx-spark) for any of them. Prompts take bf16
 activations by default; what that costs against the FP8 prompt path (`--prefill-fp8`) depends on the format
 ([prompt precision](cuda.md#prompt-precision)):
@@ -77,14 +77,14 @@ alone. One GPU: `--tp 2` stops at startup (two ranks read the MLX checkpoint), a
 input is qualified on this checkpoint.
 
 ```bash
-tensorfold pull nvidia/Qwen3.8-27B-NVFP4 z-lab/Qwen3.8-27B-DFlash2
-tensorfold serve nvidia/Qwen3.8-27B-NVFP4 --host 0.0.0.0 --port 8080
+pli pull nvidia/Qwen3.8-27B-NVFP4 z-lab/Qwen3.8-27B-DFlash2
+pli serve nvidia/Qwen3.8-27B-NVFP4 --host 0.0.0.0 --port 8080
 ```
 
 Prompts take bf16 rows on a prompt GEMM that reads the stored bytes: each FP8 byte and each NVFP4 code times its
 block scale is exact in bf16, summed in fp32 over the inputs, the tensor scale last. `--prefill-fp8` restores the FP8
 prompt matmul (FP8 projections as stored, NVFP4 ones staged to e4m3 once a chunk, a step that rounds by 2^-4 at most,
-and e4m3 activations). Decode, measured on one DGX Spark (GB10) through `tensorfold serve` against the MLX 4-bit
+and e4m3 activations). Decode, measured on one DGX Spark (GB10) through `pli serve` against the MLX 4-bit
 checkpoint on the same engine and box, alternating (MLX, NVFP4, NVFP4, MLX), 64 tokens, five seeds, medians:
 
 | Cell | NVFP4 | MLX 4-bit | vLLM MTP=3 (NVFP4) |
@@ -109,8 +109,8 @@ serve the folder:
 
 ```bash
 python -c "from huggingface_hub import snapshot_download as d; d('turboderp/Qwen3.8-27B-exl3', revision='3.00bpw', local_dir='qwen27b-exl3-3.00bpw')"
-tensorfold pull z-lab/Qwen3.8-27B-DFlash2
-tensorfold serve qwen27b-exl3-3.00bpw --host 0.0.0.0 --port 8080
+pli pull z-lab/Qwen3.8-27B-DFlash2
+pli serve qwen27b-exl3-3.00bpw --host 0.0.0.0 --port 8080
 ```
 
 Verify windows use the row-invariant EXL3 linear, so drafted replies equal `"draft": false` ones; prompts use the
@@ -118,8 +118,8 @@ EXL3 prompt path (W_q decoded once a chunk, a fixed-tile GEMM), whose bits do no
 engine keeps prompt ends as it does for the MLX checkpoint. The drafter reads the target's 6-bit head over its
 draft vocabulary by slicing the head's 128-column strips as stored: its logits are the target's, bit for bit.
 
-Measured on one DGX Spark (GB10) through `tensorfold serve`, the 3.00bpw pack against the MLX 4-bit checkpoint on
-the same engine and box, the [public benchmark command](README.md#measurements), medians of 15 runs a cell:
+Measured on one DGX Spark (GB10) through `pli serve`, the 3.00bpw pack against the MLX 4-bit checkpoint on
+the same engine and box, the [public benchmark command](../benchmark.md#measurements), medians of 15 runs a cell:
 
 | Cell | EXL3 3.00bpw | MLX 4-bit | vLLM MTP=3 |
 | --- | ---: | ---: | ---: |
@@ -140,19 +140,19 @@ measured here.
 One or two ranks are supported. Pull the model and drafter on every rank, then start rank 1 before rank 0:
 
 ```bash
-tensorfold serve TensorFold/Qwen3.8-27B-MLX-4bit --tp 2 --rank 1 --master 192.0.2.1
-tensorfold serve TensorFold/Qwen3.8-27B-MLX-4bit --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
+pli serve TensorFold/Qwen3.8-27B-MLX-4bit --tp 2 --rank 1 --master 192.0.2.1
+pli serve TensorFold/Qwen3.8-27B-MLX-4bit --tp 2 --rank 0 --master 192.0.2.1 --name bench --host 0.0.0.0
 ```
 
 The verify matmul fixes reduction order by weight shape. Tree attention reads only committed keys and the
 node's own path; recurrent commits replay that path. Two-rank reductions gather fp32 partials and add in
 rank order. Each rank count has its own serial reference. See the
-[CUDA kernel map](../../src/tensorfold/families/qwen3_5/cuda/README.md).
+[CUDA kernel map](../../src/pli/families/qwen3_5/cuda/README.md).
 
 ### Concurrent requests
 
 ```bash
-tensorfold serve TensorFold/Qwen3.8-27B-MLX-4bit --parallel 16 --context 8192 --name bench
+pli serve TensorFold/Qwen3.8-27B-MLX-4bit --parallel 16 --context 8192 --name bench
 ```
 
 `--parallel N` decodes up to N requests in shared rounds: each stream verifies its own DFlash2 tree in one
@@ -169,7 +169,7 @@ serves 147.5 and 112.0 tok/s. `tools/shared_prefix_prompts.py` builds the worklo
 
 ### Structured output
 
-With `pip install 'tensorfold[grammar]'` (xgrammar), serving on one or two GPUs enforces `response_format` and the
+With `pip install 'pli[grammar]'` (xgrammar), serving on one or two GPUs enforces `response_format` and the
 `guided_*` fields: drafts the grammar rejects are cut and rows are masked by their paths' grammar before sampling, so
 drafted, serial and concurrent replies stay equal. See [the API reference](../api.md#structured-output).
 
@@ -184,7 +184,7 @@ They are retained as historical results, not measurements of the merged 0.3.5 re
 | Two | 82.4 tok/s | 58.9 tok/s | 76.2 tok/s | 71.1 tok/s |
 
 Reproduce the workload with the checkpoint above, default drafting and the
-[public benchmark command](README.md#measurements). Its fixed prompts, 64-token replies, seeds 1234
+[public benchmark command](../benchmark.md#measurements). Its fixed prompts, 64-token replies, seeds 1234
 through 1238 and sampling settings define these cells. For one rank, omit the tensor-parallel flags. Record the runtime
 and model revision with any new result; these historical rates are not predictions for another runtime.
 
@@ -199,7 +199,7 @@ release; the issue's first comment has the archive of logs, request bodies and t
 | Budget | 44.8 GiB: 70% of 64 GB, under the 55 GiB Metal working set (`iogpu.wired_limit_mb=56320`) |
 | Runtime | TensorFold 0.3.5.1 (`beddbb7`, from the tag), Python 3.12.13, mlx and mlx-metal 0.31.2, mlx-lm 0.31.3 |
 | Checkpoints | `TensorFold/Qwen3.8-27B-MLX-4bit@70ae7fac`, `z-lab/Qwen3.8-27B-DFlash2@50307d4c`, `TensorFold/Qwen3.8-27B-oQ2@8cf0a7da` |
-| Launch | `tensorfold serve <model> --name bench`, plus `--drafter none` or `--no-drafts` where named |
+| Launch | `pli serve <model> --name bench`, plus `--drafter none` or `--no-drafts` where named |
 | Peak memory | `ri_lifetime_max_phys_footprint` from `proc_pid_rusage` |
 
 | Configuration | Fitted context | Peak footprint | Workload that set the peak |
@@ -222,7 +222,7 @@ tokenized by the served model and cut to N tokens behind a nonce line. Replies w
 | 131,106 | 578.4 s | 227 tok/s | 15.7 tok/s | 0, 574 s (#71) |
 | 139,922 | 640.5 s | 219 tok/s | 16.3 tok/s | 0, 644 s (#71) |
 
-Decode medians from the [public benchmark command](README.md#measurements), in tok/s for code sampled, chat
+Decode medians from the [public benchmark command](../benchmark.md#measurements), in tok/s for code sampled, chat
 sampled, code greedy and chat greedy: 62.8, 45.9, 61.2 and 56.2 with DFlash2; 16.6, 16.1, 16.2 and 16.3 with
 `--no-drafts`; 16.2, 16.2, 16.6 and 16.4 with `--drafter none`; 41.8, 37.2, 92.1 and 47.9 for oQ2 with DFlash2.
 `tools/bench_concurrent.py --alone --serial` at 1, 2, 4 and 8 streams found all 180 concurrent replies equal to

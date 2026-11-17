@@ -1,0 +1,10 @@
+{
+  "voix": {
+    "kokoro-siwis": {
+      "modele": "kokoro",
+      "memoire_go": 3,
+      "voice": "ff_siwis",
+      "lang_code": "f"
+    }
+  }
+}

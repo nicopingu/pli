@@ -44,10 +44,10 @@ pli serve mlx-community/Qwen3.8-27B-4bit --profile m1-ultra --drafter auto \
 - Machine-specific values go in the environment, not in a profile: `PLI_ALLOWED_HOSTS` (extra host names accepted
   by the Host/Origin guard, e.g. the machine's LAN name) and `PLI_EVENTS` (path of the event journal).
 - Step trace, to find slow steps on real traffic: start the server with `PLI_TRACE_DIR=<dir>` (nothing is
-  written while it is off). `python -m tensorfold.pli.trace on --dir <dir> --duration 24h` switches it on within a
+  written while it is off). `python -m pli.additions.trace on --dir <dir> --duration 24h` switches it on within a
   second, without a restart, and it switches itself off at the end; `off` and `status` stop it or show it. Each
   server writes `<dir>/trace-<served name>.jsonl` (one JSON line per request, prefill chunk, decode round and
-  draft; same text produced, no GPU synchronisation added). Report: `python -m tensorfold.pli.trace_analysis
+  draft; same text produced, no GPU synchronisation added). Report: `python -m pli.additions.trace_analysis
   <dir>/trace-<name>.jsonl --md report.md`.
 - `--snapshot-dir` keeps conversation prefixes on disk across restarts (`none`: memory only); `--spill-gib`
   writes evicted prefixes to disk.
@@ -96,6 +96,21 @@ git -C ~/dev/pli pull --ff-only
 Restart the server afterwards. `pli update` is disabled in this fork: update with `git pull` and `pip install` as
 above.
 
+### Updating across the rename `tensorfold` -> `pli` (PLI 5)
+
+With the server stopped:
+
+1. Keep a worktree of the commit served before the update (`git worktree add --detach ~/dev/pli-avant HEAD`).
+2. Update the code as above, then `pip install -e` again: it rewrites the `pli` and `tensorfold` commands so that they
+   import `pli` (before that, they still work through the compatibility package, with one warning in the log).
+3. Native libraries built in the source tree (`src/tensorfold/pli/ane/native/*.dylib`, not tracked by git) are not
+   moved by git: run `src/pli/additions/ane/build.sh` or copy them to `src/pli/additions/ane/native/`.
+4. Paths that name the old tree in your own files keep working through `src/tensorfold/` (generation children,
+   extended draft list), but point them at `src/pli/...` when you can.
+5. Keep the saved conversations: `tools/pli-renommage-cles --ancien ~/dev/pli-avant --env ENV_FILE... SNAPSHOT_DIR`
+   prints the plan (and refuses if a hashed file is more than renamed); add `--appliquer` to move the keys.
+6. Start the server.
+
 ## Tests
 
 ```bash
@@ -111,8 +126,8 @@ production server is idle if timings matter elsewhere.
 | Symptom | Check |
 | --- | --- |
 | `PLI runs on Apple Silicon (macOS, MLX) only` | PLI has no other backend |
-| `unknown profile` | `--profile` names a folder of `src/tensorfold/pli/profiles/` |
-| `libpli_ane.dylib missing and not compiled` | `xcode-select --install`, then `bash src/tensorfold/pli/ane/build.sh` |
+| `unknown profile` | `--profile` names a folder of `src/pli/additions/profiles/` |
+| `libpli_ane.dylib missing and not compiled` | `xcode-select --install`, then `bash src/pli/additions/ane/build.sh` |
 | Download failure | Repository id, access and free disk space |
 | Rejected checkpoint | Quantization, model family and draft-head requirements (`pli info`) |
 | Client cannot connect | Server process, `/health`, base URL, model id, `PLI_ALLOWED_HOSTS` for a LAN name |

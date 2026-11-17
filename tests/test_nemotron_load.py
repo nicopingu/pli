@@ -11,8 +11,8 @@ mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 pytest.importorskip("mlx_lm")
 
-from tensorfold import families  # noqa: E402
-from tensorfold.families import nemotron_h  # noqa: E402
+from pli import families  # noqa: E402
+from pli.families import nemotron_h  # noqa: E402
 
 
 def _tiny(bits):
@@ -68,7 +68,7 @@ def test_the_loaded_widths_are_named(bits):
 
 
 def test_load_refuses_weights_the_config_does_not_name(monkeypatch):
-    from tensorfold.families.nemotron_h import model as nemotron_model
+    from pli.families.nemotron_h import model as nemotron_model
 
     tiny = _tiny(8)
     monkeypatch.setattr(families, "read_config", lambda path: {"quantization": {"bits": 4, "group_size": 64}})

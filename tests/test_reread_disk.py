@@ -3,9 +3,9 @@ from disk at that chunk (here a fake disk); without the setting, the request rea
 
 from __future__ import annotations
 
-from tensorfold.server import prompt_fill
-from tensorfold.server.checkpoints import CheckpointStore
-from tensorfold.server.scheduler import ChatJob, Scheduler
+from pli.server import prompt_fill
+from pli.server.checkpoints import CheckpointStore
+from pli.server.scheduler import ChatJob, Scheduler
 from tests.test_prompt_fill import GridEngine, _prompt, _run, _solo
 
 

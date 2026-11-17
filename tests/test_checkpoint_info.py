@@ -7,8 +7,8 @@ from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
 
-from tensorfold.server.checkpoint_info import describe, describe_weights, hub_snapshot
-from tensorfold.server.http import make_handler
+from pli.server.checkpoint_info import describe, describe_weights, hub_snapshot
+from pli.server.http import make_handler
 
 
 def weights(directory, config):
@@ -76,7 +76,7 @@ def test_draft_only_and_checkpoint_head(tmp_path):
     info = describe(model_dir, model=moe)
     assert info["draft"] is None and info["mtp_head"]["in_checkpoint"] is True
     assert describe(model_dir, model=SimpleNamespace(head_drafts=None, mtp=None))["mtp_head"] is None
-    from tensorfold import __version__
+    from pli import __version__
     assert describe(None)["engine"]["version"] == __version__ and describe(None)["name"] is None
 
 

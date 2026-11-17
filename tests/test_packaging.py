@@ -11,7 +11,7 @@ SHIPPED = {".cu", ".cuh", ".cpp", ".json", ".txt"}       # what the engines read
 def unlisted(pyproject: str, src: Path) -> list[str]:
     table = tomllib.loads(pyproject)["tool"]["setuptools"]["package-data"]
     missing = []
-    for path in sorted((src / "tensorfold").rglob("*")):     # not a build's egg-info
+    for path in sorted((src / "pli").rglob("*")):     # not a build's egg-info
         patterns = table.get(".".join(path.parent.relative_to(src).parts), [])
         if path.suffix in SHIPPED and not any(fnmatch.fnmatch(path.name, p) for p in patterns):
             missing.append(str(path.relative_to(src)))

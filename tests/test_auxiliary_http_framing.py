@@ -8,7 +8,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from tensorfold.server.http import make_handler as mac_handler
+from pli.server.http import make_handler as mac_handler
 from tests.test_token_routes import MacApp
 
 CHAT = {"model": "local-model", "max_tokens": 8,

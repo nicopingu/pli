@@ -2,7 +2,7 @@
 
 import pytest
 
-from tensorfold.tool_parameters import decode_parameter, typed_parameter
+from pli.tool_parameters import decode_parameter, typed_parameter
 
 
 @pytest.mark.parametrize("schema,value", [

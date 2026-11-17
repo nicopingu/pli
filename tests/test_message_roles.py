@@ -3,7 +3,7 @@
 import jinja2
 import pytest
 
-from tensorfold.server.messages import late_system_role, normalize_messages
+from pli.server.messages import late_system_role, normalize_messages
 
 # Qwen3.8's rule: one system message, and only first
 _FIRST_ONLY = jinja2.Environment().from_string(

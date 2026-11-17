@@ -7,8 +7,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from tensorfold import cli, families, hub
-from tensorfold.server import memory_budget
+from pli import cli, families, hub
+from pli.server import memory_budget
 
 GIB = 1024**3
 

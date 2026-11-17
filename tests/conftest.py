@@ -19,7 +19,7 @@ TENSOR_UNIT_TESTS = {
 
 def _tensor_units() -> bool:
     try:
-        from tensorfold.families.qwen3_5 import tensor_units
+        from pli.families.qwen3_5 import tensor_units
 
         return tensor_units()
     except Exception:  # noqa: BLE001 - no MLX or no Metal: no tensor units
@@ -50,3 +50,15 @@ def pytest_runtest_call(item: pytest.Item):
         if "maximum allowed threads per threadgroup" in str(exc):
             pytest.skip(f"this GPU's threadgroup limit: {exc}")
         raise
+
+
+@pytest.fixture(autouse=True)
+def _snapshot_classes_from_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PLI 5.6.3: checkpoints name their cache classes and only known packages are imported back; caches defined in a
+    test module (tests.*) are allowed in tests (test_prefix_snapshots checks the refusal with the production list)."""
+
+    try:
+        from pli.engine import prefix_snapshots
+    except Exception:  # noqa: BLE001 - no MLX: nothing to load
+        return
+    monkeypatch.setattr(prefix_snapshots, "SNAPSHOT_CLASS_PACKAGES", prefix_snapshots.SNAPSHOT_CLASS_PACKAGES + ("tests.",))

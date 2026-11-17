@@ -4,7 +4,8 @@ Copyright 2026 Nicolas F. (nicopingu)
 PLI is a fork of TensorFold 0.6.6 (https://github.com/ashhart/TensorFold, commit cb2ebf05),
 distributed under the same Apache License 2.0 (LICENSE). PLI modifies TensorFold's files and adds
 its own: the changes are described in CHANGELOG.md, the code PLI took from other projects is listed
-in THIRD_PARTY_NOTICES.md. The Python module keeps the name tensorfold.
+in THIRD_PARTY_NOTICES.md. Since PLI 5 the Python package is named pli (a compatibility package tensorfold
+remains for the old imports); TensorFold's notice below and its license still apply to the code PLI took from it.
 
 ----- Original TensorFold notice -----
 

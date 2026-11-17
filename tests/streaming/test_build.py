@@ -6,7 +6,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.streaming import build  # noqa: E402
+from pli.streaming import build  # noqa: E402
 
 
 @pytest.mark.parametrize("mlx, nanobind", [("0.32.2", "2.15.0"), ("0.32.3", "3.0.1")])

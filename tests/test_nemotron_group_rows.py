@@ -8,16 +8,16 @@ mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 pytest.importorskip("mlx_lm")
 
-from tensorfold.engine.lane_engine import LaneEngine  # noqa: E402
-from tensorfold.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
-from tensorfold.kernels.nemotron.lightning.v1 import rows  # noqa: E402
+from pli.engine.lane_engine import LaneEngine  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import kernels as K  # noqa: E402
+from pli.kernels.nemotron.lightning.v1 import rows  # noqa: E402
 
 from test_nemotron_pre_m5_streams import IDS, _same, _tiny  # noqa: E402
 
 
 @pytest.fixture(scope="module")
 def nem():
-    from tensorfold.families.nemotron_h.model import NemotronH
+    from pli.families.nemotron_h.model import NemotronH
 
     patch = pytest.MonkeyPatch()
     patch.setattr(K, "tensor_units", lambda: False)          # the same kernels on every Mac
@@ -26,8 +26,8 @@ def nem():
 
 
 def test_tensor_unit_install_groups_from_two_rows(monkeypatch):
-    from tensorfold.families.nemotron_h.model import NemotronH
-    from tensorfold.kernels.qwen.dense.v1 import lane_qmm
+    from pli.families.nemotron_h.model import NemotronH
+    from pli.kernels.qwen.dense.v1 import lane_qmm
 
     monkeypatch.setattr(K, "tensor_units", lambda: True)
     monkeypatch.setattr(lane_qmm, "install", lambda *a, **k: None)

@@ -37,7 +37,7 @@ def compare(model_dir: Path, eval_set: Path, truth_file: Path, backend: str | No
     import mlx.core as mx
     import numpy as np
 
-    from tensorfold.families.gemma4.model import load
+    from pli.families.gemma4.model import load
 
     model, _ = load(model_dir, backend=backend, check=False)
     data = np.load(truth_file)

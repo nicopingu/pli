@@ -8,7 +8,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.families.qwen4_exp.runtime import FlashNext  # noqa: E402
+from pli.families.qwen4_exp.runtime import FlashNext  # noqa: E402
 
 
 class _Cache:

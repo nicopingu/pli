@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from tensorfold import families
-from tensorfold.families import qwen3_5_moe
+from pli import families
+from pli.families import qwen3_5_moe
 
 
 def _config(tmp_path, bits=4, group=64):
@@ -16,7 +16,7 @@ def _config(tmp_path, bits=4, group=64):
 
 
 def test_the_family_is_found_by_model_type(tmp_path):
-    assert families.detect(_config(tmp_path)).module == "tensorfold.families.qwen3_5_moe"
+    assert families.detect(_config(tmp_path)).module == "pli.families.qwen3_5_moe"
 
 
 def test_only_4_bit_groups_of_64_are_read(tmp_path):

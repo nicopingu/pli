@@ -13,10 +13,10 @@ if not mx.metal.is_available():
 
 import mlx.nn as nn  # noqa: E402
 
-from tensorfold.families.qwen3_5 import tensor_units  # noqa: E402
-from tensorfold.families.qwen4_exp import decode, host_table  # noqa: E402
-from tensorfold.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
-from tensorfold.kernels.qwen.flash_next.v1 import embed  # noqa: E402
+from pli.families.qwen3_5 import tensor_units  # noqa: E402
+from pli.families.qwen4_exp import decode, host_table  # noqa: E402
+from pli.kernels.qwen.dense.v1 import lane_qmm  # noqa: E402
+from pli.kernels.qwen.flash_next.v1 import embed  # noqa: E402
 
 DIMS = 160
 
@@ -105,8 +105,8 @@ def test_linears_the_lane_matmul_cannot_read_are_named():
 
 
 def test_flash_next_refuses_them_before_building(monkeypatch):
-    from tensorfold.families.qwen4_exp import model as q4
-    from tensorfold.families.qwen4_exp import runtime
+    from pli.families.qwen4_exp import model as q4
+    from pli.families.qwen4_exp import runtime
 
     fake = nn.Module()
     fake.layers = [_linear(256, 64, 8, 32)]

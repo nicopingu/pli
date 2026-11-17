@@ -7,13 +7,13 @@ import threading
 from types import SimpleNamespace
 from typing import Any
 
-from tensorfold.engine.memory import Admission, StreamMemory
-from tensorfold.server.checkpoints import CheckpointStore
-from tensorfold.server.errors import RequestError
-from tensorfold.server.memory_budget import cache_nbytes
-from tensorfold.server.prompt_memory import PromptMemory
-from tensorfold.server.scheduler import ChatJob, Scheduler
-from tensorfold.server.stream_gate import StreamGate
+from pli.engine.memory import Admission, StreamMemory
+from pli.server.checkpoints import CheckpointStore
+from pli.server.errors import RequestError
+from pli.server.memory_budget import cache_nbytes
+from pli.server.prompt_memory import PromptMemory
+from pli.server.scheduler import ChatJob, Scheduler
+from pli.server.stream_gate import StreamGate
 from tests.lane_fakes import FakeEngine, fake_serial
 from tests.test_memory_window import Runtime, SizedFamily, SizedKV
 from tests.test_prompt_memory import populated

@@ -9,8 +9,8 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tensorfold.engine import prefix_snapshots as ps  # noqa: E402
-from tensorfold.pli import code_key, rekey  # noqa: E402
+from pli.engine import prefix_snapshots as ps  # noqa: E402
+from pli.additions import code_key, rekey  # noqa: E402
 
 OLD = "/models/qwen|mlx=0.32.3|kernels=k1|prefill=p|tensorfold=4.1.2|pli=abc|points=4"
 
@@ -72,7 +72,7 @@ def test_fingerprint_leaves_out_falcon_traces_and_events():
 
 def test_fingerprint_is_the_old_one_without_those_settings():
     import hashlib
-    from tensorfold.pli import env_names
+    from pli.additions import env_names
     env = {"PLI_HYBRIDE": "1", "PLI_DISK_REPLY_END": "1", "PLI_TOOL_GRAMMAR": "1"}
     old = env_names.pli_settings(env, exclude=code_key.SETTINGS_EXCLUDED)
     assert code_key.settings_fingerprint(env) == hashlib.sha256(repr(old).encode()).hexdigest()[:12]

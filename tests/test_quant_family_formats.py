@@ -8,8 +8,8 @@ from types import ModuleType, SimpleNamespace as NS
 
 import pytest
 
-from tensorfold import cli, families
-from tensorfold.families import nemotron_h, qwen3_5, qwen4_exp
+from pli import cli, families
+from pli.families import nemotron_h, qwen3_5, qwen4_exp
 
 
 @pytest.fixture(autouse=True)
